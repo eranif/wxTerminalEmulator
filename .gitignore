@@ -1,0 +1,18 @@
+# Build directories  
+.build-debug/  
+.build-release/  
+  
+# IDE and editor cache  
+.cache/  
+.codelite/  
+.vscode/  
+  
+# Compiled binaries  
+*.exe  
+*.dll  
+*.o  
+*.obj  
+*.a  
+  
+# Log files  
+*.log 
