@@ -16,3 +16,4 @@
   
 # Log files  
 *.log 
+compile_commands.json
