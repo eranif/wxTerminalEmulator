@@ -17,7 +17,7 @@ public:
     int width = screen.width / 2;
     int height = screen.height / 2;
     SetSize(width, height);
-    Centre(); // Center the window on screen
+    CentreOnScreen(); // Center the window on screen
 
     TerminalLogger::Get().SetLevel(TerminalLogLevel::WARN);
     auto *view = new TerminalView(this);

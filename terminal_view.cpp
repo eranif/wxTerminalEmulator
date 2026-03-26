@@ -428,7 +428,7 @@ void TerminalView::OnCopy(wxCommandEvent &evt) {
     for (int c = minCol; c <= maxCol && c < static_cast<int>(row.size()); ++c) {
       selectedText += static_cast<wxChar>(row[c].ch);
     }
-    if (r < maxRow) {
+    if (r < maxRow && !selectedText.EndsWith("\n")) {
       selectedText += "\n"; // Add newline between rows
     }
   }
