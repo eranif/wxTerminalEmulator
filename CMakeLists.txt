@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(EmbeddedCmdDemo)
+project(wxTerminalEmulator)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -37,6 +37,7 @@ add_compile_definitions(-DwxDEBUG_LEVEL=0)
 set(SOURCES
   main.cpp
   terminal_core.cpp
+  terminal_logger.cpp
   terminal_panel.cpp
 )
 

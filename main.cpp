@@ -6,7 +6,7 @@
 
 class MyFrame : public wxFrame {
 public:
-  MyFrame() : wxFrame(nullptr, wxID_ANY, "EmbeddedCmdDemo") {
+  MyFrame() : wxFrame(nullptr, wxID_ANY, "wxTerminalEmulator") {
     // Get the primary display size
     wxDisplay display(wxDisplay::GetFromWindow(this));
     wxRect screen = display.GetClientArea();
