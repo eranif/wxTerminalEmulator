@@ -410,12 +410,14 @@ None currently!
 - SGR (m): full 16/256/truecolor, bold, underline, reverse
 - Device status: n (cursor position report), c (device attributes)
 - OSC: window title (0, 2)
-- Single-byte: ESC>, ESC=, ESC7, ESC8 (recognized but ignored)
-- Private mode CSI: ?h/?l (recognized but ignored)
+- Single-byte: ESC>, ESC=, ESC7, ESC8 (save/restore cursor), ESCM (reverse index), ESCD (index), ESCE (next line)
+- Intermediate byte sequences: ESC(B, ESC)0, etc. (character set designation, acknowledged)
+- Private mode CSI: ?1049h/?1049l (alternate screen buffer), ?25h/?25l, ?1h/?1l, ?7h/?7l
 
 #### Verified Working
 - `man ls` — paging with spacebar works correctly
 - `vi` on large files — scrolling up/down with arrows, ESC → :q! and ESC → :wq all working
+- `top` — displays process list, updates in real-time, `q` to quit works
 
 #### Missing Private Mode Sequences
 | Mode | Description |

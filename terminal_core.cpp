@@ -159,6 +159,17 @@ void TerminalCore::PutData(const std::string &data) {
     if (m_inEscape) {
       m_escape.push_back(c);
 
+      // Safety: if escape buffer grows too large, it's stuck — dump and reset
+      if (m_escape.size() > 256) {
+        LOG(WARN) << "Escape buffer overflow, dumping: [";
+        for (unsigned char ch : m_escape)
+          LOG(WARN) << std::hex << std::setfill('0') << std::setw(2) << (int)ch << " ";
+        LOG(WARN) << "]" << std::endl;
+        m_escape.clear();
+        m_inEscape = false;
+        continue;
+      }
+
       if (m_escape.size() > 0 && m_escape[0] == ']') {
         if (c == '\x07') {
           ParseEscape(m_escape);
@@ -178,9 +189,13 @@ void TerminalCore::PutData(const std::string &data) {
           ParseEscape(m_escape);
           m_escape.clear();
           m_inEscape = false;
-        } else if (m_escape.size() == 1 && c != '[' && c != ']' &&
-                   (c >= '@' && c <= '~')) {
-          m_escape.push_back(c);
+        } else if (m_escape.size() == 1 && c != '[' && c != ']') {
+          ParseEscape(m_escape);
+          m_escape.clear();
+          m_inEscape = false;
+        } else if (m_escape.size() == 2 && m_escape[0] >= 0x20 &&
+                   m_escape[0] <= 0x2F) {
+          // Two-byte sequences with intermediate: ESC ( B, ESC ) 0, etc.
           ParseEscape(m_escape);
           m_escape.clear();
           m_inEscape = false;
@@ -357,7 +372,37 @@ void TerminalCore::ParseEscape(const std::string &seq) {
   }
 
   if (seq.size() == 1) {
-    // Single-char escape sequences (ESC 7, ESC 8, ESC >, ESC =)
+    switch (seq[0]) {
+    case 'M': // Reverse Index — cursor up, scroll down if at top
+      if (m_cursor.row == m_scrollTop)
+        ScrollRegionDown();
+      else if (m_cursor.row > 0)
+        --m_cursor.row;
+      break;
+    case 'D': // Index — cursor down, scroll up if at bottom
+      if (m_cursor.row == m_scrollBottom)
+        ScrollRegionUp();
+      else if (m_cursor.row < m_rows - 1)
+        ++m_cursor.row;
+      break;
+    case 'E': // Next Line
+      m_cursor.col = 0;
+      if (m_cursor.row == m_scrollBottom)
+        ScrollRegionUp();
+      else if (m_cursor.row < m_rows - 1)
+        ++m_cursor.row;
+      break;
+    case '7': // Save Cursor (DECSC)
+      m_savedCursor = m_cursor;
+      break;
+    case '8': // Restore Cursor (DECRC)
+      m_cursor = m_savedCursor;
+      if (m_cursor.row >= m_rows) m_cursor.row = m_rows - 1;
+      if (m_cursor.col >= m_cols) m_cursor.col = m_cols - 1;
+      break;
+    default:
+      break;
+    }
     return;
   }
 
@@ -405,7 +450,50 @@ void TerminalCore::ParseEscape(const std::string &seq) {
   }
 
   if (privateMode) {
-    // Acknowledge private mode sequences
+    bool setMode = (final_ch == 'h');
+    for (int mode : paramList) {
+      switch (mode) {
+      case 1049: // Alternate screen buffer with save/restore cursor
+      case 47:   // Alternate screen buffer (no cursor save)
+        if (setMode && !m_altScreenActive) {
+          // Save current screen and switch to alt
+          m_savedScreen.buffer = m_buffer;
+          m_savedScreen.viewStart = m_viewStart;
+          m_savedScreen.shellStart = m_shellStart;
+          m_savedScreen.cursor = m_cursor;
+          m_savedScreen.scrollTop = m_scrollTop;
+          m_savedScreen.scrollBottom = m_scrollBottom;
+          m_altScreenActive = true;
+          // Clear alt screen
+          m_buffer.clear();
+          for (std::size_t r = 0; r < m_rows; ++r)
+            m_buffer.push_back(std::vector<Cell>(m_cols));
+          m_viewStart = 0;
+          m_shellStart = 0;
+          m_cursor = {};
+          m_scrollTop = 0;
+          m_scrollBottom = m_rows - 1;
+        } else if (!setMode && m_altScreenActive) {
+          // Restore main screen
+          m_buffer = m_savedScreen.buffer;
+          m_viewStart = m_savedScreen.viewStart;
+          m_shellStart = m_savedScreen.shellStart;
+          m_cursor = m_savedScreen.cursor;
+          m_scrollTop = m_savedScreen.scrollTop;
+          m_scrollBottom = m_savedScreen.scrollBottom;
+          m_altScreenActive = false;
+        }
+        break;
+      case 25: // Show/hide cursor — acknowledged, rendering handles this
+        break;
+      case 1:  // Application/normal cursor keys — acknowledged
+        break;
+      case 7:  // Auto-wrap — acknowledged
+        break;
+      default:
+        break;
+      }
+    }
     return;
   }
 

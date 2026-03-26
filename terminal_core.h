@@ -106,6 +106,18 @@ private:
   // Last printed character (for ESC[b repeat)
   char32_t m_lastChar{U' '};
 
+  // Alternate screen buffer
+  struct ScreenState {
+    std::deque<std::vector<Cell>> buffer;
+    std::size_t viewStart{0};
+    std::size_t shellStart{0};
+    CursorPos cursor{};
+    std::size_t scrollTop{0};
+    std::size_t scrollBottom{0};
+  };
+  ScreenState m_savedScreen;
+  bool m_altScreenActive{false};
+
   bool m_inEscape{false};
   std::string m_escape;
   Cell m_attr{};
