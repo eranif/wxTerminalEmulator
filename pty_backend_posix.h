@@ -22,9 +22,11 @@ public:
 
 private:
   void ReaderThread();
+  void WriterThread();
 
   std::atomic<bool> m_running{false};
-  std::thread m_thread;
+  std::thread m_readerThread;
+  std::thread m_writerThread;
   std::mutex m_mutex;
   std::condition_variable m_cv;
   std::vector<char> m_writeBuffer;

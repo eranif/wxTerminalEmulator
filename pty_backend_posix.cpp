@@ -66,7 +66,8 @@ bool PosixPtyBackend::Start(const std::string &command,
     fcntl(m_masterFd, F_SETFL, flags | O_NONBLOCK);
 
   m_running = true;
-  m_thread = std::thread([this] { ReaderThread(); });
+  m_readerThread = std::thread([this] { ReaderThread(); });
+  m_writerThread = std::thread([this] { WriterThread(); });
   return true;
 }
 
@@ -91,8 +92,10 @@ void PosixPtyBackend::Stop() {
   m_running = false;
   m_cv.notify_all();
 
-  if (m_thread.joinable())
-    m_thread.join();
+  if (m_readerThread.joinable())
+    m_readerThread.join();
+  if (m_writerThread.joinable())
+    m_writerThread.join();
 
   if (m_masterFd >= 0) {
     close(m_masterFd);
@@ -111,14 +114,39 @@ void PosixPtyBackend::ReaderThread() {
   char buf[4096];
 
   while (m_running) {
-    // Drain outbound write buffer
+    if (m_masterFd < 0)
+      break;
+
+    struct pollfd pfd {};
+    pfd.fd = m_masterFd;
+    pfd.events = POLLIN;
+
+    int ret = poll(&pfd, 1, 50);
+    if (ret > 0 && (pfd.revents & POLLIN)) {
+      ssize_t n = read(m_masterFd, buf, sizeof(buf));
+      if (n > 0) {
+        if (m_onOutput)
+          m_onOutput(std::string(buf, static_cast<size_t>(n)));
+      } else if (n == 0 || (n < 0 && errno != EAGAIN && errno != EINTR)) {
+        m_running = false;
+        break;
+      }
+    } else if (ret < 0 && errno != EINTR) {
+      m_running = false;
+      break;
+    }
+  }
+}
+
+void PosixPtyBackend::WriterThread() {
+  while (m_running) {
     std::vector<char> pending;
     {
       std::unique_lock<std::mutex> lock(m_mutex);
-      m_cv.wait_for(lock, std::chrono::milliseconds(1),
-                    [this] { return !m_running || !m_writeBuffer.empty(); });
-      if (!m_writeBuffer.empty())
-        pending.swap(m_writeBuffer);
+      m_cv.wait(lock, [this] { return !m_running || !m_writeBuffer.empty(); });
+      if (!m_running && m_writeBuffer.empty())
+        break;
+      pending.swap(m_writeBuffer);
     }
 
     if (!pending.empty() && m_masterFd >= 0) {
@@ -132,27 +160,6 @@ void PosixPtyBackend::ReaderThread() {
         } else if (n < 0 && errno != EAGAIN && errno != EINTR) {
           break;
         }
-      }
-    }
-
-    if (m_masterFd >= 0) {
-      struct pollfd pfd {};
-      pfd.fd = m_masterFd;
-      pfd.events = POLLIN;
-
-      int ret = poll(&pfd, 1, 1); // 1ms timeout
-      if (ret > 0 && (pfd.revents & POLLIN)) {
-        ssize_t n = read(m_masterFd, buf, sizeof(buf));
-        if (n > 0) {
-          if (m_onOutput)
-            m_onOutput(std::string(buf, static_cast<size_t>(n)));
-        } else if (n == 0 || (n < 0 && errno != EAGAIN && errno != EINTR)) {
-          m_running = false;
-          break;
-        }
-      } else if (ret < 0 && errno != EINTR) {
-        m_running = false;
-        break;
       }
     }
   }
