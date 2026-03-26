@@ -280,8 +280,10 @@ void TerminalCore::PutCell(char c) {
     cell.ch = static_cast<unsigned char>(c);
     m_buffer[abs][m_cursor.col] = cell;
     ++m_cursor.col;
-    if (m_cursor.col >= m_cols)
+    if (m_cursor.col >= m_cols) {
+      m_cursor.col = 0;
       NewLine();
+    }
   }
 }
 
@@ -296,8 +298,10 @@ void TerminalCore::PutCell(char32_t cp) {
     m_buffer[abs][m_cursor.col] = cell;
     m_lastChar = cp;
     ++m_cursor.col;
-    if (m_cursor.col >= m_cols)
+    if (m_cursor.col >= m_cols) {
+      m_cursor.col = 0;
       NewLine();
+    }
   }
 }
 
