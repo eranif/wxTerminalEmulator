@@ -188,9 +188,7 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   wxAutoBufferedPaintDC pdc(this);
   wxGCDC dc(pdc);
   const auto &theme = m_core.GetTheme();
-  wxColour themeBg((theme.bg >> 16) & 0xFF, (theme.bg >> 8) & 0xFF,
-                   theme.bg & 0xFF);
-  dc.SetBackground(wxBrush(themeBg));
+  dc.SetBackground(wxBrush(theme.bg));
   dc.Clear();
   dc.SetFont(m_defaultFont);
 

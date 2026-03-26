@@ -13,15 +13,15 @@ namespace terminal {
 TerminalCore::TerminalCore(std::size_t rows, std::size_t cols,
                            std::size_t maxLines)
     : m_rows(rows), m_cols(cols), m_maxLines(maxLines) {
-  m_attr.fg = m_theme.fg;
-  m_attr.bg = m_theme.bg;
+  m_attr.fg = wxTerminalTheme::ToU32(m_theme.fg);
+  m_attr.bg = wxTerminalTheme::ToU32(m_theme.bg);
   Reset();
 }
 
 void TerminalCore::SetTheme(const wxTerminalTheme &theme) {
   m_theme = theme;
-  m_attr.fg = m_theme.fg;
-  m_attr.bg = m_theme.bg;
+  m_attr.fg = wxTerminalTheme::ToU32(m_theme.fg);
+  m_attr.bg = wxTerminalTheme::ToU32(m_theme.bg);
 }
 
 std::size_t TerminalCore::AbsRow(std::size_t viewportRow) const {
@@ -129,7 +129,7 @@ void TerminalCore::Reset() {
   m_lastChar = U' ';
   m_inEscape = false;
   m_escape.clear();
-  m_attr = Cell{U' ', m_theme.fg, m_theme.bg};
+  m_attr = Cell{U' ', wxTerminalTheme::ToU32(m_theme.fg), wxTerminalTheme::ToU32(m_theme.bg)};
 }
 
 void TerminalCore::PutData(const std::string &data) {
@@ -766,7 +766,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
 
 void TerminalCore::ApplySgr(const std::string &params) {
   if (params.empty()) {
-    m_attr = Cell{U' ', m_theme.fg, m_theme.bg};
+    m_attr = Cell{U' ', wxTerminalTheme::ToU32(m_theme.fg), wxTerminalTheme::ToU32(m_theme.bg)};
     return;
   }
 
@@ -795,7 +795,7 @@ void TerminalCore::ApplySgr(const std::string &params) {
     int code = codes[i];
     switch (code) {
     case 0:
-      m_attr = Cell{U' ', m_theme.fg, m_theme.bg};
+      m_attr = Cell{U' ', wxTerminalTheme::ToU32(m_theme.fg), wxTerminalTheme::ToU32(m_theme.bg)};
       break;
     case 1:
       m_attr.bold = true;
@@ -878,10 +878,10 @@ void TerminalCore::ApplySgr(const std::string &params) {
       }
       break;
     case 39:
-      m_attr.fg = m_theme.fg;
+      m_attr.fg = wxTerminalTheme::ToU32(m_theme.fg);
       break;
     case 49:
-      m_attr.bg = m_theme.bg;
+      m_attr.bg = wxTerminalTheme::ToU32(m_theme.bg);
       break;
     default:
       break;

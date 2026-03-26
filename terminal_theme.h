@@ -5,28 +5,28 @@
 
 struct wxTerminalTheme {
   // Default foreground/background
-  std::uint32_t fg{0x00C0C0C0};
-  std::uint32_t bg{0x00000000};
+  wxColour fg{0xC0, 0xC0, 0xC0};
+  wxColour bg{0x00, 0x00, 0x00};
 
   // Normal colours
-  std::uint32_t black{0x000000};
-  std::uint32_t red{0x800000};
-  std::uint32_t green{0x008000};
-  std::uint32_t yellow{0x808000};
-  std::uint32_t blue{0x000080};
-  std::uint32_t magenta{0x800080};
-  std::uint32_t cyan{0x008080};
-  std::uint32_t white{0xC0C0C0};
+  wxColour black{0x00, 0x00, 0x00};
+  wxColour red{0x80, 0x00, 0x00};
+  wxColour green{0x00, 0x80, 0x00};
+  wxColour yellow{0x80, 0x80, 0x00};
+  wxColour blue{0x00, 0x00, 0x80};
+  wxColour magenta{0x80, 0x00, 0x80};
+  wxColour cyan{0x00, 0x80, 0x80};
+  wxColour white{0xC0, 0xC0, 0xC0};
 
   // Bright colours
-  std::uint32_t brightBlack{0x808080};
-  std::uint32_t brightRed{0xFF0000};
-  std::uint32_t brightGreen{0x00FF00};
-  std::uint32_t brightYellow{0xFFFF00};
-  std::uint32_t brightBlue{0x0000FF};
-  std::uint32_t brightMagenta{0xFF00FF};
-  std::uint32_t brightCyan{0x00FFFF};
-  std::uint32_t brightWhite{0xFFFFFF};
+  wxColour brightBlack{0x80, 0x80, 0x80};
+  wxColour brightRed{0xFF, 0x00, 0x00};
+  wxColour brightGreen{0x00, 0xFF, 0x00};
+  wxColour brightYellow{0xFF, 0xFF, 0x00};
+  wxColour brightBlue{0x00, 0x00, 0xFF};
+  wxColour brightMagenta{0xFF, 0x00, 0xFF};
+  wxColour brightCyan{0x00, 0xFF, 0xFF};
+  wxColour brightWhite{0xFF, 0xFF, 0xFF};
 
   // Selection colours (with alpha)
   wxColour selectionBg{70, 130, 180, 100};
@@ -35,21 +35,26 @@ struct wxTerminalTheme {
   // Cursor
   wxColour cursorColour{255, 255, 255};
 
+  // Convert wxColour to packed uint32_t (RGB)
+  static std::uint32_t ToU32(const wxColour &c) {
+    return (c.Red() << 16) | (c.Green() << 8) | c.Blue();
+  }
+
   // Helper: get ANSI colour by index (0-7) + bright flag
   std::uint32_t GetAnsiColor(int index, bool bright = false) const {
-    static const std::uint32_t wxTerminalTheme::*normal[8] = {
+    static const wxColour wxTerminalTheme::*normal[8] = {
         &wxTerminalTheme::black,   &wxTerminalTheme::red,
         &wxTerminalTheme::green,   &wxTerminalTheme::yellow,
         &wxTerminalTheme::blue,    &wxTerminalTheme::magenta,
         &wxTerminalTheme::cyan,    &wxTerminalTheme::white};
-    static const std::uint32_t wxTerminalTheme::*brights[8] = {
+    static const wxColour wxTerminalTheme::*brights[8] = {
         &wxTerminalTheme::brightBlack,   &wxTerminalTheme::brightRed,
         &wxTerminalTheme::brightGreen,   &wxTerminalTheme::brightYellow,
         &wxTerminalTheme::brightBlue,    &wxTerminalTheme::brightMagenta,
         &wxTerminalTheme::brightCyan,    &wxTerminalTheme::brightWhite};
     if (index < 0 || index > 7)
-      return fg;
-    return this->*(bright ? brights[index] : normal[index]);
+      return ToU32(fg);
+    return ToU32(this->*(bright ? brights[index] : normal[index]));
   }
 
   // Helper: 256-colour palette (first 16 from theme, rest computed)
