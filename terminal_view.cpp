@@ -324,29 +324,36 @@ void TerminalView::OnRightClick(wxMouseEvent &evt) {
 }
 
 void TerminalView::OnCopy(wxCommandEvent &evt) {
-  if (!m_selection.active)
+  LOG_DEBUG() << "Copy is called!" << std::endl;
+  LOG_DEBUG() << "Copy is called!" << std::endl;
+  if (!m_selection.active) {
+    LOG_DEBUG() << "No selection is active - will do nothing" << std::endl;
     return;
+  }
 
   // Get the selected text
-  std::string selectedText;
+  wxString selectedText;
 
   int minRow = std::min(m_selection.startRow, m_selection.endRow);
   int maxRow = std::max(m_selection.startRow, m_selection.endRow);
   int minCol = std::min(m_selection.startCol, m_selection.endCol);
   int maxCol = std::max(m_selection.startCol, m_selection.endCol);
-
+  LOG_DEBUG() << "Copying content {" << minCol << "," << minRow << "} => {"
+              << maxCol << "," << maxRow << "}" << std::endl;
   std::size_t viewStart = m_core.ViewStart();
   for (int r = minRow; r <= maxRow && r < static_cast<int>(m_core.Rows());
        ++r) {
     const auto &row = m_core.BufferRow(viewStart + r);
     for (int c = minCol; c <= maxCol && c < static_cast<int>(row.size()); ++c) {
-      selectedText += static_cast<char>(row[c].ch);
+      selectedText += static_cast<wxChar>(row[c].ch);
     }
     if (r < maxRow) {
-      selectedText += "\r\n"; // Add newline between rows
+      selectedText += "\n"; // Add newline between rows
     }
   }
 
+  LOG_DEBUG() << "Copying:" << selectedText.size() << " chars. " << selectedText
+              << std::endl;
   // Copy to clipboard
   if (wxTheClipboard->Open()) {
     wxTheClipboard->SetData(new wxTextDataObject(selectedText));
@@ -358,6 +365,7 @@ void TerminalView::OnCopy(wxCommandEvent &evt) {
 }
 
 void TerminalView::OnPaste(wxCommandEvent &evt) {
+  LOG_DEBUG() << "Paste is called!" << std::endl;
   if (!wxTheClipboard->Open())
     return;
 
@@ -365,7 +373,7 @@ void TerminalView::OnPaste(wxCommandEvent &evt) {
       wxTheClipboard->IsSupported(wxDF_TEXT)) {
     wxTextDataObject data;
     wxTheClipboard->GetData(data);
-    std::string text = data.GetText().ToStdString();
+    std::string text = data.GetText().ToStdString(wxConvUTF8);
 #ifdef _WIN32
     m_currentCommand += text;
 #endif

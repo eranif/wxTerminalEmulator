@@ -50,7 +50,7 @@ void TerminalLogger::Write(TerminalLogLevel level, const wxString &msg) {
   wxDateTime now = wxDateTime::UNow();
   wxString line = now.FormatISOCombined(' ') +
                   wxString::Format(".%03ld", now.GetMillisecond()) + " [" +
-                  LevelToString(level) + "] " + msg + "\n";
+                  LevelToString(level) + "] " + msg;
   m_file.Write(line);
   m_file.Flush();
 }
