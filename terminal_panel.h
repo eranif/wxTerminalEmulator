@@ -52,7 +52,6 @@ private:
   terminal::TerminalCore m_core;
   wxTimer m_timer;
   std::unique_ptr<terminal::PtyBackend> m_backend;
-  bool m_cursorVisible{true};
   Selection m_selection;
   bool m_isDragging{false};
 

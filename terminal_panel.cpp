@@ -199,15 +199,13 @@ void TerminalPanel::OnPaint(wxPaintEvent &) {
     rowIdx++;
   }
 
-  // Draw cursor
+  // Draw cursor (thin line caret)
   auto cursor = m_core.Cursor();
-  if (m_cursorVisible && cursor.row < m_core.Rows() &&
-      cursor.col < m_core.Cols()) {
-    // Draw a solid block cursor
-    dc.SetBrush(
-        wxBrush(wxColour(255, 255, 255, 128))); // Semi-transparent white
-    dc.SetPen(*wxTRANSPARENT_PEN);
-    dc.DrawRectangle(cursor.col * charW, cursor.row * charH, charW, charH);
+  if (cursor.row < m_core.Rows() && cursor.col < m_core.Cols()) {
+    dc.SetPen(wxPen(*wxWHITE, 2));
+    int cx = cursor.col * charW;
+    int cy = cursor.row * charH;
+    dc.DrawLine(cx, cy, cx, cy + charH);
   }
 }
 
@@ -332,8 +330,11 @@ void TerminalPanel::OnCopy(wxCommandEvent &evt) {
   // Copy to clipboard
   if (wxTheClipboard->Open()) {
     wxTheClipboard->SetData(new wxTextDataObject(selectedText));
+    wxTheClipboard->Flush();
     wxTheClipboard->Close();
   }
+  m_selection.active = false;
+  Refresh();
 }
 
 void TerminalPanel::OnPaste(wxCommandEvent &evt) {
@@ -630,10 +631,5 @@ void TerminalPanel::OnChar(wxKeyEvent &evt) {
 }
 
 void TerminalPanel::OnTimer(wxTimerEvent &) {
-  // Blink cursor every ~500ms (every 30th frame at ~16ms intervals)
-  static int frameCount = 0;
-  if (++frameCount % 30 == 0) {
-    m_cursorVisible = !m_cursorVisible;
-  }
   Refresh(false);
 }
