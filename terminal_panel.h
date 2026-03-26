@@ -5,6 +5,7 @@
 
 #include <wx/panel.h>
 #include <wx/timer.h>
+#include <vector>
 
 #include <memory>
 
@@ -54,4 +55,9 @@ private:
   bool m_cursorVisible{true};
   Selection m_selection;
   bool m_isDragging{false};
+
+  // Command history
+  std::vector<std::string> m_commandHistory;
+  int m_historyIndex{-1};
+  std::string m_currentCommand;
 };

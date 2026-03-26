@@ -10,6 +10,10 @@ cmake -DCMAKE_BUILD_TYPE=Debug -DWXWIN=C:/msys64/home/eran/root ..
 make -j32
 ```
 
+## GUIDELINES AND RULES
+
+- In order to test the application, ALWAYS ask the user to do it for you. This is a GUI program which you can not interact with.
+
 ## Initial Problem & Resolution
 - **Original Issue**: "Failed to create ConPTY error" - but this was a misdiagnosis
 - **Actual Problem**: ConPTY was working fine, but escape sequences weren't being parsed correctly
@@ -74,6 +78,7 @@ make -j32
 - ✅ Backspace fixed to delete single character (sends 0x7F instead of 0x08)
 - ✅ OSC sequence handling fixed (window titles no longer bleed into output)
 - ✅ Debug logging removed - production ready code
+- ✅ Command history with Up/Down arrows
 
 ## Recent Changes - Terminal Resize Implementation
 
@@ -229,6 +234,60 @@ This created a conflict where characters were potentially being double-sent or i
 
 **Result**: ✅ Pagers (git log, less, more) now work perfectly. Press `q` to quit, Space to scroll, arrows to navigate.
 
+## Recent Changes - Command History Implementation
+
+### Feature Added
+**Command History Navigation**: Users can now press Up/Down arrow keys to cycle through previously executed commands.
+
+### How It Works
+1. **Command Tracking**: The terminal tracks every character typed by the user
+2. **History Storage**: When Enter is pressed, the command is saved to history (duplicates are not added consecutively)
+3. **Navigation**:
+   - Press **Up Arrow** to go back through command history
+   - Press **Down Arrow** to go forward through history
+   - Pressing Down at the end clears the line
+4. **Editing**: Any character typed or deleted resets the history index back to current input
+5. **Line Replacement**: When navigating history, the current line is cleared and replaced with the history item
+
+### Changes Made
+1. **terminal_panel.h**:
+   - Added `std::vector<std::string> m_commandHistory` to store command history
+   - Added `int m_historyIndex` to track current position in history (-1 = current command)
+   - Added `std::string m_currentCommand` to track what user is currently typing
+
+2. **terminal_panel.cpp**:
+   - **OnCharHook()**: Added Up/Down arrow handling for history navigation with line clearing/replacement logic
+   - **OnCharHook()**: Enter key now saves command to history before submitting
+   - **OnKeyDown()**: All character input (letters, numbers, special chars) now tracked in `m_currentCommand`
+   - **OnKeyDown()**: Backspace removes last character from `m_currentCommand`
+   - **OnKeyDown()**: Ctrl+C clears current command
+   - **OnKeyDown()**: Up/Down arrows no longer send escape sequences to terminal (handled by history instead)
+   - **OnPaste()**: Pasted text is added to `m_currentCommand`
+
+### Testing
+1. Type a command like `echo hello` and press Enter
+2. Type another command like `dir` and press Enter
+3. Press Up arrow - should show `dir`
+4. Press Up arrow again - should show `echo hello`
+5. Press Down arrow - should show `dir`
+6. Press Down arrow again - should clear the line
+
+### Important Notes
+
+**This is application-level command history**, which means:
+- ✅ **Works independently** of shell's built-in history
+- ✅ **Intercepts keypresses** before sending to ConPTY
+- ✅ **Tracks everything** you type in real-time
+- ✅ **Clears and replaces** the current line when navigating
+- ❌ **Not persistent** - history is lost when application closes
+- ❌ **Only for this session** - doesn't interact with shell history files
+
+**Why not use shell's built-in history?**
+- We're working at the PTY level, passing raw keypresses
+- Shell history (cmd.exe/PowerShell) would conflict with our tracking
+- Application-level gives us more control and consistent behavior
+- Future enhancement: Could save history to file for persistence
+
 ## Known Issues to Address
 None currently!
 
@@ -236,9 +295,6 @@ None currently!
 
 ### High Priority
 1. ~~**Remove Debug Logging**~~ ✅ **COMPLETED**
-   - ~~Remove creation of `.log` files~~
-   - ~~Clean up debug code in terminal_panel.cpp and terminal_core.cpp~~
-   - ~~Make the codebase production-ready~~
 
    **What was done:**
    - Removed all `std::ofstream` debug logging from terminal_panel.cpp and terminal_core.cpp

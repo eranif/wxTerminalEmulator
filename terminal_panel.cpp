@@ -337,6 +337,7 @@ void TerminalPanel::OnPaste(wxCommandEvent &evt) {
     std::string text = data.GetText().ToStdString();
 
     // Send the pasted text to the terminal
+    m_currentCommand += text;
     SendInput(text);
   }
 
@@ -355,13 +356,77 @@ void TerminalPanel::OnCharHook(wxKeyEvent &evt) {
   int key = evt.GetKeyCode();
 
   if (key == WXK_RETURN || key == WXK_NUMPAD_ENTER) {
+    // Save current command to history (if not empty)
+    if (!m_currentCommand.empty()) {
+      // Don't add duplicate consecutive commands
+      if (m_commandHistory.empty() || m_commandHistory.back() != m_currentCommand) {
+        m_commandHistory.push_back(m_currentCommand);
+      }
+      m_currentCommand.clear();
+    }
+    m_historyIndex = -1; // Reset history navigation
     SendInput("\r");
     return; // Don't skip - we handled it
   } else if (key == WXK_TAB) {
     SendInput("\t");
+    m_currentCommand += '\t';
     return;
   } else if (key == WXK_ESCAPE) {
     SendInput("\x1b");
+    m_currentCommand += '\x1b';
+    return;
+  }
+
+  // Handle Up/Down arrows for command history
+  if (key == WXK_UP) {
+    if (!m_commandHistory.empty()) {
+      // If we're at the current command (historyIndex == -1), save it
+      if (m_historyIndex == -1) {
+        // Save whatever is currently typed (in case user wants to get back to it)
+        // This is stored but not added to permanent history yet
+      }
+
+      // Move back in history
+      if (m_historyIndex == -1) {
+        m_historyIndex = m_commandHistory.size() - 1;
+      } else if (m_historyIndex > 0) {
+        m_historyIndex--;
+      }
+
+      // Clear current line and replace with history item
+      std::string clearAndReplace = std::string(m_currentCommand.length(), '\b') +
+                                    std::string(m_currentCommand.length(), ' ') +
+                                    std::string(m_currentCommand.length(), '\b');
+      SendInput(clearAndReplace);
+      SendInput(m_commandHistory[m_historyIndex]);
+      m_currentCommand = m_commandHistory[m_historyIndex];
+    }
+    return;
+  } else if (key == WXK_DOWN) {
+    if (m_historyIndex >= 0) {
+      // Move forward in history
+      m_historyIndex++;
+
+      // Clear current line
+      std::string clearLine = std::string(m_currentCommand.length(), '\b') +
+                              std::string(m_currentCommand.length(), ' ') +
+                              std::string(m_currentCommand.length(), '\b');
+      SendInput(clearLine);
+
+      if (m_historyIndex < static_cast<int>(m_commandHistory.size())) {
+        // Show history item
+        SendInput(m_commandHistory[m_historyIndex]);
+        m_currentCommand = m_commandHistory[m_historyIndex];
+      } else {
+        // We've gone past the end - back to empty current command
+        m_historyIndex = -1;
+        m_currentCommand.clear();
+      }
+    }
+    return;
+  } else if (key == WXK_ESCAPE) {
+    SendInput("\x1b");
+    m_currentCommand += '\x1b';
     return;
   }
 
@@ -370,7 +435,6 @@ void TerminalPanel::OnCharHook(wxKeyEvent &evt) {
 }
 
 void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
-
   const int key = evt.GetKeyCode();
 
   // Handle Ctrl combinations
@@ -383,6 +447,8 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
         return;
       }
       // No selection - send Ctrl+C to terminal (SIGINT)
+      m_currentCommand.clear(); // Clear current command
+      m_historyIndex = -1;
     }
 
     // Handle Ctrl+V - Paste
@@ -415,13 +481,16 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
   // Handle special keys
   // Note: ENTER, TAB, and ESCAPE are handled in OnCharHook
   if (key == WXK_BACK) {
+    // Handle backspace - remove last character from current command
+    if (!m_currentCommand.empty()) {
+      m_currentCommand.pop_back();
+    }
+    m_historyIndex = -1; // Any edit resets history navigation
     SendInput("\x7f"); // Send DEL (0x7F)
     return;
-  } else if (key == WXK_UP) {
-    SendInput("\x1b[A");
-    return;
-  } else if (key == WXK_DOWN) {
-    SendInput("\x1b[B");
+  } else if (key == WXK_UP || key == WXK_DOWN) {
+    // UP and DOWN are now handled in OnCharHook for command history
+    // Don't pass them through to the terminal
     return;
   } else if (key == WXK_RIGHT) {
     SendInput("\x1b[C");
@@ -469,6 +538,8 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
     if (!evt.ShiftDown()) {
       ch = ch - 'A' + 'a'; // Convert to lowercase
     }
+    m_currentCommand += ch;
+    m_historyIndex = -1; // Any edit resets history navigation
     SendInput(std::string(1, ch));
     return;
   }
@@ -478,11 +549,14 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
   if (it != shiftMap.end()) {
     if (!evt.ShiftDown()) {
       // No shift - send the key as-is
+      m_currentCommand += static_cast<char>(key);
       SendInput(std::string(1, static_cast<char>(key)));
     } else {
       // Shift pressed - send the shifted character
+      m_currentCommand += static_cast<char>(it->second);
       SendInput(std::string(1, static_cast<char>(it->second)));
     }
+    m_historyIndex = -1; // Any edit resets history navigation
     return;
   }
 
@@ -490,6 +564,8 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
   if (key >= 32 && key < 127) {
     // For other ASCII characters, send as-is
     SendInput(std::string(1, static_cast<char>(key)));
+    m_currentCommand += static_cast<char>(key);
+    m_historyIndex = -1; // Any edit resets history navigation
     return;
   }
 
