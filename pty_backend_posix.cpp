@@ -22,11 +22,11 @@
 
 namespace terminal {
 
-std::unique_ptr<PtyBackend> PtyBackend::Create() {
-  return std::make_unique<PosixPtyBackend>();
+std::unique_ptr<PtyBackend> PtyBackend::Create(wxEvtHandler *handler) {
+  return std::make_unique<PosixPtyBackend>(handler);
 }
 
-PosixPtyBackend::PosixPtyBackend() = default;
+PosixPtyBackend::PosixPtyBackend(wxEvtHandler *handler) : PtyBackend(handler) {}
 PosixPtyBackend::~PosixPtyBackend() { Stop(); }
 
 bool PosixPtyBackend::Start(const std::string &command,
@@ -34,7 +34,7 @@ bool PosixPtyBackend::Start(const std::string &command,
   Stop();
   m_onOutput = std::move(on_output);
 
-  struct winsize ws {};
+  struct winsize ws{};
   ws.ws_col = 120;
   ws.ws_row = 30;
 
@@ -85,7 +85,7 @@ void PosixPtyBackend::Write(const std::string &data) {
 void PosixPtyBackend::Resize(int cols, int rows) {
   if (m_masterFd < 0)
     return;
-  struct winsize ws {};
+  struct winsize ws{};
   ws.ws_col = static_cast<unsigned short>(cols);
   ws.ws_row = static_cast<unsigned short>(rows);
   ioctl(m_masterFd, TIOCSWINSZ, &ws);
@@ -120,7 +120,7 @@ void PosixPtyBackend::ReaderThread() {
     if (m_masterFd < 0)
       break;
 
-    struct pollfd pfd {};
+    struct pollfd pfd{};
     pfd.fd = m_masterFd;
     pfd.events = POLLIN;
 

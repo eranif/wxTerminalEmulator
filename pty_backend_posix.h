@@ -12,7 +12,7 @@ namespace terminal {
 
 class PosixPtyBackend final : public PtyBackend {
 public:
-  PosixPtyBackend();
+  PosixPtyBackend(wxEvtHandler* handler);
   ~PosixPtyBackend() override;
 
   bool Start(const std::string &command, OutputCallback on_output) override;

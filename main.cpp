@@ -5,6 +5,7 @@
 #include <wx/app.h>
 #include <wx/display.h>
 #include <wx/frame.h>
+#include <wx/msgdlg.h>
 
 class MyFrame : public wxFrame {
 public:
@@ -19,14 +20,23 @@ public:
     SetSize(width, height);
     CentreOnScreen(); // Center the window on screen
 
-    TerminalLogger::Get().SetLevel(TerminalLogLevel::DEBUG);
+    TerminalLogger::Get().SetLevel(TerminalLogLevel::kDebug);
     auto *view = new TerminalView(this);
     view->SetTheme(wxTerminalTheme::MakeDarkTheme());
     view->StartProcess(""); // Empty string will use default shell
 
-    Bind(wxEVT_TERMINAL_TITLE_CHANGED,
-         [this](wxTerminalEvent &evt) { SetTitle(evt.GetTitle()); });
+    view->Bind(wxEVT_TERMINAL_TITLE_CHANGED, &MyFrame::OnTitleChanged, this);
+    view->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
   }
+
+  void OnTerminated(wxTerminalEvent &event) {
+    wxUnusedVar(event);
+    ::wxMessageBox("Terminal terminated!", "wxTerminalEmulator",
+                   wxICON_WARNING | wxOK | wxCENTER);
+    CallAfter(&MyFrame::Terminate);
+  }
+  void OnTitleChanged(wxTerminalEvent &event) { SetTitle(event.GetTitle()); }
+  void Terminate() { Close(true); }
 };
 
 class MyApp : public wxApp {

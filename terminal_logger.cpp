@@ -6,13 +6,13 @@
 namespace {
 wxString LevelToString(TerminalLogLevel level) {
   switch (level) {
-  case TRACE:
+  case TerminalLogLevel::kTrace:
     return "TRACE";
-  case DEBUG:
+  case TerminalLogLevel::kDebug:
     return "DEBUG";
-  case WARN:
+  case TerminalLogLevel::kWarn:
     return "WARN";
-  case ERROR:
+  case TerminalLogLevel::kError:
     return "ERROR";
   }
   return "?";

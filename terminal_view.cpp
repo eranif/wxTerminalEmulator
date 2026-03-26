@@ -74,7 +74,7 @@ TerminalView::TerminalView(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   Bind(wxEVT_SET_FOCUS, &TerminalView::OnFocus, this);
   Bind(wxEVT_TIMER, &TerminalView::OnTimer, this);
 
-  m_backend = terminal::PtyBackend::Create();
+  m_backend = terminal::PtyBackend::Create(GetEventHandler());
 
   m_timer.SetOwner(this);
   m_timer.Start(16);
@@ -124,7 +124,7 @@ void TerminalView::SetTerminalSizeFromClient() {
 
 bool TerminalView::StartProcess(const std::string &command) {
   if (!m_backend)
-    m_backend = terminal::PtyBackend::Create();
+    m_backend = terminal::PtyBackend::Create(GetEventHandler());
   return m_backend && m_backend->Start(command, [this](const std::string &out) {
     CallAfter(&TerminalView::Feed, out);
   });

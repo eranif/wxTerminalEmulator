@@ -14,7 +14,7 @@ namespace terminal {
 
 class WindowsPtyBackend final : public PtyBackend {
 public:
-  WindowsPtyBackend();
+  WindowsPtyBackend(wxEvtHandler *eventHandler);
   ~WindowsPtyBackend() override;
 
   bool Start(const std::string &command, OutputCallback on_output) override;
@@ -25,7 +25,6 @@ public:
 private:
   void ReaderThread();
   void WriterThread();
-  std::string NormalizeInputForConsoleModes(const std::string &data) const;
   void InterruptIo();
   bool CreateConPty(const std::string &command);
   void DestroyConPty();

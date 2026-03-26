@@ -19,3 +19,4 @@ private:
 };
 
 wxDECLARE_EVENT(wxEVT_TERMINAL_TITLE_CHANGED, wxTerminalEvent);
+wxDECLARE_EVENT(wxEVT_TERMINAL_TERMINATED, wxTerminalEvent);

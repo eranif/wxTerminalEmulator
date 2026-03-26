@@ -131,18 +131,18 @@ void TerminalCore::Reset() {
 }
 
 void TerminalCore::PutData(const std::string &data) {
-  LOG(TRACE) << "PutData len=" << data.size() << std::endl;
+  LOG_TRACE() << "PutData len=" << data.size() << std::endl;
   for (char c : data) {
     if (m_inEscape) {
       m_escape.push_back(c);
 
       // Safety: if escape buffer grows too large, it's stuck — dump and reset
       if (m_escape.size() > 256) {
-        LOG(WARN) << "Escape buffer overflow, dumping: [";
+        LOG_WARN() << "Escape buffer overflow, dumping: [";
         for (unsigned char ch : m_escape)
-          LOG(WARN) << std::hex << std::setfill('0') << std::setw(2) << (int)ch
-                    << " ";
-        LOG(WARN) << "]" << std::endl;
+          LOG_WARN() << std::hex << std::setfill('0') << std::setw(2) << (int)ch
+                     << " ";
+        LOG_WARN() << "]" << std::endl;
         m_escape.clear();
         m_inEscape = false;
         continue;
@@ -354,7 +354,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
       oss << std::hex << std::setfill('0') << std::setw(2) << (int)ch << " ";
     oss << "] cursor=(" << std::dec << m_cursor.row << "," << m_cursor.col
         << ")";
-    LOG(TRACE) << oss.str() << std::endl;
+    LOG_TRACE() << oss.str() << std::endl;
   }
 
   if (seq.size() == 1) {

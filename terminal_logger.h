@@ -9,7 +9,7 @@
 #include <wx/filename.h>
 #include <wx/string.h>
 
-enum TerminalLogLevel { TRACE = 0, DEBUG = 1, WARN = 2, ERROR = 3 };
+enum class TerminalLogLevel { kTrace = 0, kDebug = 1, kWarn = 2, kError = 3 };
 
 class TerminalLogger {
 public:
@@ -62,13 +62,13 @@ private:
   void Write(TerminalLogLevel level, const wxString &msg);
   void EnsureOpen();
 
-  TerminalLogLevel m_level{DEBUG};
+  TerminalLogLevel m_level{TerminalLogLevel::kDebug};
   wxString m_logPath;
   wxFFile m_file;
 };
 
 #define LOG(level) TerminalLogger::Get().Log(level)
-#define LOG_DEBUG() LOG(TerminalLogLevel::DEBUG)
-#define LOG_WARN() LOG(TerminalLogLevel::WARN)
-#define LOG_ERROR() LOG(TerminalLogLevel::ERROR)
-#define LOG_TRACE() LOG(TerminalLogLevel::TRACE)
+#define LOG_DEBUG() LOG(TerminalLogLevel::kDebug)
+#define LOG_WARN() LOG(TerminalLogLevel::kWarn)
+#define LOG_ERROR() LOG(TerminalLogLevel::kError)
+#define LOG_TRACE() LOG(TerminalLogLevel::kTrace)

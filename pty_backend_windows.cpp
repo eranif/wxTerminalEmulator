@@ -1,4 +1,10 @@
+// clang-format off
+#include <wx/app.h>
+// clang-format on
+
 #include "pty_backend_windows.h"
+#include "terminal_event.h"
+#include "terminal_logger.h"
 
 #include <chrono>
 #include <cstdio>
@@ -113,11 +119,12 @@ using unique_handle =
 
 } // namespace
 
-std::unique_ptr<PtyBackend> PtyBackend::Create() {
-  return std::make_unique<WindowsPtyBackend>();
+std::unique_ptr<PtyBackend> PtyBackend::Create(wxEvtHandler *eventHandler) {
+  return std::make_unique<WindowsPtyBackend>(eventHandler);
 }
 
-WindowsPtyBackend::WindowsPtyBackend() = default;
+WindowsPtyBackend::WindowsPtyBackend(wxEvtHandler *eventHandler)
+    : PtyBackend{eventHandler} {}
 
 WindowsPtyBackend::~WindowsPtyBackend() { Stop(); }
 
@@ -203,6 +210,10 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
   sa.nLength = sizeof(sa);
   sa.bInheritHandle = TRUE;
   sa.lpSecurityDescriptor = nullptr;
+
+  // Create pipes with FILE_FLAG_OVERLAPPED for non-blocking I/O
+  // Note: We only make the parent-side handles overlapped
+  // The child-side handles (inRead, outWrite) remain synchronous
 
   HANDLE inRead = nullptr, inWrite = nullptr;
   HANDLE outRead = nullptr, outWrite = nullptr;
@@ -384,28 +395,56 @@ void WindowsPtyBackend::WriterThread() {
           m_running = false;
           break;
         }
-      } else {
-        FlushFileBuffers(m_hInputWrite);
       }
     }
   }
+  LOG_DEBUG() << "WriterThread is going down" << std::endl;
 }
 
 void WindowsPtyBackend::ReaderThread() {
   char buf[4096];
 
   while (m_running) {
+    // Check if process is still alive
+    if (m_hProcess) {
+      DWORD exitCode = 0;
+      if (GetExitCodeProcess(m_hProcess, &exitCode) &&
+          exitCode != STILL_ACTIVE) {
+        LOG_WARN() << "Process has exited with code: " << exitCode << std::endl;
+        m_running = false;
+        wxTerminalEvent terminate_event{wxEVT_TERMINAL_TERMINATED};
+        m_eventHandler->AddPendingEvent(terminate_event);
+        break;
+      }
+    }
+
     if (m_hOutputRead) {
       DWORD read = 0;
-      BOOL ok = ReadFile(m_hOutputRead, buf, sizeof(buf), &read, nullptr);
-      if (ok && read > 0) {
-        if (m_onOutput) {
-          m_onOutput(std::string(buf, buf + read));
+      DWORD avail = 0;
+
+      // Check if there's data available before attempting to read
+      if (PeekNamedPipe(m_hOutputRead, nullptr, 0, nullptr, &avail, nullptr)) {
+        if (avail > 0) {
+          // Limit read to buffer size
+          DWORD toRead = (avail < sizeof(buf)) ? avail : sizeof(buf);
+          BOOL ok = ReadFile(m_hOutputRead, buf, toRead, &read, nullptr);
+          if (ok && read > 0) {
+            if (m_onOutput) {
+              m_onOutput(std::string(buf, buf + read));
+            }
+          } else {
+            DWORD err = GetLastError();
+            if (err == ERROR_BROKEN_PIPE || err == ERROR_INVALID_HANDLE) {
+              m_running = false;
+              break;
+            }
+          }
         }
       } else {
         DWORD err = GetLastError();
         if (err == ERROR_BROKEN_PIPE || err == ERROR_INVALID_HANDLE) {
           m_running = false;
+          LOG_WARN() << "Pipe broken!" << std::endl;
           break;
         }
       }
@@ -415,35 +454,9 @@ void WindowsPtyBackend::ReaderThread() {
     if (!m_running) {
       break;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
-}
-
-std::string WindowsPtyBackend::NormalizeInputForConsoleModes(
-    const std::string &data) const {
-  if (data.empty())
-    return {};
-
-  std::string normalized;
-  normalized.reserve(data.size() * 2);
-
-  for (size_t i = 0; i < data.size(); ++i) {
-    const char ch = data[i];
-
-    // Windows console line input typically expects CR for Enter/history
-    // navigation to be processed consistently by cmd.exe and similar shells.
-    // Preserve existing CRLF and avoid doubling CRs.
-    if (ch == '\n') {
-      if (i == 0 || data[i - 1] != '\r')
-        normalized.push_back('\r');
-      normalized.push_back('\n');
-      continue;
-    }
-
-    normalized.push_back(ch);
-  }
-
-  return normalized;
+  LOG_DEBUG() << "ReaderThread is going down" << std::endl;
 }
 
 void WindowsPtyBackend::InterruptIo() {
