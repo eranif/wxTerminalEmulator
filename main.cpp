@@ -1,5 +1,6 @@
 #include "terminal_panel.h"
 
+#include "terminal_event.h"
 #include "terminal_logger.h"
 #include <wx/app.h>
 #include <wx/display.h>
@@ -20,7 +21,10 @@ public:
 
     TerminalLogger::Get().SetLevel(TerminalLogLevel::WARN);
     auto *panel = new TerminalPanel(this);
-    panel->StartProcess(""); // Empty string will use default shell (cmd.exe)
+    panel->StartProcess(""); // Empty string will use default shell
+
+    Bind(wxEVT_TERMINAL_TITLE_CHANGED,
+         [this](wxTerminalEvent &evt) { SetTitle(evt.GetTitle()); });
   }
 };
 

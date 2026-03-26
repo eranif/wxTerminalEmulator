@@ -79,6 +79,7 @@ make -j32
 - ✅ Mouse selection and copy/paste functionality
 - ✅ Backspace fixed to delete single character (sends 0x7F instead of 0x08)
 - ✅ OSC sequence handling fixed (window titles no longer bleed into output)
+- ✅ Window title updates via OSC 0/2 sequences (fires wxTerminalEvent)
 - ✅ Debug logging removed - production ready code
 - ✅ Command history with Up/Down arrows
 - ✅ Common keyboard shortcuts (Ctrl+L, Ctrl+U)

@@ -358,7 +358,18 @@ void TerminalCore::ParseEscape(const std::string &seq) {
 
   // Handle OSC sequences (starts with ])
   if (seq[0] == ']') {
-    // Operating System Command - just ignore for now
+    // OSC 0;title or OSC 2;title — set window title
+    // seq is "]0;title\x07" or "]2;title\x07"
+    if (seq.size() > 2 && (seq[1] == '0' || seq[1] == '2') && seq[2] == ';') {
+      std::string title = seq.substr(3);
+      // Strip terminator (BEL or ESC\)
+      if (!title.empty() && (title.back() == '\x07' || title.back() == '\\'))
+        title.pop_back();
+      if (!title.empty() && title.back() == '\x1b')
+        title.pop_back();
+      if (m_titleCallback)
+        m_titleCallback(title);
+    }
     return;
   }
 

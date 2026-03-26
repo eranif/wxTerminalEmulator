@@ -39,6 +39,9 @@ public:
   void SetResponseCallback(std::function<void(const std::string &)> callback) {
     m_responseCallback = callback;
   }
+  void SetTitleCallback(std::function<void(const std::string &)> callback) {
+    m_titleCallback = callback;
+  }
 
   std::size_t Rows() const { return m_rows; }
   std::size_t Cols() const { return m_cols; }
@@ -75,6 +78,7 @@ private:
   std::string m_escape;
   Cell m_attr{};
   std::function<void(const std::string &)> m_responseCallback;
+  std::function<void(const std::string &)> m_titleCallback;
   std::string m_utf8Buf;
 };
 

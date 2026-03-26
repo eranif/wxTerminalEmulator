@@ -1,5 +1,6 @@
 #include "terminal_panel.h"
 
+#include "terminal_event.h"
 #include "terminal_logger.h"
 #include <algorithm>
 #include <cstdio>
@@ -9,6 +10,7 @@
 #include <wx/dcbuffer.h>
 #include <wx/dcgraph.h>
 #include <wx/font.h>
+#include <wx/frame.h>
 #include <wx/menu.h>
 #include <wx/window.h>
 
@@ -48,7 +50,7 @@ TerminalPanel::TerminalPanel(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
 
   m_defaultFont =
-#ifdef __APPLE__
+#ifdef __WXMAC__
       wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
              wxFONTWEIGHT_NORMAL, false, "Menlo");
 #else
@@ -72,6 +74,12 @@ TerminalPanel::TerminalPanel(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   // Set up callback for terminal responses (e.g., cursor position reports)
   m_core.SetResponseCallback(
       [this](const std::string &response) { SendInput(response); });
+  m_core.SetTitleCallback([this](const std::string &title) {
+    wxTerminalEvent event{wxEVT_TERMINAL_TITLE_CHANGED};
+    event.SetTitle(wxString::FromUTF8(title));
+    event.SetEventObject(this);
+    AddPendingEvent(event);
+  });
 
   SetTerminalSizeFromClient();
   SetFocus();
@@ -345,7 +353,8 @@ void TerminalPanel::OnPaste(wxCommandEvent &evt) {
   if (!wxTheClipboard->Open())
     return;
 
-  if (wxTheClipboard->IsSupported(wxDF_TEXT)) {
+  if (wxTheClipboard->IsSupported(wxDF_UNICODETEXT) ||
+      wxTheClipboard->IsSupported(wxDF_TEXT)) {
     wxTextDataObject data;
     wxTheClipboard->GetData(data);
     std::string text = data.GetText().ToStdString();
@@ -393,7 +402,8 @@ void TerminalPanel::OnCharHook(wxKeyEvent &evt) {
   }
 
 #ifdef _WIN32
-  // Application-level command history (Windows only — POSIX shells have readline)
+  // Application-level command history (Windows only — POSIX shells have
+  // readline)
   if (key == WXK_UP) {
     if (!m_commandHistory.empty()) {
       if (m_historyIndex == -1) {
