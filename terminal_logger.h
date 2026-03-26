@@ -1,6 +1,8 @@
 #pragma once
 
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <vector>
 #include <wx/arrstr.h>
 #include <wx/ffile.h>
@@ -22,24 +24,33 @@ public:
     LogEntry(TerminalLogLevel level, bool enabled);
     ~LogEntry();
 
+    // Generic: anything std::ostream supports (numbers, std::hex, etc.)
+    template <typename T> LogEntry &operator<<(const T &v) {
+      if (m_enabled)
+        m_ss << v;
+      return *this;
+    }
+
+    // Stream manipulators (std::hex, std::dec, std::endl, etc.)
+    LogEntry &operator<<(std::ostream &(*manip)(std::ostream &)) {
+      if (m_enabled)
+        manip(m_ss);
+      return *this;
+    }
+
+    LogEntry &operator<<(std::ios_base &(*manip)(std::ios_base &)) {
+      if (m_enabled)
+        manip(m_ss);
+      return *this;
+    }
+
+    // wx-specific types
     LogEntry &operator<<(const wxString &s);
-    LogEntry &operator<<(const char *s);
-    LogEntry &operator<<(const std::string &s);
-    LogEntry &operator<<(int v);
-    LogEntry &operator<<(long v);
-    LogEntry &operator<<(long long v);
-    LogEntry &operator<<(unsigned int v);
-    LogEntry &operator<<(unsigned long v);
-    LogEntry &operator<<(double v);
     LogEntry &operator<<(const wxArrayString &arr);
     LogEntry &operator<<(const std::vector<wxString> &arr);
-    LogEntry &operator<<(const std::vector<std::string> &arr);
-
-    // Support for std::endl
-    LogEntry &operator<<(std::ostream &(*)(std::ostream &));
 
   private:
-    wxString m_buf;
+    std::ostringstream m_ss;
     TerminalLogLevel m_level;
     bool m_enabled;
   };

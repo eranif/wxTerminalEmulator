@@ -1,11 +1,12 @@
 #include "terminal_core.h"
 
 #include <algorithm>
+#include <iomanip>
 #include <sstream>
 
 #include <wx/string.h>
 
-#include <wx/string.h>
+#include "terminal_logger.h"
 
 namespace terminal {
 
@@ -139,6 +140,7 @@ void TerminalCore::Reset() {
 }
 
 void TerminalCore::PutData(const std::string &data) {
+  LOG(TRACE) << "PutData len=" << data.size() << std::endl;
   for (char c : data) {
     if (m_inEscape) {
       m_escape.push_back(c);
@@ -321,6 +323,16 @@ void TerminalCore::ScrollUp() {
 void TerminalCore::ParseEscape(const std::string &seq) {
   if (seq.empty())
     return;
+
+  {
+    std::ostringstream oss;
+    oss << "ESC [";
+    for (unsigned char ch : seq)
+      oss << std::hex << std::setfill('0') << std::setw(2) << (int)ch << " ";
+    oss << "] cursor=(" << std::dec << m_cursor.row << "," << m_cursor.col
+        << ")";
+    LOG(TRACE) << oss.str() << std::endl;
+  }
 
   // Handle single-character escape sequences (not CSI or OSC)
   if (seq.size() == 1) {
@@ -576,6 +588,35 @@ void TerminalCore::ParseEscape(const std::string &seq) {
             : static_cast<std::size_t>(std::max(1, std::stoi(params)));
     for (std::size_t i = 0; i < n; ++i) {
       ScrollUp();
+    }
+    break;
+  }
+
+  case 'P': { // DCH - Delete Character (shift remaining left)
+    const std::size_t n =
+        paramList.empty() ? 1
+                          : static_cast<std::size_t>(std::max(1, paramList[0]));
+    if (m_cursor.row < m_screen.size()) {
+      auto &row = m_screen[m_cursor.row];
+      for (std::size_t c = m_cursor.col; c + n < m_cols; ++c)
+        row[c] = row[c + n];
+      for (std::size_t c = m_cols > n ? m_cols - n : 0; c < m_cols; ++c)
+        row[c] = Cell{};
+    }
+    break;
+  }
+
+  case '@': { // ICH - Insert Character (shift remaining right)
+    const std::size_t n =
+        paramList.empty() ? 1
+                          : static_cast<std::size_t>(std::max(1, paramList[0]));
+    if (m_cursor.row < m_screen.size()) {
+      auto &row = m_screen[m_cursor.row];
+      for (std::size_t c = m_cols - 1; c >= m_cursor.col + n; --c)
+        row[c] = row[c - n];
+      for (std::size_t c = m_cursor.col; c < m_cursor.col + n && c < m_cols;
+           ++c)
+        row[c] = Cell{};
     }
     break;
   }

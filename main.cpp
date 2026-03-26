@@ -18,7 +18,7 @@ public:
     SetSize(width, height);
     Centre(); // Center the window on screen
 
-    TerminalLogger::Get().SetLevel(TerminalLogLevel::DEBUG);
+    TerminalLogger::Get().SetLevel(TerminalLogLevel::WARN);
     auto *panel = new TerminalPanel(this);
     panel->StartProcess(""); // Empty string will use default shell (cmd.exe)
   }

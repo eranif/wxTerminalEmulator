@@ -1,7 +1,6 @@
 #include "terminal_logger.h"
 
 #include <wx/datetime.h>
-#include <wx/stdpaths.h>
 
 namespace {
 wxString LevelToString(TerminalLogLevel level) {
@@ -60,83 +59,34 @@ TerminalLogger::LogEntry TerminalLogger::Log(TerminalLogLevel level) {
   return LogEntry(level, level >= m_level);
 }
 
-// LogEntry implementation
-
 TerminalLogger::LogEntry::LogEntry(TerminalLogLevel level, bool enabled)
     : m_level(level), m_enabled(enabled) {}
 
 TerminalLogger::LogEntry::~LogEntry() {
-  if (m_enabled && !m_buf.empty())
-    TerminalLogger::Get().Write(m_level, m_buf);
+  if (m_enabled) {
+    std::string s = m_ss.str();
+    if (!s.empty())
+      TerminalLogger::Get().Write(m_level, wxString::FromUTF8(s));
+  }
 }
 
 TerminalLogger::LogEntry &
 TerminalLogger::LogEntry::operator<<(const wxString &s) {
   if (m_enabled)
-    m_buf += s;
-  return *this;
-}
-
-TerminalLogger::LogEntry &TerminalLogger::LogEntry::operator<<(const char *s) {
-  if (m_enabled)
-    m_buf += s;
-  return *this;
-}
-
-TerminalLogger::LogEntry &
-TerminalLogger::LogEntry::operator<<(const std::string &s) {
-  if (m_enabled)
-    m_buf += s;
-  return *this;
-}
-
-TerminalLogger::LogEntry &TerminalLogger::LogEntry::operator<<(int v) {
-  if (m_enabled)
-    m_buf << v;
-  return *this;
-}
-
-TerminalLogger::LogEntry &TerminalLogger::LogEntry::operator<<(long v) {
-  if (m_enabled)
-    m_buf << v;
-  return *this;
-}
-
-TerminalLogger::LogEntry &TerminalLogger::LogEntry::operator<<(long long v) {
-  if (m_enabled)
-    m_buf << v;
-  return *this;
-}
-
-TerminalLogger::LogEntry &TerminalLogger::LogEntry::operator<<(unsigned int v) {
-  if (m_enabled)
-    m_buf << v;
-  return *this;
-}
-
-TerminalLogger::LogEntry &
-TerminalLogger::LogEntry::operator<<(unsigned long v) {
-  if (m_enabled)
-    m_buf << v;
-  return *this;
-}
-
-TerminalLogger::LogEntry &TerminalLogger::LogEntry::operator<<(double v) {
-  if (m_enabled)
-    m_buf += wxString::Format("%.6g", v);
+    m_ss << s.ToStdString(wxConvUTF8);
   return *this;
 }
 
 TerminalLogger::LogEntry &
 TerminalLogger::LogEntry::operator<<(const wxArrayString &arr) {
   if (m_enabled) {
-    m_buf += "[";
+    m_ss << "[";
     for (size_t i = 0; i < arr.size(); ++i) {
       if (i > 0)
-        m_buf += ", ";
-      m_buf += arr[i];
+        m_ss << ", ";
+      m_ss << arr[i].ToStdString(wxConvUTF8);
     }
-    m_buf += "]";
+    m_ss << "]";
   }
   return *this;
 }
@@ -144,33 +94,13 @@ TerminalLogger::LogEntry::operator<<(const wxArrayString &arr) {
 TerminalLogger::LogEntry &
 TerminalLogger::LogEntry::operator<<(const std::vector<wxString> &arr) {
   if (m_enabled) {
-    m_buf += "[";
+    m_ss << "[";
     for (size_t i = 0; i < arr.size(); ++i) {
       if (i > 0)
-        m_buf += ", ";
-      m_buf += arr[i];
+        m_ss << ", ";
+      m_ss << arr[i].ToStdString(wxConvUTF8);
     }
-    m_buf += "]";
+    m_ss << "]";
   }
-  return *this;
-}
-
-TerminalLogger::LogEntry &
-TerminalLogger::LogEntry::operator<<(const std::vector<std::string> &arr) {
-  if (m_enabled) {
-    m_buf += "[";
-    for (size_t i = 0; i < arr.size(); ++i) {
-      if (i > 0)
-        m_buf += ", ";
-      m_buf += arr[i];
-    }
-    m_buf += "]";
-  }
-  return *this;
-}
-
-TerminalLogger::LogEntry &
-TerminalLogger::LogEntry::operator<<(std::ostream &(*)(std::ostream &)) {
-  // endl triggers flush — the destructor handles writing
   return *this;
 }

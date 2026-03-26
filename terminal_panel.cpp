@@ -342,9 +342,9 @@ void TerminalPanel::OnPaste(wxCommandEvent &evt) {
     wxTextDataObject data;
     wxTheClipboard->GetData(data);
     std::string text = data.GetText().ToStdString();
-
-    // Send the pasted text to the terminal
+#ifdef _WIN32
     m_currentCommand += text;
+#endif
     SendInput(text);
   }
 
@@ -364,46 +364,36 @@ void TerminalPanel::OnCharHook(wxKeyEvent &evt) {
 
   if (key == WXK_RETURN || key == WXK_NUMPAD_ENTER) {
     LOG_TRACE() << "Handling WXK_RETURN" << std::endl;
-    // Save current command to history (if not empty)
+#ifdef _WIN32
     if (!m_currentCommand.empty()) {
-      // Don't add duplicate consecutive commands
       if (m_commandHistory.empty() ||
           m_commandHistory.back() != m_currentCommand) {
         m_commandHistory.push_back(m_currentCommand);
       }
       m_currentCommand.clear();
     }
-    m_historyIndex = -1; // Reset history navigation
+    m_historyIndex = -1;
+#endif
     SendInput("\r");
     LOG_TRACE() << "SendInput is called with \\r" << std::endl;
-    return; // Don't skip - we handled it
+    return;
   } else if (key == WXK_TAB) {
     SendInput("\t");
-    m_currentCommand += '\t';
     return;
   } else if (key == WXK_ESCAPE) {
     SendInput("\x1b");
-    m_currentCommand += '\x1b';
     return;
   }
 
-  // Handle Up/Down arrows for command history
+#ifdef _WIN32
+  // Application-level command history (Windows only — POSIX shells have readline)
   if (key == WXK_UP) {
     if (!m_commandHistory.empty()) {
-      // If we're at the current command (historyIndex == -1), save it
-      if (m_historyIndex == -1) {
-        // Save whatever is currently typed (in case user wants to get back to
-        // it) This is stored but not added to permanent history yet
-      }
-
-      // Move back in history
       if (m_historyIndex == -1) {
         m_historyIndex = m_commandHistory.size() - 1;
       } else if (m_historyIndex > 0) {
         m_historyIndex--;
       }
-
-      // Clear current line and replace with history item
       std::string clearAndReplace =
           std::string(m_currentCommand.length(), '\b') +
           std::string(m_currentCommand.length(), ' ') +
@@ -415,31 +405,22 @@ void TerminalPanel::OnCharHook(wxKeyEvent &evt) {
     return;
   } else if (key == WXK_DOWN) {
     if (m_historyIndex >= 0) {
-      // Move forward in history
       m_historyIndex++;
-
-      // Clear current line
       std::string clearLine = std::string(m_currentCommand.length(), '\b') +
                               std::string(m_currentCommand.length(), ' ') +
                               std::string(m_currentCommand.length(), '\b');
       SendInput(clearLine);
-
       if (m_historyIndex < static_cast<int>(m_commandHistory.size())) {
-        // Show history item
         SendInput(m_commandHistory[m_historyIndex]);
         m_currentCommand = m_commandHistory[m_historyIndex];
       } else {
-        // We've gone past the end - back to empty current command
         m_historyIndex = -1;
         m_currentCommand.clear();
       }
     }
     return;
-  } else if (key == WXK_ESCAPE) {
-    SendInput("\x1b");
-    m_currentCommand += '\x1b';
-    return;
   }
+#endif
 
   // For all other keys, let the normal event handling continue
   evt.Skip();
@@ -478,8 +459,10 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
         return;
       }
       // No selection - send Ctrl+C to terminal (SIGINT)
-      m_currentCommand.clear(); // Clear current command
+#ifdef _WIN32
+      m_currentCommand.clear();
       m_historyIndex = -1;
+#endif
     }
 
     // Handle Ctrl+V - Paste
@@ -492,19 +475,17 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
     // Handle Ctrl+U - Clear current line (Unix-style line kill)
     if (key == 'U' || key == 'u') {
 #ifdef _WIN32
-      // On Windows, manually clear the line since cmd.exe doesn't handle ^U
       if (!m_currentCommand.empty()) {
         std::string clearLine = std::string(m_currentCommand.length(), '\b') +
                                 std::string(m_currentCommand.length(), ' ') +
                                 std::string(m_currentCommand.length(), '\b');
         SendInput(clearLine);
       }
-#else
-      // On POSIX, send the control character and let the shell handle it
-      SendInput(std::string(1, '\x15'));
-#endif
       m_currentCommand.clear();
       m_historyIndex = -1;
+#else
+      SendInput(std::string(1, '\x15'));
+#endif
       return;
     }
 
@@ -531,17 +512,23 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
   // Handle special keys
   // Note: ENTER, TAB, and ESCAPE are handled in OnCharHook
   if (key == WXK_BACK) {
-    // Handle backspace - remove last character from current command
+#ifdef _WIN32
     if (!m_currentCommand.empty()) {
       m_currentCommand.pop_back();
     }
-    m_historyIndex = -1; // Any edit resets history navigation
-    SendInput("\x7f");   // Send DEL (0x7F)
+    m_historyIndex = -1;
+#endif
+    SendInput("\x7f");
     return;
   } else if (key == WXK_UP || key == WXK_DOWN) {
-    // UP and DOWN are now handled in OnCharHook for command history
-    // Don't pass them through to the terminal
+#ifdef _WIN32
+    // UP and DOWN are handled in OnCharHook for command history on Windows
     return;
+#else
+    // On POSIX, send arrow escape sequences — shell handles history
+    SendInput(key == WXK_UP ? "\x1b[A" : "\x1b[B");
+    return;
+#endif
   } else if (key == WXK_RIGHT) {
     SendInput("\x1b[C");
     return;
@@ -583,39 +570,36 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
   // Note: GetUnicodeKey() doesn't work properly in KEY_DOWN on Windows
   // We need to handle case conversion ourselves
   if (key >= 'A' && key <= 'Z') {
-    // Letter key - convert to lowercase unless Shift is pressed
     char ch = key;
     if (!evt.ShiftDown()) {
-      ch = ch - 'A' + 'a'; // Convert to lowercase
+      ch = ch - 'A' + 'a';
     }
+#ifdef _WIN32
     m_currentCommand += ch;
-    m_historyIndex = -1; // Any edit resets history navigation
+    m_historyIndex = -1;
+#endif
     SendInput(std::string(1, ch));
     return;
   }
 
-  // Handle characters that have shift variants (numbers and special characters)
   auto it = shiftMap.find(key);
   if (it != shiftMap.end()) {
-    if (!evt.ShiftDown()) {
-      // No shift - send the key as-is
-      m_currentCommand += static_cast<char>(key);
-      SendInput(std::string(1, static_cast<char>(key)));
-    } else {
-      // Shift pressed - send the shifted character
-      m_currentCommand += static_cast<char>(it->second);
-      SendInput(std::string(1, static_cast<char>(it->second)));
-    }
-    m_historyIndex = -1; // Any edit resets history navigation
+    char ch = evt.ShiftDown() ? static_cast<char>(it->second)
+                              : static_cast<char>(key);
+#ifdef _WIN32
+    m_currentCommand += ch;
+    m_historyIndex = -1;
+#endif
+    SendInput(std::string(1, ch));
     return;
   }
 
-  // Handle other printable characters
   if (key >= 32 && key < 127) {
-    // For other ASCII characters, send as-is
     SendInput(std::string(1, static_cast<char>(key)));
+#ifdef _WIN32
     m_currentCommand += static_cast<char>(key);
-    m_historyIndex = -1; // Any edit resets history navigation
+    m_historyIndex = -1;
+#endif
     return;
   }
 
