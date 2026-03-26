@@ -25,6 +25,8 @@ public:
 private:
   void ReaderThread();
   void WriterThread();
+  std::string NormalizeInputForConsoleModes(const std::string &data) const;
+  void InterruptIo();
   bool CreateConPty(const std::string &command);
   void DestroyConPty();
 

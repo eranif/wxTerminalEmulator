@@ -1,4 +1,5 @@
 #include "terminal_logger.h"
+#include "wx/utils.h"
 
 #include <wx/datetime.h>
 
@@ -28,8 +29,15 @@ TerminalLogger::TerminalLogger() {}
 void TerminalLogger::EnsureOpen() {
   if (m_file.IsOpened())
     return;
-  wxString dir = wxFileName::GetHomeDir() + wxFileName::GetPathSeparator() +
-                 ".wxTerminalEmulator";
+#ifdef __WXMSW__
+  wxString dir;
+  dir << R"(C:\Users\)" << ::wxGetUserId() << wxFileName::GetPathSeparator()
+      << ".wxterminal";
+#else
+  wxString dir =
+      wxFileName::GetHomeDir() + wxFileName::GetPathSeparator() + ".wxterminal";
+#endif
+
   if (!wxFileName::DirExists(dir))
     wxFileName::Mkdir(dir, wxS_DIR_DEFAULT, wxPATH_MKDIR_FULL);
   m_logPath = dir + wxFileName::GetPathSeparator() + "trace.log";

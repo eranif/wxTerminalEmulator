@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdio>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -168,7 +169,6 @@ void WindowsPtyBackend::Write(const std::string &data) {
   }
   m_cv.notify_one();
 }
-
 void WindowsPtyBackend::Resize(int cols, int rows) {
   if (!m_hPC)
     return;
@@ -187,6 +187,8 @@ void WindowsPtyBackend::Resize(int cols, int rows) {
 void WindowsPtyBackend::Stop() {
   m_running = false;
   m_cv.notify_all();
+
+  InterruptIo();
 
   if (m_readerThread.joinable())
     m_readerThread.join();
@@ -324,7 +326,6 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
   m_hOutputRead = outRead;
   m_hProcess = pi.hProcess;
   m_hThread = pi.hThread;
-
   return true;
 }
 
@@ -376,8 +377,16 @@ void WindowsPtyBackend::WriterThread() {
 
     if (!pending.empty() && m_hInputWrite) {
       DWORD written = 0;
-      WriteFile(m_hInputWrite, pending.data(),
-                static_cast<DWORD>(pending.size()), &written, nullptr);
+      if (!WriteFile(m_hInputWrite, pending.data(),
+                     static_cast<DWORD>(pending.size()), &written, nullptr)) {
+        DWORD err = GetLastError();
+        if (err == ERROR_BROKEN_PIPE || err == ERROR_INVALID_HANDLE) {
+          m_running = false;
+          break;
+        }
+      } else {
+        FlushFileBuffers(m_hInputWrite);
+      }
     }
   }
 }
@@ -388,27 +397,12 @@ void WindowsPtyBackend::ReaderThread() {
   while (m_running) {
     if (m_hOutputRead) {
       DWORD read = 0;
-      DWORD avail = 0;
-
-      // Check if there's data available before attempting to read
-      if (PeekNamedPipe(m_hOutputRead, nullptr, 0, nullptr, &avail, nullptr) &&
-          avail > 0) {
-        // Limit read to buffer size
-        DWORD toRead = (avail < sizeof(buf)) ? avail : sizeof(buf);
-        BOOL ok = ReadFile(m_hOutputRead, buf, toRead, &read, nullptr);
-        if (ok && read > 0) {
-          if (m_onOutput) {
-            m_onOutput(std::string(buf, buf + read));
-          }
-        } else {
-          DWORD err = GetLastError();
-          if (err == ERROR_BROKEN_PIPE || err == ERROR_INVALID_HANDLE) {
-            m_running = false;
-            break;
-          }
+      BOOL ok = ReadFile(m_hOutputRead, buf, sizeof(buf), &read, nullptr);
+      if (ok && read > 0) {
+        if (m_onOutput) {
+          m_onOutput(std::string(buf, buf + read));
         }
       } else {
-        // PeekNamedPipe failed - check the error
         DWORD err = GetLastError();
         if (err == ERROR_BROKEN_PIPE || err == ERROR_INVALID_HANDLE) {
           m_running = false;
@@ -423,6 +417,40 @@ void WindowsPtyBackend::ReaderThread() {
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
+}
+
+std::string WindowsPtyBackend::NormalizeInputForConsoleModes(
+    const std::string &data) const {
+  if (data.empty())
+    return {};
+
+  std::string normalized;
+  normalized.reserve(data.size() * 2);
+
+  for (size_t i = 0; i < data.size(); ++i) {
+    const char ch = data[i];
+
+    // Windows console line input typically expects CR for Enter/history
+    // navigation to be processed consistently by cmd.exe and similar shells.
+    // Preserve existing CRLF and avoid doubling CRs.
+    if (ch == '\n') {
+      if (i == 0 || data[i - 1] != '\r')
+        normalized.push_back('\r');
+      normalized.push_back('\n');
+      continue;
+    }
+
+    normalized.push_back(ch);
+  }
+
+  return normalized;
+}
+
+void WindowsPtyBackend::InterruptIo() {
+  if (m_hInputWrite)
+    CancelIoEx(m_hInputWrite, nullptr);
+  if (m_hOutputRead)
+    CancelIoEx(m_hOutputRead, nullptr);
 }
 
 } // namespace terminal

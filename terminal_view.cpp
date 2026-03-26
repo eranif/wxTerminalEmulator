@@ -12,6 +12,7 @@
 #include <wx/font.h>
 #include <wx/frame.h>
 #include <wx/menu.h>
+#include <wx/msgdlg.h>
 #include <wx/window.h>
 
 // Map of character key codes to their shifted values
@@ -460,9 +461,6 @@ void TerminalView::OnPaste(wxCommandEvent &evt) {
     wxTextDataObject data;
     wxTheClipboard->GetData(data);
     std::string text = data.GetText().ToStdString(wxConvUTF8);
-#ifdef _WIN32
-    m_currentCommand += text;
-#endif
     SendInput(text);
   }
 
@@ -482,16 +480,6 @@ void TerminalView::OnCharHook(wxKeyEvent &evt) {
 
   if (key == WXK_RETURN || key == WXK_NUMPAD_ENTER) {
     LOG_TRACE() << "Handling WXK_RETURN" << std::endl;
-#ifdef _WIN32
-    if (!m_currentCommand.empty()) {
-      if (m_commandHistory.empty() ||
-          m_commandHistory.back() != m_currentCommand) {
-        m_commandHistory.push_back(m_currentCommand);
-      }
-      m_currentCommand.clear();
-    }
-    m_historyIndex = -1;
-#endif
     SendInput("\r");
     LOG_TRACE() << "SendInput is called with \\r" << std::endl;
     return;
@@ -503,40 +491,9 @@ void TerminalView::OnCharHook(wxKeyEvent &evt) {
     return;
   }
 
-#ifdef _WIN32
-  // Application-level command history (Windows only — POSIX shells have
-  // readline)
-  if (key == WXK_UP) {
-    if (!m_commandHistory.empty()) {
-      if (m_historyIndex == -1) {
-        m_historyIndex = m_commandHistory.size() - 1;
-      } else if (m_historyIndex > 0) {
-        m_historyIndex--;
-      }
-      std::string clearAndReplace =
-          std::string(m_currentCommand.length(), '\b') +
-          std::string(m_currentCommand.length(), ' ') +
-          std::string(m_currentCommand.length(), '\b');
-      SendInput(clearAndReplace);
-      SendInput(m_commandHistory[m_historyIndex]);
-      m_currentCommand = m_commandHistory[m_historyIndex];
-    }
-    return;
-  } else if (key == WXK_DOWN) {
-    if (m_historyIndex >= 0) {
-      m_historyIndex++;
-      std::string clearLine = std::string(m_currentCommand.length(), '\b') +
-                              std::string(m_currentCommand.length(), ' ') +
-                              std::string(m_currentCommand.length(), '\b');
-      SendInput(clearLine);
-      if (m_historyIndex < static_cast<int>(m_commandHistory.size())) {
-        SendInput(m_commandHistory[m_historyIndex]);
-        m_currentCommand = m_commandHistory[m_historyIndex];
-      } else {
-        m_historyIndex = -1;
-        m_currentCommand.clear();
-      }
-    }
+#ifdef __WXMSW__
+  // Special keys should be handled here on Windows.
+  if (HandleSpecialKeys(evt)) {
     return;
   }
 #endif
@@ -579,8 +536,6 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
       }
       // No selection - send Ctrl+C to terminal (SIGINT)
 #ifdef _WIN32
-      m_currentCommand.clear();
-      m_historyIndex = -1;
 #endif
     }
 
@@ -594,14 +549,6 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
     // Handle Ctrl+U - Clear current line (Unix-style line kill)
     if (key == 'U' || key == 'u') {
 #ifdef _WIN32
-      if (!m_currentCommand.empty()) {
-        std::string clearLine = std::string(m_currentCommand.length(), '\b') +
-                                std::string(m_currentCommand.length(), ' ') +
-                                std::string(m_currentCommand.length(), '\b');
-        SendInput(clearLine);
-      }
-      m_currentCommand.clear();
-      m_historyIndex = -1;
 #else
       SendInput(std::string(1, '\x15'));
 #endif
@@ -631,59 +578,15 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
   // Handle special keys
   // Note: ENTER, TAB, and ESCAPE are handled in OnCharHook
   if (key == WXK_BACK) {
-#ifdef _WIN32
-    if (!m_currentCommand.empty()) {
-      m_currentCommand.pop_back();
-    }
-    m_historyIndex = -1;
-#endif
     SendInput("\x7f");
     return;
-  } else if (key == WXK_UP || key == WXK_DOWN) {
-#ifdef _WIN32
-    // UP and DOWN are handled in OnCharHook for command history on Windows
-    return;
-#else
-    // On POSIX, send arrow escape sequences — shell handles history
-    SendInput(key == WXK_UP ? "\x1b[A" : "\x1b[B");
-    return;
-#endif
-  } else if (key == WXK_RIGHT) {
-    SendInput("\x1b[C");
-    return;
-  } else if (key == WXK_LEFT) {
-    SendInput("\x1b[D");
-    return;
-  } else if (key == WXK_HOME) {
-    SendInput("\x1b[H");
-    return;
-  } else if (key == WXK_END) {
-    SendInput("\x1b[F");
-    return;
-  } else if (key == WXK_DELETE) {
-    SendInput("\x1b[3~");
-    return;
-  } else if (key == WXK_INSERT) {
-    SendInput("\x1b[2~");
-    return;
-  } else if (key == WXK_PAGEUP) {
-    SendInput("\x1b[5~");
-    return;
-  } else if (key == WXK_PAGEDOWN) {
-    SendInput("\x1b[6~");
-    return;
-  } else if (key >= WXK_F1 && key <= WXK_F12) {
-    // Function keys F1-F12
-    char buf[16];
-    int fkey = key - WXK_F1 + 1;
-    if (fkey <= 4) {
-      snprintf(buf, sizeof(buf), "\x1bO%c", 'P' + fkey - 1);
-    } else {
-      snprintf(buf, sizeof(buf), "\x1b[%d~", fkey + 10);
-    }
-    SendInput(buf);
+  }
+
+#ifndef __WXMSW__
+  if (HandleSpecialKeys(evt)) {
     return;
   }
+#endif
 
   // Handle regular printable characters
   // Note: GetUnicodeKey() doesn't work properly in KEY_DOWN on Windows
@@ -694,8 +597,6 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
       ch = ch - 'A' + 'a';
     }
 #ifdef _WIN32
-    m_currentCommand += ch;
-    m_historyIndex = -1;
 #endif
     SendInput(std::string(1, ch));
     return;
@@ -706,8 +607,6 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
     char ch = evt.ShiftDown() ? static_cast<char>(it->second)
                               : static_cast<char>(key);
 #ifdef _WIN32
-    m_currentCommand += ch;
-    m_historyIndex = -1;
 #endif
     SendInput(std::string(1, ch));
     return;
@@ -716,14 +615,56 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
   if (key >= 32 && key < 127) {
     SendInput(std::string(1, static_cast<char>(key)));
 #ifdef _WIN32
-    m_currentCommand += static_cast<char>(key);
-    m_historyIndex = -1;
 #endif
     return;
   }
 
   // Unknown key - skip it
   evt.Skip();
+}
+
+bool TerminalView::HandleSpecialKeys(wxKeyEvent &key_event) {
+  auto key = key_event.GetKeyCode();
+  if (key == WXK_UP || key == WXK_DOWN) {
+    SendInput(key == WXK_UP ? "\x1b[A" : "\x1b[B");
+    return true;
+  } else if (key == WXK_RIGHT) {
+    SendInput("\x1b[C");
+    return true;
+  } else if (key == WXK_LEFT) {
+    SendInput("\x1b[D");
+    return true;
+  } else if (key == WXK_HOME) {
+    SendInput("\x1b[H");
+    return true;
+  } else if (key == WXK_END) {
+    SendInput("\x1b[F");
+    return true;
+  } else if (key == WXK_DELETE) {
+    SendInput("\x1b[3~");
+    return true;
+  } else if (key == WXK_INSERT) {
+    SendInput("\x1b[2~");
+    return true;
+  } else if (key == WXK_PAGEUP) {
+    SendInput("\x1b[5~");
+    return true;
+  } else if (key == WXK_PAGEDOWN) {
+    SendInput("\x1b[6~");
+    return true;
+  } else if (key >= WXK_F1 && key <= WXK_F12) {
+    // Function keys F1-F12
+    char buf[16];
+    int fkey = key - WXK_F1 + 1;
+    if (fkey <= 4) {
+      snprintf(buf, sizeof(buf), "\x1bO%c", 'P' + fkey - 1);
+    } else {
+      snprintf(buf, sizeof(buf), "\x1b[%d~", fkey + 10);
+    }
+    SendInput(buf);
+    return true;
+  }
+  return false;
 }
 
 void TerminalView::OnTimer(wxTimerEvent &evt) {

@@ -53,7 +53,23 @@ private:
   void OnFocus(wxFocusEvent &evt);
   void OnCopy(wxCommandEvent &evt);
   void OnPaste(wxCommandEvent &evt);
-
+  /**
+   * Handles terminal-specific special key events by translating supported
+   * wxWidgets key codes into ANSI escape sequences and sending them to the
+   * terminal input stream.
+   *
+   * This TerminalView method recognizes navigation keys, insert/delete keys,
+   * page movement keys, and function keys F1 through F12. When a supported key
+   * is detected, it calls SendInput() with the corresponding escape sequence
+   * and reports that the event was handled; unsupported keys are ignored and
+   * left for other handlers.
+   *
+   * @param key_event wxKeyEvent& The keyboard event containing the key code to
+   * inspect and translate.
+   * @return bool Returns true if the key was recognized and an escape sequence
+   * was sent; returns false if the key is not handled by this method.
+   */
+  bool HandleSpecialKeys(wxKeyEvent &key_event);
   struct Selection {
     int startRow{-1}, startCol{-1};
     int endRow{-1}, endCol{-1};
@@ -74,10 +90,6 @@ private:
   int m_scrollOffset{0}; // 0 = at bottom, >0 = scrolled back
   int m_wheelAccum{0};
 
-  // Command history
-  std::vector<std::string> m_commandHistory;
-  int m_historyIndex{-1};
-  std::string m_currentCommand;
   wxFont m_defaultFont;
   wxTimer m_timer;
 };
