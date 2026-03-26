@@ -392,53 +392,43 @@ None currently!
 ### Completed
 1. ~~**Remove Debug Logging**~~ ✅
 2. ~~**Mouse Wheel Scrollback**~~ ✅
+3. ~~**Scroll region + Insert/Delete Lines**~~ ✅
+4. ~~**Alternate screen buffer**~~ ✅ (`?1049h`/`?1049l`, `?47h`/`?47l`)
+5. ~~**Cursor show/hide**~~ ✅ (`?25h`/`?25l` acknowledged)
+6. ~~**Reverse Index / Index / Next Line**~~ ✅ (`ESCM`, `ESCD`, `ESCE`)
+7. ~~**ESC7/ESC8 save/restore cursor**~~ ✅
+8. ~~**Intermediate byte sequences**~~ ✅ (`ESC(B`, `ESC)0`, etc.)
+9. ~~**Auto-wrap line wrapping**~~ ✅ (cursor resets to col 0 on wrap)
+10. ~~**Theme support**~~ ✅ (`wxTerminalTheme` with named wxColour fields, dark/light themes)
+11. ~~**Public API**~~ ✅ (ScrollToLastLine, GetLineCount, SetBufferSize, GetBufferSize, CenterLine, GetLine, SetSelection, ClearSelection, SetTheme)
 
-### High Priority - Missing Escape Sequences
+### Bug Fixes
+- **Scrollback buffer not growing**: `NewLine()` was calling `ScrollRegionUp()` even for full-screen scroll regions, which shifts rows in-place instead of growing the buffer. Fixed to use `ScrollUp()` when scroll region covers the full screen.
+- **Escape parser stuck on `ESC(B`**: Intermediate bytes (0x20-0x2F) weren't handled, causing the parser to never terminate sequences like `ESC(B` (Select Character Set). This caused `top` to hang.
+- **Single-byte escape double-push**: Characters were pushed into the escape buffer twice, so `ESCM` was parsed as `"MM"` instead of `"M"`. Fixed by removing the redundant push.
+
+### High Priority - Escape Sequences
 
 #### Currently Handled
-- Cursor movement: A, B, C, D, E, F, G, H, f
-- Erase: J (modes 0/1/2/3), K (modes 0/1/2)
-- Scroll: S (up), T (down)
-- Delete chars: P, Insert blanks: @
-- Insert Lines: L, Delete Lines: M
-- Erase Characters: X
-- Cursor Save/Restore: s / u
-- Set Scroll Region: r (DECSTBM)
-- Line Position Absolute: d
-- Repeat Character: b
-- Tab Clear: g (acknowledged, no custom tab stops)
+- Cursor movement: A, B, C, D, E, F, G, H, f, d
+- Erase: J (modes 0/1/2/3), K (modes 0/1/2), X
+- Scroll: S (up), T (down), scroll regions (r/DECSTBM)
+- Line editing: P (delete chars), @ (insert blanks), L (insert lines), M (delete lines)
+- Cursor: s/u (save/restore), ESC7/ESC8 (DEC save/restore)
+- Repeat: b (repeat last char)
 - SGR (m): full 16/256/truecolor, bold, underline, reverse
 - Device status: n (cursor position report), c (device attributes)
 - OSC: window title (0, 2)
-- Single-byte: ESC>, ESC=, ESC7, ESC8 (save/restore cursor), ESCM (reverse index), ESCD (index), ESCE (next line)
-- Intermediate byte sequences: ESC(B, ESC)0, etc. (character set designation, acknowledged)
-- Private mode CSI: ?1049h/?1049l (alternate screen buffer), ?25h/?25l, ?1h/?1l, ?7h/?7l
+- Single-byte: ESCM (reverse index), ESCD (index), ESCE (next line), ESC>/ESC=
+- Intermediate byte sequences: ESC(B, ESC)0, etc.
+- Private mode: ?1049h/?1049l (alternate screen buffer), ?25h/?25l, ?1h/?1l, ?7h/?7l
+- Escape buffer overflow protection (resets after 256 bytes)
 
 #### Verified Working
-- `man ls` — paging with spacebar works correctly
-- `vi` on large files — scrolling up/down with arrows, ESC → :q! and ESC → :wq all working
-- `top` — displays process list, updates in real-time, `q` to quit works
-
-#### Missing Private Mode Sequences
-| Mode | Description |
-|---|---|
-| `?1h` / `?1l` | Application/Normal cursor keys |
-| `?25h` / `?25l` | Show/hide cursor |
-| `?47h` / `?47l` / `?1049h` / `?1049l` | Alternate screen buffer (vim, less, htop, man) |
-| `?7h` / `?7l` | Auto-wrap mode on/off |
-
-#### Missing Single-Byte ESC Sequences
-| Sequence | Description |
-|---|---|
-| `ESCM` | Reverse Index — cursor up, scroll down if at top |
-| `ESCD` | Index — cursor down, scroll up if at bottom |
-| `ESCE` | Next Line — move to start of next line |
-
-#### Recommended Implementation Order
-1. ~~Scroll region (`r`) + Insert/Delete Lines (`L`/`M`)~~ ✅
-2. Alternate screen buffer (`?1049h`/`?1049l`) — lets vim/less restore screen on exit
-3. Cursor show/hide (`?25h`/`?25l`)
-4. Reverse Index (`ESCM`) — used by scroll regions
+- `man ls` — paging with spacebar
+- `vi` on large files — scrolling, ESC → :q! and :wq
+- `top` — real-time process list, `q` to quit
+- Scrollback — mouse wheel scrolling through history
 
 ### Medium Priority
 3. **Scrollback Navigation (remaining)**
@@ -450,7 +440,6 @@ None currently!
    - Ctrl+Plus/Ctrl+= to increase font size
    - Ctrl+Minus to decrease font size
    - Ctrl+0 to reset to default
-   - Persist font size preference (optional)
 
 ### Low Priority / Nice to Have
 5. **Selection Improvements**
@@ -462,9 +451,8 @@ None currently!
    - Save history to file so it survives app restart
 
 7. **Test Complex Applications**
-   - Test with vim, less, top, htop
-   - Verify all escape sequences work correctly
-   - Fix any issues that arise
+   - Test with htop, nano, tmux
+   - Fix any escape sequence gaps
 
 ## Files Modified
 1. `pty_backend_windows.cpp` - ConPTY handling, ReadFile fix, error diagnostics
