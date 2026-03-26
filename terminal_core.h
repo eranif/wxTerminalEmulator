@@ -83,14 +83,28 @@ private:
   // Convert viewport-relative row to absolute buffer row
   std::size_t AbsRow(std::size_t viewportRow) const;
 
+  // Scroll helpers (respect scroll region)
+  void ScrollRegionUp();
+  void ScrollRegionDown();
+
   std::size_t m_rows{24};
   std::size_t m_cols{80};
   std::size_t m_maxLines{10000};
 
   std::deque<std::vector<Cell>> m_buffer;
-  std::size_t m_viewStart{0};     // Where the user is looking (for rendering)
-  std::size_t m_shellStart{0};    // Where the shell's viewport starts (for cursor ops)
-  CursorPos m_cursor{};           // Relative to shell viewport
+  std::size_t m_viewStart{0};
+  std::size_t m_shellStart{0};
+  CursorPos m_cursor{};
+
+  // Scroll region (0-based, inclusive)
+  std::size_t m_scrollTop{0};
+  std::size_t m_scrollBottom{23}; // m_rows - 1
+
+  // Saved cursor (for ESC[s / ESC[u)
+  CursorPos m_savedCursor{};
+
+  // Last printed character (for ESC[b repeat)
+  char32_t m_lastChar{U' '};
 
   bool m_inEscape{false};
   std::string m_escape;

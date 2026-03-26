@@ -107,6 +107,10 @@ void TerminalCore::Resize(std::size_t rows, std::size_t cols) {
     m_cursor.row = m_rows - 1;
   if (m_cursor.col >= m_cols)
     m_cursor.col = m_cols - 1;
+
+  // Reset scroll region to full screen on resize
+  m_scrollTop = 0;
+  m_scrollBottom = m_rows - 1;
 }
 
 void TerminalCore::SetViewportSize(std::size_t rows, std::size_t cols) {
@@ -140,6 +144,10 @@ void TerminalCore::Reset() {
   m_viewStart = 0;
   m_shellStart = 0;
   m_cursor = {};
+  m_scrollTop = 0;
+  m_scrollBottom = m_rows - 1;
+  m_savedCursor = {};
+  m_lastChar = U' ';
   m_inEscape = false;
   m_escape.clear();
   m_attr = Cell{};
@@ -271,6 +279,7 @@ void TerminalCore::PutCell(char32_t cp) {
     auto cell = m_attr;
     cell.ch = cp;
     m_buffer[abs][m_cursor.col] = cell;
+    m_lastChar = cp;
     ++m_cursor.col;
     if (m_cursor.col >= m_cols)
       NewLine();
@@ -278,10 +287,12 @@ void TerminalCore::PutCell(char32_t cp) {
 }
 
 void TerminalCore::NewLine() {
-  ++m_cursor.row;
-  if (m_cursor.row >= m_rows) {
+  if (m_cursor.row == m_scrollBottom) {
+    ScrollRegionUp();
+  } else if (m_cursor.row >= m_rows - 1) {
     ScrollUp();
-    m_cursor.row = m_rows - 1;
+  } else {
+    ++m_cursor.row;
   }
 }
 
@@ -299,16 +310,36 @@ void TerminalCore::Tab() {
 void TerminalCore::ScrollUp() {
   m_buffer.push_back(std::vector<Cell>(m_cols));
   ++m_shellStart;
-  // Keep viewStart in sync if user is at the bottom
   if (m_viewStart + m_rows >= m_buffer.size() - 1)
     m_viewStart = m_shellStart;
-  // Trim oldest row if over limit
   if (m_buffer.size() > m_maxLines) {
     m_buffer.pop_front();
     --m_shellStart;
     if (m_viewStart > 0)
       --m_viewStart;
   }
+}
+
+void TerminalCore::ScrollRegionUp() {
+  // Delete the top row of the scroll region, shift rows up, blank the bottom
+  std::size_t top = AbsRow(m_scrollTop);
+  std::size_t bot = AbsRow(m_scrollBottom);
+  if (top >= m_buffer.size() || bot >= m_buffer.size())
+    return;
+  for (std::size_t r = top; r < bot; ++r)
+    m_buffer[r] = m_buffer[r + 1];
+  m_buffer[bot] = std::vector<Cell>(m_cols);
+}
+
+void TerminalCore::ScrollRegionDown() {
+  // Insert a blank row at the top of the scroll region, shift rows down
+  std::size_t top = AbsRow(m_scrollTop);
+  std::size_t bot = AbsRow(m_scrollBottom);
+  if (top >= m_buffer.size() || bot >= m_buffer.size())
+    return;
+  for (std::size_t r = bot; r > top; --r)
+    m_buffer[r] = m_buffer[r - 1];
+  m_buffer[top] = std::vector<Cell>(m_cols);
 }
 
 void TerminalCore::ParseEscape(const std::string &seq) {
@@ -538,6 +569,96 @@ void TerminalCore::ParseEscape(const std::string &seq) {
            ++c)
         row[c] = Cell{};
     }
+    break;
+  }
+
+  case 'T': { // Scroll Down
+    std::size_t n =
+        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    for (std::size_t i = 0; i < n; ++i)
+      ScrollRegionDown();
+    break;
+  }
+
+  case 'L': { // Insert Lines
+    std::size_t n =
+        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    for (std::size_t i = 0; i < n; ++i) {
+      // Shift rows from cursor down to scroll bottom
+      std::size_t bot = AbsRow(m_scrollBottom);
+      std::size_t cur = AbsRow(m_cursor.row);
+      if (cur < m_buffer.size() && bot < m_buffer.size()) {
+        for (std::size_t r = bot; r > cur; --r)
+          m_buffer[r] = m_buffer[r - 1];
+        m_buffer[cur] = std::vector<Cell>(m_cols);
+      }
+    }
+    break;
+  }
+
+  case 'M': { // Delete Lines
+    std::size_t n =
+        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    for (std::size_t i = 0; i < n; ++i) {
+      std::size_t bot = AbsRow(m_scrollBottom);
+      std::size_t cur = AbsRow(m_cursor.row);
+      if (cur < m_buffer.size() && bot < m_buffer.size()) {
+        for (std::size_t r = cur; r < bot; ++r)
+          m_buffer[r] = m_buffer[r + 1];
+        m_buffer[bot] = std::vector<Cell>(m_cols);
+      }
+    }
+    break;
+  }
+
+  case 'X': { // Erase Characters (no shift)
+    std::size_t n =
+        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t abs = cursorAbsRow();
+    if (abs < m_buffer.size()) {
+      for (std::size_t c = m_cursor.col; c < m_cursor.col + n && c < m_cols; ++c)
+        m_buffer[abs][c] = Cell{};
+    }
+    break;
+  }
+
+  case 's': // Save Cursor Position
+    m_savedCursor = m_cursor;
+    break;
+
+  case 'u': // Restore Cursor Position
+    m_cursor = m_savedCursor;
+    if (m_cursor.row >= m_rows) m_cursor.row = m_rows - 1;
+    if (m_cursor.col >= m_cols) m_cursor.col = m_cols - 1;
+    break;
+
+  case 'r': { // Set Scroll Region (DECSTBM)
+    std::size_t top = paramList.size() >= 1 && paramList[0] > 0 ? paramList[0] - 1 : 0;
+    std::size_t bot = paramList.size() >= 2 && paramList[1] > 0 ? paramList[1] - 1 : m_rows - 1;
+    if (top < m_rows && bot < m_rows && top < bot) {
+      m_scrollTop = top;
+      m_scrollBottom = bot;
+    }
+    m_cursor.row = 0;
+    m_cursor.col = 0;
+    break;
+  }
+
+  case 'g': // Tab Clear (ignored for now — no custom tab stops)
+    break;
+
+  case 'd': { // Line Position Absolute (VPA)
+    std::size_t row =
+        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    m_cursor.row = std::min(m_rows - 1, row - 1);
+    break;
+  }
+
+  case 'b': { // Repeat Previous Character
+    std::size_t n =
+        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    for (std::size_t i = 0; i < n; ++i)
+      PutCell(m_lastChar);
     break;
   }
 

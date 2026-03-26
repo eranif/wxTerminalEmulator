@@ -393,6 +393,51 @@ None currently!
 1. ~~**Remove Debug Logging**~~ ✅
 2. ~~**Mouse Wheel Scrollback**~~ ✅
 
+### High Priority - Missing Escape Sequences
+
+#### Currently Handled
+- Cursor movement: A, B, C, D, E, F, G, H, f
+- Erase: J (modes 0/1/2/3), K (modes 0/1/2)
+- Scroll: S (up), T (down)
+- Delete chars: P, Insert blanks: @
+- Insert Lines: L, Delete Lines: M
+- Erase Characters: X
+- Cursor Save/Restore: s / u
+- Set Scroll Region: r (DECSTBM)
+- Line Position Absolute: d
+- Repeat Character: b
+- Tab Clear: g (acknowledged, no custom tab stops)
+- SGR (m): full 16/256/truecolor, bold, underline, reverse
+- Device status: n (cursor position report), c (device attributes)
+- OSC: window title (0, 2)
+- Single-byte: ESC>, ESC=, ESC7, ESC8 (recognized but ignored)
+- Private mode CSI: ?h/?l (recognized but ignored)
+
+#### Verified Working
+- `man ls` — paging with spacebar works correctly
+- `vi` on large files — scrolling up/down with arrows, ESC → :q! and ESC → :wq all working
+
+#### Missing Private Mode Sequences
+| Mode | Description |
+|---|---|
+| `?1h` / `?1l` | Application/Normal cursor keys |
+| `?25h` / `?25l` | Show/hide cursor |
+| `?47h` / `?47l` / `?1049h` / `?1049l` | Alternate screen buffer (vim, less, htop, man) |
+| `?7h` / `?7l` | Auto-wrap mode on/off |
+
+#### Missing Single-Byte ESC Sequences
+| Sequence | Description |
+|---|---|
+| `ESCM` | Reverse Index — cursor up, scroll down if at top |
+| `ESCD` | Index — cursor down, scroll up if at bottom |
+| `ESCE` | Next Line — move to start of next line |
+
+#### Recommended Implementation Order
+1. ~~Scroll region (`r`) + Insert/Delete Lines (`L`/`M`)~~ ✅
+2. Alternate screen buffer (`?1049h`/`?1049l`) — lets vim/less restore screen on exit
+3. Cursor show/hide (`?25h`/`?25l`)
+4. Reverse Index (`ESCM`) — used by scroll regions
+
 ### Medium Priority
 3. **Scrollback Navigation (remaining)**
    - Shift+PageUp/PageDown keyboard shortcuts
