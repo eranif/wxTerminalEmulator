@@ -4,20 +4,101 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <optional>
 #include <string>
 #include <vector>
+#include <wx/gdicmn.h>
 
 #include "terminal_theme.h"
 
 namespace terminal {
 
+struct CellColours {
+  std::uint32_t bg{0x00000000};
+  std::uint32_t fg{0x00C0C0C0};
+};
+
+/**
+ * @brief Converts a 24-bit packed RGB value into a wxColour.
+ *
+ * Creates a wxColour from the red, green, and blue components stored in the
+ * lower 24 bits of the input value, using the standard 0xRRGGBB layout.
+ *
+ * @param c std::uint32_t Packed RGB color value in 0xRRGGBB format.
+ *
+ * @return wxColour The corresponding color object constructed from the
+ *         extracted red, green, and blue components.
+ */
+inline wxColour ToColour(std::uint32_t c) {
+  return wxColour((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
+}
+
 struct Cell {
   char32_t ch{U' '};
-  std::uint32_t fg{0x00C0C0C0};
-  std::uint32_t bg{0x00000000};
+  std::optional<CellColours> colours{std::nullopt};
   bool bold{false};
   bool underline{false};
   bool reverse{false};
+
+  inline bool IsEmpty() const { return ch == U' ' && !colours.has_value(); }
+  inline void SetColours(const wxTerminalTheme &theme) {
+    SetColours(theme.bg, theme.fg);
+  }
+
+  inline void SetColours(const wxColour &bg, const wxColour &fg) {
+    colours = CellColours{
+        .bg = wxTerminalTheme::ToU32(bg),
+        .fg = wxTerminalTheme::ToU32(fg),
+    };
+  }
+
+  inline void SetFgColour(std::uint32_t c) {
+    if (IsEmpty()) {
+      colours = CellColours{};
+    }
+    colours.value().fg = c;
+  }
+
+  inline void SetBgColour(std::uint32_t c) {
+    if (IsEmpty()) {
+      colours = CellColours{};
+    }
+    colours.value().bg = c;
+  }
+
+  inline std::optional<wxColour> GetBgColour() const {
+    if (IsEmpty()) {
+      return std::nullopt;
+    }
+    return ToColour(colours.value().bg);
+  }
+
+  inline std::optional<wxColour> GetFgColour() const {
+    if (IsEmpty()) {
+      return std::nullopt;
+    }
+    return ToColour(colours.value().fg);
+  }
+
+  /**
+   * @brief Creates a new Cell initialized with the given character and theme
+   * colors.
+   *
+   * Constructs a Cell, assigns its character value, applies the colors from the
+   * provided wxTerminalTheme, and returns the initialized object.
+   *
+   * @param theme const wxTerminalTheme & The theme used to initialize the
+   * Cell's colours.
+   * @param c char32_t The character to store in the new Cell.
+   *
+   * @return Cell The newly created and fully initialized Cell.
+   */
+  inline static Cell New(const wxTerminalTheme &theme, char32_t c = U' ') {
+    Cell cell;
+    cell.ch = c;
+    cell.SetColours(theme);
+    return cell;
+  }
 };
 
 struct CursorPos {

@@ -13,15 +13,13 @@ namespace terminal {
 TerminalCore::TerminalCore(std::size_t rows, std::size_t cols,
                            std::size_t maxLines)
     : m_rows(rows), m_cols(cols), m_maxLines(maxLines) {
-  m_attr.fg = wxTerminalTheme::ToU32(m_theme.fg);
-  m_attr.bg = wxTerminalTheme::ToU32(m_theme.bg);
+  m_attr.SetColours(m_theme);
   Reset();
 }
 
 void TerminalCore::SetTheme(const wxTerminalTheme &theme) {
   m_theme = theme;
-  m_attr.fg = wxTerminalTheme::ToU32(m_theme.fg);
-  m_attr.bg = wxTerminalTheme::ToU32(m_theme.bg);
+  m_attr.SetColours(m_theme);
 }
 
 std::size_t TerminalCore::AbsRow(std::size_t viewportRow) const {
@@ -129,7 +127,7 @@ void TerminalCore::Reset() {
   m_lastChar = U' ';
   m_inEscape = false;
   m_escape.clear();
-  m_attr = Cell{U' ', wxTerminalTheme::ToU32(m_theme.fg), wxTerminalTheme::ToU32(m_theme.bg)};
+  m_attr = {};
 }
 
 void TerminalCore::PutData(const std::string &data) {
@@ -766,7 +764,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
 
 void TerminalCore::ApplySgr(const std::string &params) {
   if (params.empty()) {
-    m_attr = Cell{U' ', wxTerminalTheme::ToU32(m_theme.fg), wxTerminalTheme::ToU32(m_theme.bg)};
+    m_attr = Cell::New(m_theme);
     return;
   }
 
@@ -795,7 +793,7 @@ void TerminalCore::ApplySgr(const std::string &params) {
     int code = codes[i];
     switch (code) {
     case 0:
-      m_attr = Cell{U' ', wxTerminalTheme::ToU32(m_theme.fg), wxTerminalTheme::ToU32(m_theme.bg)};
+      m_attr = Cell::New(m_theme);
       break;
     case 1:
       m_attr.bold = true;
@@ -823,7 +821,7 @@ void TerminalCore::ApplySgr(const std::string &params) {
     case 35:
     case 36:
     case 37:
-      m_attr.fg = m_theme.GetAnsiColor(code - 30, false);
+      m_attr.SetFgColour(m_theme.GetAnsiColor(code - 30, false));
       break;
     case 90:
     case 91:
@@ -833,7 +831,7 @@ void TerminalCore::ApplySgr(const std::string &params) {
     case 95:
     case 96:
     case 97:
-      m_attr.fg = m_theme.GetAnsiColor(code - 90, true);
+      m_attr.SetFgColour(m_theme.GetAnsiColor(code - 90, true));
       break;
     case 40:
     case 41:
@@ -843,7 +841,7 @@ void TerminalCore::ApplySgr(const std::string &params) {
     case 45:
     case 46:
     case 47:
-      m_attr.bg = m_theme.GetAnsiColor(code - 40, false);
+      m_attr.SetBgColour(m_theme.GetAnsiColor(code - 40, false));
       break;
     case 100:
     case 101:
@@ -853,15 +851,16 @@ void TerminalCore::ApplySgr(const std::string &params) {
     case 105:
     case 106:
     case 107:
-      m_attr.bg = m_theme.GetAnsiColor(code - 100, true);
+      m_attr.SetBgColour(m_theme.GetAnsiColor(code - 100, true));
       break;
     case 38:
       if (i + 1 < codes.size()) {
         if (codes[i + 1] == 5 && i + 2 < codes.size()) {
-          m_attr.fg = m_theme.Get256Color(codes[i + 2]);
+          m_attr.SetFgColour(m_theme.Get256Color(codes[i + 2]));
           i += 2;
         } else if (codes[i + 1] == 2 && i + 4 < codes.size()) {
-          m_attr.fg = (codes[i + 2] << 16) | (codes[i + 3] << 8) | codes[i + 4];
+          m_attr.SetFgColour((codes[i + 2] << 16) | (codes[i + 3] << 8) |
+                             codes[i + 4]);
           i += 4;
         }
       }
@@ -869,19 +868,20 @@ void TerminalCore::ApplySgr(const std::string &params) {
     case 48:
       if (i + 1 < codes.size()) {
         if (codes[i + 1] == 5 && i + 2 < codes.size()) {
-          m_attr.bg = m_theme.Get256Color(codes[i + 2]);
+          m_attr.SetBgColour(m_theme.Get256Color(codes[i + 2]));
           i += 2;
         } else if (codes[i + 1] == 2 && i + 4 < codes.size()) {
-          m_attr.bg = (codes[i + 2] << 16) | (codes[i + 3] << 8) | codes[i + 4];
+          m_attr.SetBgColour((codes[i + 2] << 16) | (codes[i + 3] << 8) |
+                             codes[i + 4]);
           i += 4;
         }
       }
       break;
     case 39:
-      m_attr.fg = wxTerminalTheme::ToU32(m_theme.fg);
+      m_attr.SetFgColour(wxTerminalTheme::ToU32(m_theme.fg));
       break;
     case 49:
-      m_attr.bg = wxTerminalTheme::ToU32(m_theme.bg);
+      m_attr.SetBgColour(wxTerminalTheme::ToU32(m_theme.bg));
       break;
     default:
       break;

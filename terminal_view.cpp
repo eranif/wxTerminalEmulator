@@ -203,13 +203,7 @@ void TerminalView::OnPaint(wxPaintEvent &) {
     int x = 0;
     int colIdx = 0;
     for (const auto &cell : row) {
-      wxColour bgColor((cell.bg >> 16) & 0xFF, (cell.bg >> 8) & 0xFF,
-                       cell.bg & 0xFF);
-      wxColour fgColor((cell.fg >> 16) & 0xFF, (cell.fg >> 8) & 0xFF,
-                       cell.fg & 0xFF);
-      if (cell.reverse)
-        std::swap(bgColor, fgColor);
-
+      // Check selections before skipping empty cells
       bool isMouseSelected = false;
       if (m_selection.active) {
         int minRow = std::min(m_selection.startRow, m_selection.endRow);
@@ -229,9 +223,23 @@ void TerminalView::OnPaint(wxPaintEvent &) {
              static_cast<std::size_t>(colIdx) < m_apiSelection.endCol);
       }
 
-      dc.SetBrush(wxBrush(bgColor));
-      dc.SetPen(*wxTRANSPARENT_PEN);
-      dc.DrawRectangle(x, y, charW, charH);
+      // Skip empty cells unless they are selected
+      if (cell.IsEmpty() && !isMouseSelected && !isApiSelected) {
+        x += charW;
+        colIdx++;
+        continue;
+      }
+
+      wxColour bgColor = cell.GetBgColour().value_or(theme.bg);
+      wxColour fgColor = cell.GetFgColour().value_or(theme.fg);
+      if (cell.reverse)
+        std::swap(bgColor, fgColor);
+
+      if (!cell.IsEmpty()) {
+        dc.SetBrush(wxBrush(bgColor));
+        dc.SetPen(*wxTRANSPARENT_PEN);
+        dc.DrawRectangle(x, y, charW, charH);
+      }
 
       if (isApiSelected) {
         dc.SetBrush(wxBrush(theme.highlightBg));
