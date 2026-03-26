@@ -1,9 +1,9 @@
 #include "terminal_panel.h"
 
+#include "terminal_logger.h"
 #include <algorithm>
 #include <cstdio>
 #include <unordered_map>
-
 #include <wx/app.h>
 #include <wx/clipbrd.h>
 #include <wx/dcbuffer.h>
@@ -54,7 +54,6 @@ TerminalPanel::TerminalPanel(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   Bind(wxEVT_SIZE, &TerminalPanel::OnSize, this);
   Bind(wxEVT_CHAR_HOOK, &TerminalPanel::OnCharHook, this);
   Bind(wxEVT_KEY_DOWN, &TerminalPanel::OnKeyDown, this);
-  Bind(wxEVT_CHAR, &TerminalPanel::OnChar, this);
   Bind(wxEVT_LEFT_DOWN, &TerminalPanel::OnMouseClick, this);
   Bind(wxEVT_LEFT_UP, &TerminalPanel::OnMouseUp, this);
   Bind(wxEVT_MOTION, &TerminalPanel::OnMouseMove, this);
@@ -364,6 +363,7 @@ void TerminalPanel::OnCharHook(wxKeyEvent &evt) {
   int key = evt.GetKeyCode();
 
   if (key == WXK_RETURN || key == WXK_NUMPAD_ENTER) {
+    LOG_TRACE() << "Handling WXK_RETURN" << std::endl;
     // Save current command to history (if not empty)
     if (!m_currentCommand.empty()) {
       // Don't add duplicate consecutive commands
@@ -375,6 +375,7 @@ void TerminalPanel::OnCharHook(wxKeyEvent &evt) {
     }
     m_historyIndex = -1; // Reset history navigation
     SendInput("\r");
+    LOG_TRACE() << "SendInput is called with \\r" << std::endl;
     return; // Don't skip - we handled it
   } else if (key == WXK_TAB) {
     SendInput("\t");
@@ -619,12 +620,6 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
   }
 
   // Unknown key - skip it
-  evt.Skip();
-}
-
-void TerminalPanel::OnChar(wxKeyEvent &evt) {
-  // All character input is now handled in OnKeyDown
-  // This prevents double-sending characters
   evt.Skip();
 }
 

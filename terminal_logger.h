@@ -1,11 +1,11 @@
 #pragma once
 
+#include <iostream>
+#include <vector>
 #include <wx/arrstr.h>
 #include <wx/ffile.h>
 #include <wx/filename.h>
 #include <wx/string.h>
-
-#include <vector>
 
 enum TerminalLogLevel { TRACE = 0, DEBUG = 1, WARN = 2, ERROR = 3 };
 
@@ -49,6 +49,7 @@ public:
 private:
   TerminalLogger();
   void Write(TerminalLogLevel level, const wxString &msg);
+  void EnsureOpen();
 
   TerminalLogLevel m_level{DEBUG};
   wxString m_logPath;
@@ -56,3 +57,7 @@ private:
 };
 
 #define LOG(level) TerminalLogger::Get().Log(level)
+#define LOG_DEBUG() LOG(TerminalLogLevel::DEBUG)
+#define LOG_WARN() LOG(TerminalLogLevel::WARN)
+#define LOG_ERROR() LOG(TerminalLogLevel::ERROR)
+#define LOG_TRACE() LOG(TerminalLogLevel::TRACE)

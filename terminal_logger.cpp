@@ -24,7 +24,11 @@ TerminalLogger &TerminalLogger::Get() {
   return instance;
 }
 
-TerminalLogger::TerminalLogger() {
+TerminalLogger::TerminalLogger() {}
+
+void TerminalLogger::EnsureOpen() {
+  if (m_file.IsOpened())
+    return;
   wxString dir = wxFileName::GetHomeDir() + wxFileName::GetPathSeparator() +
                  ".wxTerminalEmulator";
   if (!wxFileName::DirExists(dir))
@@ -41,9 +45,12 @@ void TerminalLogger::SetLogFile(const wxString &path) {
 }
 
 void TerminalLogger::Write(TerminalLogLevel level, const wxString &msg) {
+  EnsureOpen();
   if (!m_file.IsOpened())
     return;
-  wxString line = wxDateTime::Now().FormatISOCombined(' ') + " [" +
+  wxDateTime now = wxDateTime::UNow();
+  wxString line = now.FormatISOCombined(' ') +
+                  wxString::Format(".%03ld", now.GetMillisecond()) + " [" +
                   LevelToString(level) + "] " + msg + "\n";
   m_file.Write(line);
   m_file.Flush();

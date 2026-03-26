@@ -32,7 +32,6 @@ private:
   void OnSize(wxSizeEvent &evt);
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);
-  void OnChar(wxKeyEvent &evt);
   void OnIdle(wxIdleEvent &evt);
   void OnMouseClick(wxMouseEvent &evt);
   void OnMouseMove(wxMouseEvent &evt);

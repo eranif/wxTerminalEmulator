@@ -1,5 +1,6 @@
 #include "terminal_panel.h"
 
+#include "terminal_logger.h"
 #include <wx/app.h>
 #include <wx/display.h>
 #include <wx/frame.h>
@@ -17,6 +18,7 @@ public:
     SetSize(width, height);
     Centre(); // Center the window on screen
 
+    TerminalLogger::Get().SetLevel(TerminalLogLevel::DEBUG);
     auto *panel = new TerminalPanel(this);
     panel->StartProcess(""); // Empty string will use default shell (cmd.exe)
   }

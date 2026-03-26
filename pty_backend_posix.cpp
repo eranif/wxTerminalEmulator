@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 
+#include "terminal_logger.h"
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
@@ -72,11 +73,13 @@ bool PosixPtyBackend::Start(const std::string &command,
 }
 
 void PosixPtyBackend::Write(const std::string &data) {
+  LOG_TRACE() << "Sending: " << data << std::endl;
   {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_writeBuffer.insert(m_writeBuffer.end(), data.begin(), data.end());
   }
   m_cv.notify_one();
+  LOG_TRACE() << "NotifyOne is called" << data << std::endl;
 }
 
 void PosixPtyBackend::Resize(int cols, int rows) {
@@ -123,14 +126,24 @@ void PosixPtyBackend::ReaderThread() {
 
     int ret = poll(&pfd, 1, 50);
     if (ret > 0 && (pfd.revents & POLLIN)) {
-      ssize_t n = read(m_masterFd, buf, sizeof(buf));
-      if (n > 0) {
-        if (m_onOutput)
-          m_onOutput(std::string(buf, static_cast<size_t>(n)));
-      } else if (n == 0 || (n < 0 && errno != EAGAIN && errno != EINTR)) {
-        m_running = false;
-        break;
+      std::string accumulated;
+      for (int i = 0; i < 5; ++i) {
+        ssize_t n = read(m_masterFd, buf, sizeof(buf));
+        if (n > 0) {
+          accumulated.append(buf, static_cast<size_t>(n));
+        } else if (n < 0 && (errno == EAGAIN || errno == EINTR)) {
+          break;
+        } else {
+          m_running = false;
+          break;
+        }
       }
+      if (!accumulated.empty() && m_onOutput) {
+        LOG_TRACE() << "Terminal output read: " << accumulated << std::endl;
+        m_onOutput(accumulated);
+      }
+      if (!m_running)
+        break;
     } else if (ret < 0 && errno != EINTR) {
       m_running = false;
       break;
@@ -152,6 +165,8 @@ void PosixPtyBackend::WriterThread() {
     if (!pending.empty() && m_masterFd >= 0) {
       const char *p = pending.data();
       size_t remaining = pending.size();
+      LOG_TRACE() << "Writing data to child process: " << remaining << " bytes"
+                  << std::endl;
       while (remaining > 0) {
         ssize_t n = write(m_masterFd, p, remaining);
         if (n > 0) {
