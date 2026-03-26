@@ -129,22 +129,27 @@ void TerminalView::SendInput(const std::string &text) {
 
 std::string TerminalView::Contents() const { return m_core.Flatten(); }
 
+void TerminalView::SetTheme(const wxTerminalTheme &theme) {
+  m_core.SetTheme(theme);
+  Refresh();
+}
+
+const wxTerminalTheme &TerminalView::GetTheme() const {
+  return m_core.GetTheme();
+}
+
 void TerminalView::ScrollToLastLine() {
   m_core.SetViewStart(m_core.ShellStart());
   Refresh();
 }
 
-std::size_t TerminalView::GetLineCount() const {
-  return m_core.TotalLines();
-}
+std::size_t TerminalView::GetLineCount() const { return m_core.TotalLines(); }
 
 void TerminalView::SetBufferSize(std::size_t maxLines) {
   m_core.SetMaxLines(maxLines);
 }
 
-std::size_t TerminalView::GetBufferSize() const {
-  return m_core.MaxLines();
-}
+std::size_t TerminalView::GetBufferSize() const { return m_core.MaxLines(); }
 
 void TerminalView::CenterLine(std::size_t line) {
   std::size_t half = m_core.Rows() / 2;
@@ -182,7 +187,10 @@ void TerminalView::ClearSelection() {
 void TerminalView::OnPaint(wxPaintEvent &) {
   wxAutoBufferedPaintDC pdc(this);
   wxGCDC dc(pdc);
-  dc.SetBackground(*wxBLACK_BRUSH);
+  const auto &theme = m_core.GetTheme();
+  wxColour themeBg((theme.bg >> 16) & 0xFF, (theme.bg >> 8) & 0xFF,
+                   theme.bg & 0xFF);
+  dc.SetBackground(wxBrush(themeBg));
   dc.Clear();
   dc.SetFont(m_defaultFont);
 
@@ -217,9 +225,10 @@ void TerminalView::OnPaint(wxPaintEvent &) {
       bool isApiSelected = false;
       if (m_apiSelection.active) {
         std::size_t absRow = m_core.ViewStart() + r;
-        isApiSelected = (absRow == m_apiSelection.row &&
-                         static_cast<std::size_t>(colIdx) >= m_apiSelection.col &&
-                         static_cast<std::size_t>(colIdx) < m_apiSelection.endCol);
+        isApiSelected =
+            (absRow == m_apiSelection.row &&
+             static_cast<std::size_t>(colIdx) >= m_apiSelection.col &&
+             static_cast<std::size_t>(colIdx) < m_apiSelection.endCol);
       }
 
       dc.SetBrush(wxBrush(bgColor));
@@ -227,12 +236,12 @@ void TerminalView::OnPaint(wxPaintEvent &) {
       dc.DrawRectangle(x, y, charW, charH);
 
       if (isApiSelected) {
-        dc.SetBrush(wxBrush(wxColour(180, 140, 50, 100)));
+        dc.SetBrush(wxBrush(theme.highlightBg));
         dc.SetPen(*wxTRANSPARENT_PEN);
         dc.DrawRectangle(x, y, charW, charH);
       }
       if (isMouseSelected) {
-        dc.SetBrush(wxBrush(wxColour(70, 130, 180, 100)));
+        dc.SetBrush(wxBrush(theme.selectionBg));
         dc.SetPen(*wxTRANSPARENT_PEN);
         dc.DrawRectangle(x, y, charW, charH);
       }
@@ -266,7 +275,7 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   if (viewStart <= shellStart &&
       shellStart + cursor.row < viewStart + m_core.Rows()) {
     int screenRow = static_cast<int>(shellStart - viewStart + cursor.row);
-    dc.SetPen(wxPen(*wxWHITE, 2));
+    dc.SetPen(wxPen(theme.cursorColour, 2));
     int cx = cursor.col * charW;
     int cy = screenRow * charH;
     dc.DrawLine(cx, cy, cx, cy + charH);

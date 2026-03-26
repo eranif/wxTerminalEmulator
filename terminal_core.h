@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "terminal_theme.h"
+
 namespace terminal {
 
 struct Cell {
@@ -27,6 +29,9 @@ class TerminalCore {
 public:
   TerminalCore(std::size_t rows = 24, std::size_t cols = 80,
                std::size_t maxLines = 10000);
+
+  void SetTheme(const wxTerminalTheme &theme);
+  const wxTerminalTheme &GetTheme() const { return m_theme; }
 
   void Resize(std::size_t rows, std::size_t cols);
   void Reset();
@@ -122,6 +127,7 @@ private:
   bool m_inEscape{false};
   std::string m_escape;
   Cell m_attr{};
+  wxTerminalTheme m_theme;
   std::function<void(const std::string &)> m_responseCallback;
   std::function<void(const std::string &)> m_titleCallback;
   std::string m_utf8Buf;

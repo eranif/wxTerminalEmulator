@@ -18,6 +18,8 @@ public:
   void SendInput(const std::string &text);
   void SetTerminalSizeFromClient();
   std::string Contents() const;
+  void SetTheme(const wxTerminalTheme &theme);
+  const wxTerminalTheme &GetTheme() const;
 
   void ScrollToLastLine();
   std::size_t GetLineCount() const;

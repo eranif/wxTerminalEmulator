@@ -10,38 +10,18 @@
 
 namespace terminal {
 
-namespace {
-
-std::uint32_t GetAnsiColor(int index, bool bright = false) {
-  static const std::uint32_t normal[8] = {
-      0x000000, 0x800000, 0x008000, 0x808000,
-      0x000080, 0x800080, 0x008080, 0xC0C0C0};
-  static const std::uint32_t bright_colors[8] = {
-      0x808080, 0xFF0000, 0x00FF00, 0xFFFF00,
-      0x0000FF, 0xFF00FF, 0x00FFFF, 0xFFFFFF};
-  if (index < 0 || index > 7)
-    return 0xC0C0C0;
-  return bright ? bright_colors[index] : normal[index];
-}
-
-std::uint32_t Get256Color(int index) {
-  if (index < 16)
-    return GetAnsiColor(index % 8, index >= 8);
-  if (index < 232) {
-    int idx = index - 16;
-    int r = (idx / 36) * 51, g = ((idx / 6) % 6) * 51, b = (idx % 6) * 51;
-    return (r << 16) | (g << 8) | b;
-  }
-  int gray = 8 + (index - 232) * 10;
-  return (gray << 16) | (gray << 8) | gray;
-}
-
-} // anonymous namespace
-
 TerminalCore::TerminalCore(std::size_t rows, std::size_t cols,
                            std::size_t maxLines)
     : m_rows(rows), m_cols(cols), m_maxLines(maxLines) {
+  m_attr.fg = m_theme.fg;
+  m_attr.bg = m_theme.bg;
   Reset();
+}
+
+void TerminalCore::SetTheme(const wxTerminalTheme &theme) {
+  m_theme = theme;
+  m_attr.fg = m_theme.fg;
+  m_attr.bg = m_theme.bg;
 }
 
 std::size_t TerminalCore::AbsRow(std::size_t viewportRow) const {
@@ -65,8 +45,7 @@ std::vector<const std::vector<Cell> *> TerminalCore::GetViewArea() const {
 }
 
 void TerminalCore::SetViewStart(std::size_t vs) {
-  std::size_t maxVs =
-      m_buffer.size() > m_rows ? m_buffer.size() - m_rows : 0;
+  std::size_t maxVs = m_buffer.size() > m_rows ? m_buffer.size() - m_rows : 0;
   m_viewStart = std::min(vs, maxVs);
 }
 
@@ -150,7 +129,7 @@ void TerminalCore::Reset() {
   m_lastChar = U' ';
   m_inEscape = false;
   m_escape.clear();
-  m_attr = Cell{};
+  m_attr = Cell{U' ', m_theme.fg, m_theme.bg};
 }
 
 void TerminalCore::PutData(const std::string &data) {
@@ -163,7 +142,8 @@ void TerminalCore::PutData(const std::string &data) {
       if (m_escape.size() > 256) {
         LOG(WARN) << "Escape buffer overflow, dumping: [";
         for (unsigned char ch : m_escape)
-          LOG(WARN) << std::hex << std::setfill('0') << std::setw(2) << (int)ch << " ";
+          LOG(WARN) << std::hex << std::setfill('0') << std::setw(2) << (int)ch
+                    << " ";
         LOG(WARN) << "]" << std::endl;
         m_escape.clear();
         m_inEscape = false;
@@ -401,8 +381,10 @@ void TerminalCore::ParseEscape(const std::string &seq) {
       break;
     case '8': // Restore Cursor (DECRC)
       m_cursor = m_savedCursor;
-      if (m_cursor.row >= m_rows) m_cursor.row = m_rows - 1;
-      if (m_cursor.col >= m_cols) m_cursor.col = m_cols - 1;
+      if (m_cursor.row >= m_rows)
+        m_cursor.row = m_rows - 1;
+      if (m_cursor.col >= m_cols)
+        m_cursor.col = m_cols - 1;
       break;
     default:
       break;
@@ -490,9 +472,9 @@ void TerminalCore::ParseEscape(const std::string &seq) {
         break;
       case 25: // Show/hide cursor — acknowledged, rendering handles this
         break;
-      case 1:  // Application/normal cursor keys — acknowledged
+      case 1: // Application/normal cursor keys — acknowledged
         break;
-      case 7:  // Auto-wrap — acknowledged
+      case 7: // Auto-wrap — acknowledged
         break;
       default:
         break;
@@ -524,46 +506,53 @@ void TerminalCore::ParseEscape(const std::string &seq) {
     break;
 
   case 'A': {
-    std::size_t n =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t n = paramList.empty()
+                        ? 1
+                        : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.row = (m_cursor.row > n) ? (m_cursor.row - n) : 0;
     break;
   }
   case 'B': {
-    std::size_t n =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t n = paramList.empty()
+                        ? 1
+                        : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.row = std::min(m_rows - 1, m_cursor.row + n);
     break;
   }
   case 'C': {
-    std::size_t n =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t n = paramList.empty()
+                        ? 1
+                        : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.col = std::min(m_cols - 1, m_cursor.col + n);
     break;
   }
   case 'D': {
-    std::size_t n =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t n = paramList.empty()
+                        ? 1
+                        : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.col = (m_cursor.col > n) ? (m_cursor.col - n) : 0;
     break;
   }
   case 'E': {
-    std::size_t n =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t n = paramList.empty()
+                        ? 1
+                        : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.row = std::min(m_rows - 1, m_cursor.row + n);
     m_cursor.col = 0;
     break;
   }
   case 'F': {
-    std::size_t n =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t n = paramList.empty()
+                        ? 1
+                        : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.row = (m_cursor.row > n) ? (m_cursor.row - n) : 0;
     m_cursor.col = 0;
     break;
   }
   case 'G': {
-    std::size_t col =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t col = paramList.empty()
+                          ? 1
+                          : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.col = std::min(m_cols - 1, col - 1);
     break;
   }
@@ -629,15 +618,18 @@ void TerminalCore::ParseEscape(const std::string &seq) {
 
   case 'S': {
     std::size_t n =
-        params.empty() ? 1 : static_cast<std::size_t>(std::max(1, std::stoi(params)));
+        params.empty()
+            ? 1
+            : static_cast<std::size_t>(std::max(1, std::stoi(params)));
     for (std::size_t i = 0; i < n; ++i)
       ScrollUp();
     break;
   }
 
   case 'P': {
-    std::size_t n =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t n = paramList.empty()
+                        ? 1
+                        : static_cast<std::size_t>(std::max(1, paramList[0]));
     std::size_t abs = cursorAbsRow();
     if (abs < m_buffer.size()) {
       auto &row = m_buffer[abs];
@@ -650,8 +642,9 @@ void TerminalCore::ParseEscape(const std::string &seq) {
   }
 
   case '@': {
-    std::size_t n =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t n = paramList.empty()
+                        ? 1
+                        : static_cast<std::size_t>(std::max(1, paramList[0]));
     std::size_t abs = cursorAbsRow();
     if (abs < m_buffer.size()) {
       auto &row = m_buffer[abs];
@@ -665,16 +658,18 @@ void TerminalCore::ParseEscape(const std::string &seq) {
   }
 
   case 'T': { // Scroll Down
-    std::size_t n =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t n = paramList.empty()
+                        ? 1
+                        : static_cast<std::size_t>(std::max(1, paramList[0]));
     for (std::size_t i = 0; i < n; ++i)
       ScrollRegionDown();
     break;
   }
 
   case 'L': { // Insert Lines
-    std::size_t n =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t n = paramList.empty()
+                        ? 1
+                        : static_cast<std::size_t>(std::max(1, paramList[0]));
     for (std::size_t i = 0; i < n; ++i) {
       // Shift rows from cursor down to scroll bottom
       std::size_t bot = AbsRow(m_scrollBottom);
@@ -689,8 +684,9 @@ void TerminalCore::ParseEscape(const std::string &seq) {
   }
 
   case 'M': { // Delete Lines
-    std::size_t n =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t n = paramList.empty()
+                        ? 1
+                        : static_cast<std::size_t>(std::max(1, paramList[0]));
     for (std::size_t i = 0; i < n; ++i) {
       std::size_t bot = AbsRow(m_scrollBottom);
       std::size_t cur = AbsRow(m_cursor.row);
@@ -704,11 +700,13 @@ void TerminalCore::ParseEscape(const std::string &seq) {
   }
 
   case 'X': { // Erase Characters (no shift)
-    std::size_t n =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t n = paramList.empty()
+                        ? 1
+                        : static_cast<std::size_t>(std::max(1, paramList[0]));
     std::size_t abs = cursorAbsRow();
     if (abs < m_buffer.size()) {
-      for (std::size_t c = m_cursor.col; c < m_cursor.col + n && c < m_cols; ++c)
+      for (std::size_t c = m_cursor.col; c < m_cursor.col + n && c < m_cols;
+           ++c)
         m_buffer[abs][c] = Cell{};
     }
     break;
@@ -720,13 +718,18 @@ void TerminalCore::ParseEscape(const std::string &seq) {
 
   case 'u': // Restore Cursor Position
     m_cursor = m_savedCursor;
-    if (m_cursor.row >= m_rows) m_cursor.row = m_rows - 1;
-    if (m_cursor.col >= m_cols) m_cursor.col = m_cols - 1;
+    if (m_cursor.row >= m_rows)
+      m_cursor.row = m_rows - 1;
+    if (m_cursor.col >= m_cols)
+      m_cursor.col = m_cols - 1;
     break;
 
   case 'r': { // Set Scroll Region (DECSTBM)
-    std::size_t top = paramList.size() >= 1 && paramList[0] > 0 ? paramList[0] - 1 : 0;
-    std::size_t bot = paramList.size() >= 2 && paramList[1] > 0 ? paramList[1] - 1 : m_rows - 1;
+    std::size_t top =
+        paramList.size() >= 1 && paramList[0] > 0 ? paramList[0] - 1 : 0;
+    std::size_t bot = paramList.size() >= 2 && paramList[1] > 0
+                          ? paramList[1] - 1
+                          : m_rows - 1;
     if (top < m_rows && bot < m_rows && top < bot) {
       m_scrollTop = top;
       m_scrollBottom = bot;
@@ -740,15 +743,17 @@ void TerminalCore::ParseEscape(const std::string &seq) {
     break;
 
   case 'd': { // Line Position Absolute (VPA)
-    std::size_t row =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t row = paramList.empty()
+                          ? 1
+                          : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.row = std::min(m_rows - 1, row - 1);
     break;
   }
 
   case 'b': { // Repeat Previous Character
-    std::size_t n =
-        paramList.empty() ? 1 : static_cast<std::size_t>(std::max(1, paramList[0]));
+    std::size_t n = paramList.empty()
+                        ? 1
+                        : static_cast<std::size_t>(std::max(1, paramList[0]));
     for (std::size_t i = 0; i < n; ++i)
       PutCell(m_lastChar);
     break;
@@ -761,7 +766,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
 
 void TerminalCore::ApplySgr(const std::string &params) {
   if (params.empty()) {
-    m_attr = Cell{};
+    m_attr = Cell{U' ', m_theme.fg, m_theme.bg};
     return;
   }
 
@@ -775,7 +780,10 @@ void TerminalCore::ApplySgr(const std::string &params) {
         start, end == std::string::npos ? std::string::npos : end - start);
     int value = 0;
     if (!token.empty()) {
-      try { value = std::stoi(token); } catch (...) {}
+      try {
+        value = std::stoi(token);
+      } catch (...) {
+      }
     }
     codes.push_back(value);
     if (end == std::string::npos)
@@ -786,46 +794,97 @@ void TerminalCore::ApplySgr(const std::string &params) {
   for (std::size_t i = 0; i < codes.size(); ++i) {
     int code = codes[i];
     switch (code) {
-    case 0: m_attr = Cell{}; break;
-    case 1: m_attr.bold = true; break;
-    case 4: m_attr.underline = true; break;
-    case 7: m_attr.reverse = true; break;
-    case 22: m_attr.bold = false; break;
-    case 24: m_attr.underline = false; break;
-    case 27: m_attr.reverse = false; break;
-    case 30: case 31: case 32: case 33:
-    case 34: case 35: case 36: case 37:
-      m_attr.fg = GetAnsiColor(code - 30, false); break;
-    case 90: case 91: case 92: case 93:
-    case 94: case 95: case 96: case 97:
-      m_attr.fg = GetAnsiColor(code - 90, true); break;
-    case 40: case 41: case 42: case 43:
-    case 44: case 45: case 46: case 47:
-      m_attr.bg = GetAnsiColor(code - 40, false); break;
-    case 100: case 101: case 102: case 103:
-    case 104: case 105: case 106: case 107:
-      m_attr.bg = GetAnsiColor(code - 100, true); break;
+    case 0:
+      m_attr = Cell{U' ', m_theme.fg, m_theme.bg};
+      break;
+    case 1:
+      m_attr.bold = true;
+      break;
+    case 4:
+      m_attr.underline = true;
+      break;
+    case 7:
+      m_attr.reverse = true;
+      break;
+    case 22:
+      m_attr.bold = false;
+      break;
+    case 24:
+      m_attr.underline = false;
+      break;
+    case 27:
+      m_attr.reverse = false;
+      break;
+    case 30:
+    case 31:
+    case 32:
+    case 33:
+    case 34:
+    case 35:
+    case 36:
+    case 37:
+      m_attr.fg = m_theme.GetAnsiColor(code - 30, false);
+      break;
+    case 90:
+    case 91:
+    case 92:
+    case 93:
+    case 94:
+    case 95:
+    case 96:
+    case 97:
+      m_attr.fg = m_theme.GetAnsiColor(code - 90, true);
+      break;
+    case 40:
+    case 41:
+    case 42:
+    case 43:
+    case 44:
+    case 45:
+    case 46:
+    case 47:
+      m_attr.bg = m_theme.GetAnsiColor(code - 40, false);
+      break;
+    case 100:
+    case 101:
+    case 102:
+    case 103:
+    case 104:
+    case 105:
+    case 106:
+    case 107:
+      m_attr.bg = m_theme.GetAnsiColor(code - 100, true);
+      break;
     case 38:
       if (i + 1 < codes.size()) {
         if (codes[i + 1] == 5 && i + 2 < codes.size()) {
-          m_attr.fg = Get256Color(codes[i + 2]); i += 2;
+          m_attr.fg = m_theme.Get256Color(codes[i + 2]);
+          i += 2;
         } else if (codes[i + 1] == 2 && i + 4 < codes.size()) {
-          m_attr.fg = (codes[i+2]<<16)|(codes[i+3]<<8)|codes[i+4]; i += 4;
+          m_attr.fg = (codes[i + 2] << 16) | (codes[i + 3] << 8) | codes[i + 4];
+          i += 4;
         }
       }
       break;
     case 48:
       if (i + 1 < codes.size()) {
         if (codes[i + 1] == 5 && i + 2 < codes.size()) {
-          m_attr.bg = Get256Color(codes[i + 2]); i += 2;
+          m_attr.bg = m_theme.Get256Color(codes[i + 2]);
+          i += 2;
         } else if (codes[i + 1] == 2 && i + 4 < codes.size()) {
-          m_attr.bg = (codes[i+2]<<16)|(codes[i+3]<<8)|codes[i+4]; i += 4;
+          m_attr.bg = (codes[i + 2] << 16) | (codes[i + 3] << 8) | codes[i + 4];
+          i += 4;
         }
       }
       break;
-    case 39: m_attr.fg = 0x00C0C0C0; break;
-    case 49: m_attr.bg = 0x00000000; break;
-    default: break;
+    case 39:
+      m_attr.fg = m_theme.fg;
+      break;
+    case 49:
+      m_attr.bg = m_theme.bg;
+      break;
+    default:
+      break;
     }
   }
 }
