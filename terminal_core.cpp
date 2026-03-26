@@ -45,7 +45,7 @@ TerminalCore::TerminalCore(std::size_t rows, std::size_t cols,
 }
 
 std::size_t TerminalCore::AbsRow(std::size_t viewportRow) const {
-  return m_viewStart + viewportRow;
+  return m_shellStart + viewportRow;
 }
 
 CursorPos TerminalCore::Cursor() const { return m_cursor; }
@@ -87,10 +87,13 @@ void TerminalCore::Resize(std::size_t rows, std::size_t cols) {
   m_cols = newCols;
 
   // Ensure viewStart is valid
-  if (m_buffer.size() > m_rows)
-    m_viewStart = m_buffer.size() - m_rows;
-  else
+  if (m_buffer.size() > m_rows) {
+    m_shellStart = m_buffer.size() - m_rows;
+    m_viewStart = m_shellStart;
+  } else {
+    m_shellStart = 0;
     m_viewStart = 0;
+  }
 
   // Clamp cursor
   if (m_cursor.row >= m_rows)
@@ -128,6 +131,7 @@ void TerminalCore::Reset() {
   for (std::size_t r = 0; r < m_rows; ++r)
     m_buffer.push_back(std::vector<Cell>(m_cols));
   m_viewStart = 0;
+  m_shellStart = 0;
   m_cursor = {};
   m_inEscape = false;
   m_escape.clear();
@@ -286,14 +290,17 @@ void TerminalCore::Tab() {
 }
 
 void TerminalCore::ScrollUp() {
-  // Add a new blank row at the end of the buffer
   m_buffer.push_back(std::vector<Cell>(m_cols));
-  // Advance the viewport
-  ++m_viewStart;
+  ++m_shellStart;
+  // Keep viewStart in sync if user is at the bottom
+  if (m_viewStart + m_rows >= m_buffer.size() - 1)
+    m_viewStart = m_shellStart;
   // Trim oldest row if over limit
   if (m_buffer.size() > m_maxLines) {
     m_buffer.pop_front();
-    --m_viewStart;
+    --m_shellStart;
+    if (m_viewStart > 0)
+      --m_viewStart;
   }
 }
 

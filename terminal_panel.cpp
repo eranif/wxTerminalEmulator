@@ -93,9 +93,7 @@ TerminalPanel::~TerminalPanel() {
 
 void TerminalPanel::Feed(const std::string &data) {
   m_core.PutData(data);
-  // Auto-scroll to bottom
-  if (m_core.TotalLines() > m_core.Rows())
-    m_core.SetViewStart(m_core.TotalLines() - m_core.Rows());
+  m_core.SetViewStart(m_core.ShellStart());
   m_dirty = true;
 }
 
@@ -198,12 +196,16 @@ void TerminalPanel::OnPaint(wxPaintEvent &) {
     rowIdx++;
   }
 
-  // Draw cursor (thin line caret)
+  // Draw cursor (thin line caret) — only if shell viewport is visible
   auto cursor = m_core.Cursor();
-  if (cursor.row < m_core.Rows() && cursor.col < m_core.Cols()) {
+  std::size_t shellStart = m_core.ShellStart();
+  if (viewStart <= shellStart &&
+      shellStart + cursor.row < viewStart + m_core.Rows()) {
+    int screenRow =
+        static_cast<int>(shellStart - viewStart + cursor.row);
     dc.SetPen(wxPen(*wxWHITE, 2));
     int cx = cursor.col * charW;
-    int cy = cursor.row * charH;
+    int cy = screenRow * charH;
     dc.DrawLine(cx, cy, cx, cy + charH);
   }
 }

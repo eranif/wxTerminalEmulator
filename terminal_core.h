@@ -52,6 +52,7 @@ public:
 
   // View into the buffer: returns rows [viewStart .. viewStart+m_rows)
   std::size_t ViewStart() const { return m_viewStart; }
+  std::size_t ShellStart() const { return m_shellStart; }
   void SetViewStart(std::size_t vs);
   std::size_t TotalLines() const { return m_buffer.size(); }
 
@@ -84,8 +85,9 @@ private:
   std::size_t m_maxLines{10000};
 
   std::deque<std::vector<Cell>> m_buffer;
-  std::size_t m_viewStart{0}; // First visible row in buffer
-  CursorPos m_cursor{};       // Relative to viewport
+  std::size_t m_viewStart{0};     // Where the user is looking (for rendering)
+  std::size_t m_shellStart{0};    // Where the shell's viewport starts (for cursor ops)
+  CursorPos m_cursor{};           // Relative to shell viewport
 
   bool m_inEscape{false};
   std::string m_escape;
