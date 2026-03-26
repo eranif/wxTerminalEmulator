@@ -32,7 +32,7 @@ else()
   # Find wxWidgets
   find_package(wxWidgets REQUIRED COMPONENTS core base)
 endif()
-
+add_compile_definitions(-DwxDEBUG_LEVEL=0)
 # Source files
 set(SOURCES
   main.cpp
@@ -68,8 +68,11 @@ endif()
 # Link wxWidgets
 target_link_libraries(${PROJECT_NAME} ${wxWidgets_LIBRARIES})
 
-# Windows specific settings
+# Platform specific settings
 if(WIN32)
   target_compile_definitions(${PROJECT_NAME} PRIVATE __WXMSW__)
   target_link_libraries(${PROJECT_NAME} shell32 ole32 user32)
+elseif(NOT APPLE)
+  # Linux needs libutil for forkpty
+  target_link_libraries(${PROJECT_NAME} util)
 endif()

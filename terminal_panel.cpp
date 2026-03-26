@@ -440,7 +440,8 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
   const int key = evt.GetKeyCode();
 
   // Handle Ctrl combinations
-  if (evt.ControlDown() && !evt.AltDown()) {
+  const bool ctrl = evt.RawControlDown();
+  if (ctrl && !evt.AltDown()) {
     // Handle Ctrl+C - Copy if text is selected, otherwise send SIGINT
     if (key == 'C' || key == 'c') {
       if (m_selection.active) {
@@ -462,16 +463,20 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
 
     // Handle Ctrl+U - Clear current line (Unix-style line kill)
     if (key == 'U' || key == 'u') {
-      // Clear everything typed on the current line
+#ifdef _WIN32
+      // On Windows, manually clear the line since cmd.exe doesn't handle ^U
       if (!m_currentCommand.empty()) {
-        // Send backspaces to clear the line
         std::string clearLine = std::string(m_currentCommand.length(), '\b') +
                                 std::string(m_currentCommand.length(), ' ') +
                                 std::string(m_currentCommand.length(), '\b');
         SendInput(clearLine);
-        m_currentCommand.clear();
-        m_historyIndex = -1;
       }
+#else
+      // On POSIX, send the control character and let the shell handle it
+      SendInput(std::string(1, '\x15'));
+#endif
+      m_currentCommand.clear();
+      m_historyIndex = -1;
       return;
     }
 
@@ -489,7 +494,7 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
   }
 
   // Handle Alt combinations (send ESC prefix)
-  if (evt.AltDown() && !evt.ControlDown() && key >= 32 && key < 127) {
+  if (evt.AltDown() && !ctrl && key >= 32 && key < 127) {
     SendInput("\x1b");
     SendInput(std::string(1, static_cast<char>(key)));
     return;
