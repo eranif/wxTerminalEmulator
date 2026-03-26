@@ -37,6 +37,7 @@ private:
   void OnMouseMove(wxMouseEvent &evt);
   void OnMouseUp(wxMouseEvent &evt);
   void OnRightClick(wxMouseEvent &evt);
+  void OnMouseWheel(wxMouseEvent &evt);
   void OnFocus(wxFocusEvent &evt);
   void OnCopy(wxCommandEvent &evt);
   void OnPaste(wxCommandEvent &evt);
@@ -52,6 +53,8 @@ private:
   Selection m_selection;
   bool m_isDragging{false};
   bool m_dirty{true};
+  int m_scrollOffset{0}; // 0 = at bottom, >0 = scrolled back
+  int m_wheelAccum{0};
 
   // Command history
   std::vector<std::string> m_commandHistory;

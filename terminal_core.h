@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <string>
 #include <vector>
@@ -25,7 +26,7 @@ struct CursorPos {
 class TerminalCore {
 public:
   TerminalCore(std::size_t rows = 24, std::size_t cols = 80,
-               std::size_t scrollback = 2000);
+               std::size_t maxLines = 10000);
 
   void Resize(std::size_t rows, std::size_t cols);
   void Reset();
@@ -35,7 +36,6 @@ public:
   void ClearScreen();
   void MoveCursor(std::size_t row, std::size_t col);
 
-  // Set callback for sending responses (e.g., cursor position reports)
   void SetResponseCallback(std::function<void(const std::string &)> callback) {
     m_responseCallback = callback;
   }
@@ -45,10 +45,18 @@ public:
 
   std::size_t Rows() const { return m_rows; }
   std::size_t Cols() const { return m_cols; }
-  CursorPos Cursor() const { return m_cursor; }
+  std::size_t MaxLines() const { return m_maxLines; }
 
-  const std::vector<std::vector<Cell>> &Screen() const { return m_screen; }
-  const std::vector<std::string> &Scrollback() const { return m_scrollback; }
+  // Cursor position relative to viewport
+  CursorPos Cursor() const;
+
+  // View into the buffer: returns rows [viewStart .. viewStart+m_rows)
+  std::size_t ViewStart() const { return m_viewStart; }
+  void SetViewStart(std::size_t vs);
+  std::size_t TotalLines() const { return m_buffer.size(); }
+
+  // Access a row by absolute index in the buffer
+  const std::vector<Cell> &BufferRow(std::size_t absRow) const;
 
   std::string Flatten() const;
 
@@ -68,12 +76,17 @@ private:
   void PutCell(char c);
   void PutCell(char32_t cp);
 
+  // Convert viewport-relative row to absolute buffer row
+  std::size_t AbsRow(std::size_t viewportRow) const;
+
   std::size_t m_rows{24};
   std::size_t m_cols{80};
-  std::size_t m_scrollbackLimit{2000};
-  std::vector<std::vector<Cell>> m_screen;
-  std::vector<std::string> m_scrollback;
-  CursorPos m_cursor{};
+  std::size_t m_maxLines{10000};
+
+  std::deque<std::vector<Cell>> m_buffer;
+  std::size_t m_viewStart{0}; // First visible row in buffer
+  CursorPos m_cursor{};       // Relative to viewport
+
   bool m_inEscape{false};
   std::string m_escape;
   Cell m_attr{};

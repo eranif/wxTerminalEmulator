@@ -66,6 +66,7 @@ TerminalPanel::TerminalPanel(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   Bind(wxEVT_LEFT_UP, &TerminalPanel::OnMouseUp, this);
   Bind(wxEVT_MOTION, &TerminalPanel::OnMouseMove, this);
   Bind(wxEVT_RIGHT_DOWN, &TerminalPanel::OnRightClick, this);
+  Bind(wxEVT_MOUSEWHEEL, &TerminalPanel::OnMouseWheel, this);
   Bind(wxEVT_SET_FOCUS, &TerminalPanel::OnFocus, this);
   Bind(wxEVT_IDLE, &TerminalPanel::OnIdle, this);
 
@@ -92,6 +93,9 @@ TerminalPanel::~TerminalPanel() {
 
 void TerminalPanel::Feed(const std::string &data) {
   m_core.PutData(data);
+  // Auto-scroll to bottom
+  if (m_core.TotalLines() > m_core.Rows())
+    m_core.SetViewStart(m_core.TotalLines() - m_core.Rows());
   m_dirty = true;
 }
 
@@ -138,71 +142,54 @@ void TerminalPanel::OnPaint(wxPaintEvent &) {
   const int charH = dc.GetCharHeight();
   int rowIdx = 0;
   int y = 0;
+  std::size_t viewStart = m_core.ViewStart();
 
-  // Draw all cells
-  for (const auto &row : m_core.Screen()) {
+  for (std::size_t r = 0; r < m_core.Rows(); ++r) {
+    const auto &row = m_core.BufferRow(viewStart + r);
     int x = 0;
     int colIdx = 0;
     for (const auto &cell : row) {
-      // Set background color
       wxColour bgColor((cell.bg >> 16) & 0xFF, (cell.bg >> 8) & 0xFF,
                        cell.bg & 0xFF);
-
-      // Set foreground color
       wxColour fgColor((cell.fg >> 16) & 0xFF, (cell.fg >> 8) & 0xFF,
                        cell.fg & 0xFF);
-
-      // Handle reverse video
-      if (cell.reverse) {
+      if (cell.reverse)
         std::swap(bgColor, fgColor);
-      }
 
-      // Check if this cell is selected
       bool isSelected = false;
       if (m_selection.active) {
         int minRow = std::min(m_selection.startRow, m_selection.endRow);
         int maxRow = std::max(m_selection.startRow, m_selection.endRow);
         int minCol = std::min(m_selection.startCol, m_selection.endCol);
         int maxCol = std::max(m_selection.startCol, m_selection.endCol);
-
         isSelected = (rowIdx >= minRow && rowIdx <= maxRow &&
                       colIdx >= minCol && colIdx <= maxCol);
       }
 
-      // Draw background
       dc.SetBrush(wxBrush(bgColor));
       dc.SetPen(*wxTRANSPARENT_PEN);
       dc.DrawRectangle(x, y, charW, charH);
 
-      // Draw selection highlight (on top of background, before text)
       if (isSelected) {
-        dc.SetBrush(wxBrush(
-            wxColour(70, 130, 180, 100))); // Semi-transparent steel blue
+        dc.SetBrush(wxBrush(wxColour(70, 130, 180, 100)));
         dc.SetPen(*wxTRANSPARENT_PEN);
         dc.DrawRectangle(x, y, charW, charH);
       }
 
-      // Draw character
       dc.SetTextForeground(fgColor);
-
-      // Set font style (bold, underline)
       wxFont font = dc.GetFont();
-      if (cell.bold) {
+      if (cell.bold)
         font.MakeBold();
-      }
-      if (cell.underline) {
+      if (cell.underline)
         font.MakeUnderlined();
-      }
       dc.SetFont(font);
 
       wxString ch;
       ch.Append(static_cast<wxChar>(cell.ch));
       dc.DrawText(ch, x, y);
 
-      // Reset font if modified
-      if (cell.bold || cell.underline) {
+      if (cell.bold || cell.underline)
         dc.SetFont(m_defaultFont);
-      }
 
       x += charW;
       colIdx++;
@@ -300,6 +287,26 @@ void TerminalPanel::OnMouseUp(wxMouseEvent &evt) {
   evt.Skip();
 }
 
+void TerminalPanel::OnMouseWheel(wxMouseEvent &evt) {
+  m_wheelAccum += evt.GetWheelRotation();
+  int delta = evt.GetWheelDelta();
+  int lines = m_wheelAccum / delta;
+  m_wheelAccum %= delta;
+
+  if (lines == 0)
+    return;
+
+  std::size_t vs = m_core.ViewStart();
+  if (lines > 0 && vs >= static_cast<std::size_t>(lines))
+    m_core.SetViewStart(vs - lines);
+  else if (lines > 0)
+    m_core.SetViewStart(0);
+  else
+    m_core.SetViewStart(vs + static_cast<std::size_t>(-lines));
+
+  m_dirty = true;
+}
+
 void TerminalPanel::OnRightClick(wxMouseEvent &evt) {
   wxMenu menu;
 
@@ -327,12 +334,13 @@ void TerminalPanel::OnCopy(wxCommandEvent &evt) {
   int minCol = std::min(m_selection.startCol, m_selection.endCol);
   int maxCol = std::max(m_selection.startCol, m_selection.endCol);
 
-  const auto &screen = m_core.Screen();
-  for (int r = minRow; r <= maxRow && r < static_cast<int>(screen.size());
+  std::size_t viewStart = m_core.ViewStart();
+  for (int r = minRow; r <= maxRow && r < static_cast<int>(m_core.Rows());
        ++r) {
-    for (int c = minCol; c <= maxCol && c < static_cast<int>(screen[r].size());
+    const auto &row = m_core.BufferRow(viewStart + r);
+    for (int c = minCol; c <= maxCol && c < static_cast<int>(row.size());
          ++c) {
-      selectedText += static_cast<char>(screen[r][c].ch);
+      selectedText += static_cast<char>(row[c].ch);
     }
     if (r < maxRow) {
       selectedText += "\r\n"; // Add newline between rows
