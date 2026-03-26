@@ -298,15 +298,7 @@ Added support for common Unix-style keyboard shortcuts that are standard in most
 
 ### Shortcuts Implemented
 
-1. **Ctrl+L - Clear Screen**
-   - Clears the entire terminal display
-   - Processes ANSI escape sequences `ESC[2J` (clear screen) + `ESC[H` (move to home) via `Feed()`
-   - Also sends same sequences to the shell to keep it synchronized
-   - Uses `Feed()` to directly process escape sequences in terminal core
-   - This ensures both display and cursor position are updated correctly
-   - Equivalent to typing `cls` (Windows) or `clear` (Unix)
-
-2. **Ctrl+U - Clear Current Line**
+1. **Ctrl+U - Clear Current Line**
    - Clears everything typed on the current line (line kill)
    - Sends backspace sequences to erase the current command
    - Clears the internal `m_currentCommand` buffer
@@ -318,12 +310,8 @@ Added support for common Unix-style keyboard shortcuts that are standard in most
 - Added Ctrl+L handler before the general Ctrl+A-Z handler
 - Added Ctrl+U handler before the general Ctrl+A-Z handler
 - Ctrl+L implementation:
-  - Calls `Feed("\x1b[2J\x1b[H")` to process escape sequences directly
-  - Sends `\x03\r` (Ctrl+C + Enter) to shell to cancel line and get fresh prompt
-  - Shell redraws its prompt at the top, keeping cursor position synchronized
-  - Clears `m_currentCommand` buffer (important for history navigation)
-  - Resets `m_historyIndex` to -1
-  - This ensures command history works correctly after screen clear
+  - Sends `\x1b[2J\x1b[H` to the shell (proper ANSI sequences)
+  - Sequences are parsed by terminal core, keeping cursor position synced
   - Forces refresh to update display
 - Ctrl+U implementation:
   - Generates backspace sequences to erase current line
@@ -334,25 +322,11 @@ Added support for common Unix-style keyboard shortcuts that are standard in most
 1. **Initial Issue**: Sending `\f` (form feed) displayed as `^L` on screen
    - **Fix**: Changed to ANSI escape sequences `\x1b[2J\x1b[H`
 
-2. **Ctrl+L Does Nothing**: Sending sequences only to shell didn't work
-   - **Root Cause**: Shell doesn't echo escape sequences back to terminal
-   - **Fix**: Use `Feed()` to process sequences directly in terminal core
-   - Also send to shell to keep its state synchronized
-
-3. **Cursor Position Issue**: After clearing, cursor remained at previous location
-   - **Root Cause**: Only calling `m_core.ClearScreen()` without moving cursor
-   - **Fix**: Send complete clear sequence `ESC[2J` + `ESC[H` (move to home)
-   - Process via `Feed()` so terminal core handles both clear and cursor move
+2. **Cursor Position Issue**: After clearing, cursor remained at previous location
+   - **Root Cause**: Mixing direct manipulation (`m_core.ClearScreen()`) with escape sequences
+   - **Fix**: Removed direct manipulation, only send escape sequences to shell
+   - Escape sequences are processed normally through terminal core
    - This keeps shell cursor position and display cursor position synchronized
-
-4. **History Navigation After Ctrl+L**: Arrow Up places command in wrong location
-   - **Root Cause**: `m_currentCommand` buffer still contained old line content
-   - History navigation uses `m_currentCommand.length()` to calculate backspaces
-   - **Fix**: Clear `m_currentCommand` and reset `m_historyIndex` when clearing screen
-
-5. **History Misplaced on Second Arrow Up After Ctrl+L**
-   - **Root Cause**: Shell's cursor position not synchronized after escape sequences
-   - **Fix**: Send `\x03\r` (Ctrl+C + Enter) to force shell to redraw prompt at top
 
 ### Testing
 - **Ctrl+L**: Type some commands, then press Ctrl+L → screen should clear and cursor at top-left
