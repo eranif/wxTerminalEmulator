@@ -189,6 +189,46 @@ make -j32
 - Updated `OnKeyDown` to look up keys in the shift map and send the appropriate character based on Shift state
 - This provides a clean, maintainable solution for all Shift-modified characters
 
+### 5. Pager/Interactive Application Support (terminal_panel.cpp)
+**Problem**: Commands like `git log`, `less`, `more` that use pagers appeared to not be responding to input (e.g., pressing 'q' to quit).
+
+**Root Cause**: There were two event handlers processing keyboard input:
+- `OnKeyDown` - handling and sending characters
+- `OnChar` - also trying to send the same characters
+
+This created a conflict where characters were potentially being double-sent or interfering with each other.
+
+**Fix**:
+- Disabled character processing in `OnChar` event handler
+- All keyboard input is now handled exclusively in `OnKeyDown`
+- This ensures single, clean character transmission to the terminal
+
+**Status**: ✅ **WORKING** - See issue #6 below for the actual fix.
+
+### 6. Escape Sequence Parsing Bug - Single-Byte Sequences (terminal_core.cpp)
+**Problem**: Commands like `git log` would display but couldn't be exited. Pressing `q` appeared to do nothing, and the screen stayed locked on the pager view.
+
+**Root Cause**:
+- The pager was sending `ESC>` (Normal Keypad Mode) followed by `ESC[K` (Erase Line)
+- `ESC>` (`>` = 0x3E) was not being recognized as a valid escape sequence terminator (range was 0x40-0x7E only)
+- This left the escape buffer in a corrupted state with unclosed sequence data
+- When `ESC[K` arrived, it was appended to the corrupted buffer and never parsed
+- The erase command never executed, leaving the `:` prompt and git log content on screen
+- Subsequent screen updates couldn't clear the old content
+
+**Fix**:
+- Extended escape sequence terminator detection to include range 0x30-0x3F
+- This covers single-byte escape sequences like:
+  - `ESC>` (0x3E) - Normal Keypad Mode
+  - `ESC=` (0x3D) - Application Keypad Mode
+  - `ESC7` (0x37) - Save Cursor (DECSC)
+  - `ESC8` (0x38) - Restore Cursor (DECRC)
+- These sequences are now properly recognized and terminated
+- Prevents escape buffer corruption
+- `ESC[K` and other CSI sequences now parse correctly
+
+**Result**: ✅ Pagers (git log, less, more) now work perfectly. Press `q` to quit, Space to scroll, arrows to navigate.
+
 ## Known Issues to Address
 None currently!
 

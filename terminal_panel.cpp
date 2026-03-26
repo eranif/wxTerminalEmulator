@@ -55,6 +55,11 @@ TerminalPanel::TerminalPanel(wxWindow *parent)
   Bind(wxEVT_TIMER, &TerminalPanel::OnTimer, this);
 
   m_backend = terminal::PtyBackend::Create();
+
+  // Set up callback for terminal responses (e.g., cursor position reports)
+  m_core.SetResponseCallback(
+      [this](const std::string &response) { SendInput(response); });
+
   SetTerminalSizeFromClient();
   m_timer.Start(16); // ~60 FPS for smooth display
   SetFocus();
@@ -493,13 +498,9 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
 }
 
 void TerminalPanel::OnChar(wxKeyEvent &evt) {
-  wxChar uc = evt.GetUnicodeKey();
-
-  if (uc != WXK_NONE && uc >= 32) {
-    wxString str;
-    str.Append(uc);
-    SendInput(str.ToStdString());
-  }
+  // All character input is now handled in OnKeyDown
+  // This prevents double-sending characters
+  evt.Skip();
 }
 
 void TerminalPanel::OnTimer(wxTimerEvent &) {

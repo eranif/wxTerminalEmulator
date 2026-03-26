@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -33,6 +34,11 @@ public:
   void AppendLine(const std::string &line);
   void ClearScreen();
   void MoveCursor(std::size_t row, std::size_t col);
+
+  // Set callback for sending responses (e.g., cursor position reports)
+  void SetResponseCallback(std::function<void(const std::string &)> callback) {
+    m_responseCallback = callback;
+  }
 
   std::size_t Rows() const { return m_rows; }
   std::size_t Cols() const { return m_cols; }
@@ -66,6 +72,7 @@ private:
   bool m_inEscape{false};
   std::string m_escape;
   Cell m_attr{};
+  std::function<void(const std::string &)> m_responseCallback;
 };
 
 } // namespace terminal

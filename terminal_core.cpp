@@ -158,6 +158,7 @@ void TerminalCore::PutData(const std::string &data) {
 
       // Check for escape sequence terminator
       // Final byte is in range 0x40-0x7E for CSI sequences
+      // But also 0x30-0x3F for some single-char sequences like ESC> ESC=
       if (c >= '@' && c <= '~') {
         // Check we have proper CSI sequence
         if (m_escape.size() > 1 && m_escape[0] == '[') {
@@ -169,6 +170,15 @@ void TerminalCore::PutData(const std::string &data) {
                    (c >= '@' && c <= '~')) {
           // Single character escape sequence (like ESC 7, ESC 8, etc.)
           // But NOT '[' or ']' which start CSI/OSC sequences
+          m_escape.push_back(c);
+          ParseEscape(m_escape);
+          m_escape.clear();
+          m_inEscape = false;
+        }
+      } else if (c >= '0' && c <= '?') {
+        // Single-byte sequences like ESC> ESC= ESC7 ESC8
+        if (m_escape.size() == 1 && m_escape[0] != '[' && m_escape[0] != ']') {
+          ParseEscape(m_escape);
           m_escape.clear();
           m_inEscape = false;
         }
@@ -263,6 +273,28 @@ void TerminalCore::ParseEscape(const std::string &seq) {
   if (seq.empty())
     return;
 
+  // Handle single-character escape sequences (not CSI or OSC)
+  if (seq.size() == 1) {
+    switch (seq[0]) {
+    case '7': // DECSC - Save cursor position
+      // We could save cursor position here
+      break;
+    case '8': // DECRC - Restore cursor position
+      // We could restore cursor position here
+      break;
+    case '>': // DECKPNM - Keypad Numeric Mode
+      // Normal keypad mode - acknowledge
+      break;
+    case '=': // DECKPAM - Keypad Application Mode
+      // Application keypad mode - acknowledge
+      break;
+    default:
+      // Unknown single-char sequence - ignore
+      break;
+    }
+    return;
+  }
+
   // Handle OSC sequences (starts with ])
   if (seq[0] == ']') {
     // Operating System Command - just ignore for now
@@ -308,7 +340,49 @@ void TerminalCore::ParseEscape(const std::string &seq) {
 
   // Private mode sequences (like ?25h for cursor visibility)
   if (privateMode) {
-    // Just ignore private mode sequences for now
+    // Handle important private mode sequences
+    if (final == 'h' || final == 'l') {
+      // Set (h) or Reset (l) mode
+      bool enable = (final == 'h');
+
+      for (int param : paramList) {
+        switch (param) {
+        case 25: // Cursor visibility
+          // We always show cursor, but acknowledge the sequence
+          break;
+        case 1: // Application cursor keys
+          // We send standard cursor keys, but acknowledge
+          break;
+        case 47:   // Alternative screen buffer (old)
+        case 1047: // Alternative screen buffer
+        case 1049: // Save cursor + Alternative screen
+          // We don't implement alternate buffer, but acknowledge
+          // This is used by less, vim, etc.
+          break;
+        }
+      }
+    }
+    return; // Don't process further
+  }
+
+  // Handle device queries that need responses
+  if (final == 'c') {
+    // Device Attributes query - respond with VT100
+    if (m_responseCallback) {
+      m_responseCallback("\x1b[?1;0c"); // VT100 with no options
+    }
+    return;
+  }
+
+  if (final == 'n') {
+    // Device Status Report
+    if (!paramList.empty() && paramList[0] == 6) {
+      // Cursor Position Report
+      if (m_responseCallback) {
+        m_responseCallback("\x1b[" + std::to_string(m_cursor.row + 1) + ";" +
+                           std::to_string(m_cursor.col + 1) + "R");
+      }
+    }
     return;
   }
 
@@ -423,6 +497,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
 
   case 'K': { // Erase in Line
     int mode = paramList.empty() ? 0 : paramList[0];
+
     if (m_cursor.row >= m_screen.size())
       break;
 
