@@ -20,8 +20,9 @@ public:
     Centre(); // Center the window on screen
 
     TerminalLogger::Get().SetLevel(TerminalLogLevel::WARN);
-    auto *panel = new TerminalView(this);
-    panel->StartProcess(""); // Empty string will use default shell
+    auto *view = new TerminalView(this);
+    view->SetTheme(wxTerminalTheme::MakeLightTheme());
+    view->StartProcess(""); // Empty string will use default shell
 
     Bind(wxEVT_TERMINAL_TITLE_CHANGED,
          [this](wxTerminalEvent &evt) { SetTitle(evt.GetTitle()); });

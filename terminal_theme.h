@@ -43,15 +43,15 @@ struct wxTerminalTheme {
   // Helper: get ANSI colour by index (0-7) + bright flag
   std::uint32_t GetAnsiColor(int index, bool bright = false) const {
     static const wxColour wxTerminalTheme::*normal[8] = {
-        &wxTerminalTheme::black,   &wxTerminalTheme::red,
-        &wxTerminalTheme::green,   &wxTerminalTheme::yellow,
-        &wxTerminalTheme::blue,    &wxTerminalTheme::magenta,
-        &wxTerminalTheme::cyan,    &wxTerminalTheme::white};
+        &wxTerminalTheme::black, &wxTerminalTheme::red,
+        &wxTerminalTheme::green, &wxTerminalTheme::yellow,
+        &wxTerminalTheme::blue,  &wxTerminalTheme::magenta,
+        &wxTerminalTheme::cyan,  &wxTerminalTheme::white};
     static const wxColour wxTerminalTheme::*brights[8] = {
-        &wxTerminalTheme::brightBlack,   &wxTerminalTheme::brightRed,
-        &wxTerminalTheme::brightGreen,   &wxTerminalTheme::brightYellow,
-        &wxTerminalTheme::brightBlue,    &wxTerminalTheme::brightMagenta,
-        &wxTerminalTheme::brightCyan,    &wxTerminalTheme::brightWhite};
+        &wxTerminalTheme::brightBlack, &wxTerminalTheme::brightRed,
+        &wxTerminalTheme::brightGreen, &wxTerminalTheme::brightYellow,
+        &wxTerminalTheme::brightBlue,  &wxTerminalTheme::brightMagenta,
+        &wxTerminalTheme::brightCyan,  &wxTerminalTheme::brightWhite};
     if (index < 0 || index > 7)
       return ToU32(fg);
     return ToU32(this->*(bright ? brights[index] : normal[index]));
@@ -63,11 +63,37 @@ struct wxTerminalTheme {
       return GetAnsiColor(index % 8, index >= 8);
     if (index < 232) {
       int idx = index - 16;
-      int r = (idx / 36) * 51, g = ((idx / 6) % 6) * 51,
-          b = (idx % 6) * 51;
+      int r = (idx / 36) * 51, g = ((idx / 6) % 6) * 51, b = (idx % 6) * 51;
       return (r << 16) | (g << 8) | b;
     }
     int gray = 8 + (index - 232) * 10;
     return (gray << 16) | (gray << 8) | gray;
+  }
+
+  static inline wxTerminalTheme MakeDarkTheme() { return wxTerminalTheme{}; }
+  static inline wxTerminalTheme MakeLightTheme() {
+    wxTerminalTheme t;
+    t.fg = wxColour(0x00, 0x00, 0x00);
+    t.bg = wxColour(0xFF, 0xFF, 0xFF);
+    t.black = wxColour(0x00, 0x00, 0x00);
+    t.red = wxColour(0xC0, 0x00, 0x00);
+    t.green = wxColour(0x00, 0x80, 0x00);
+    t.yellow = wxColour(0x80, 0x80, 0x00);
+    t.blue = wxColour(0x00, 0x00, 0xC0);
+    t.magenta = wxColour(0xC0, 0x00, 0xC0);
+    t.cyan = wxColour(0x00, 0x80, 0x80);
+    t.white = wxColour(0xC0, 0xC0, 0xC0);
+    t.brightBlack = wxColour(0x80, 0x80, 0x80);
+    t.brightRed = wxColour(0xFF, 0x00, 0x00);
+    t.brightGreen = wxColour(0x00, 0xB0, 0x00);
+    t.brightYellow = wxColour(0xFF, 0xFF, 0x00);
+    t.brightBlue = wxColour(0x00, 0x00, 0xFF);
+    t.brightMagenta = wxColour(0xFF, 0x00, 0xFF);
+    t.brightCyan = wxColour(0x00, 0xFF, 0xFF);
+    t.brightWhite = wxColour(0xFF, 0xFF, 0xFF);
+    t.selectionBg = wxColour(51, 153, 255, 80);
+    t.highlightBg = wxColour(255, 200, 50, 80);
+    t.cursorColour = wxColour(0, 0, 0);
+    return t;
   }
 };
