@@ -19,6 +19,13 @@ public:
   void SetTerminalSizeFromClient();
   std::string Contents() const;
 
+  void ScrollToLastLine();
+  std::size_t GetLineCount() const;
+  void SetBufferSize(std::size_t maxLines);
+  std::size_t GetBufferSize() const;
+  void CenterLine(std::size_t line);
+  wxString GetLine(std::size_t line) const;
+
   // Override to indicate this window can receive keyboard focus
   bool AcceptsFocus() const override { return true; }
   bool AcceptsFocusFromKeyboard() const override { return true; }

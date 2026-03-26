@@ -46,6 +46,7 @@ public:
   std::size_t Rows() const { return m_rows; }
   std::size_t Cols() const { return m_cols; }
   std::size_t MaxLines() const { return m_maxLines; }
+  void SetMaxLines(std::size_t maxLines) { m_maxLines = maxLines; }
 
   // Cursor position relative to viewport
   CursorPos Cursor() const;

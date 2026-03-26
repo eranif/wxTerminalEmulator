@@ -129,6 +129,40 @@ void TerminalView::SendInput(const std::string &text) {
 
 std::string TerminalView::Contents() const { return m_core.Flatten(); }
 
+void TerminalView::ScrollToLastLine() {
+  m_core.SetViewStart(m_core.ShellStart());
+  Refresh();
+}
+
+std::size_t TerminalView::GetLineCount() const {
+  return m_core.TotalLines();
+}
+
+void TerminalView::SetBufferSize(std::size_t maxLines) {
+  m_core.SetMaxLines(maxLines);
+}
+
+std::size_t TerminalView::GetBufferSize() const {
+  return m_core.MaxLines();
+}
+
+void TerminalView::CenterLine(std::size_t line) {
+  std::size_t half = m_core.Rows() / 2;
+  std::size_t vs = (line > half) ? line - half : 0;
+  m_core.SetViewStart(vs);
+  Refresh();
+}
+
+wxString TerminalView::GetLine(std::size_t line) const {
+  const auto &row = m_core.BufferRow(line);
+  wxString result;
+  result.reserve(row.size());
+  for (const auto &cell : row)
+    result += static_cast<wxChar>(cell.ch);
+  result.Trim();
+  return result;
+}
+
 void TerminalView::OnPaint(wxPaintEvent &) {
   wxAutoBufferedPaintDC pdc(this);
   wxGCDC dc(pdc);
