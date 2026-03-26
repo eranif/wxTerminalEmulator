@@ -60,4 +60,5 @@ private:
   std::vector<std::string> m_commandHistory;
   int m_historyIndex{-1};
   std::string m_currentCommand;
+  wxFont m_defaultFont;
 };

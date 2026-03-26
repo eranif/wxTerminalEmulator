@@ -37,9 +37,18 @@ static const std::unordered_map<int, int> shiftMap = {
     {'=', '+'},
     {'`', '~'}};
 
+#ifdef __WXMAC__
+constexpr int kDefaultFontSize = 18;
+#else
+constexpr int kDefaultFontSize = 14;
+#endif
+
 TerminalPanel::TerminalPanel(wxWindow *parent)
     : wxPanel(parent, wxID_ANY), m_timer(this) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
+
+  m_defaultFont =
+      wxFont(wxFontInfo(kDefaultFontSize).Family(wxFONTFAMILY_TELETYPE));
 
   // Bind events using modern API
   Bind(wxEVT_PAINT, &TerminalPanel::OnPaint, this);
@@ -77,7 +86,7 @@ void TerminalPanel::Feed(const std::string &data) {
 
 void TerminalPanel::SetTerminalSizeFromClient() {
   wxClientDC dc(this);
-  dc.SetFont(wxFontInfo(12).Family(wxFONTFAMILY_TELETYPE));
+  dc.SetFont(m_defaultFont);
 
   const int cw = std::max(1, dc.GetCharWidth());
   const int ch = std::max(1, dc.GetCharHeight());
@@ -111,7 +120,7 @@ void TerminalPanel::OnPaint(wxPaintEvent &) {
   wxAutoBufferedPaintDC dc(this);
   dc.SetBackground(*wxBLACK_BRUSH);
   dc.Clear();
-  dc.SetFont(wxFontInfo(12).Family(wxFONTFAMILY_TELETYPE));
+  dc.SetFont(m_defaultFont);
 
   const int charW = dc.GetCharWidth();
   const int charH = dc.GetCharHeight();
@@ -180,7 +189,7 @@ void TerminalPanel::OnPaint(wxPaintEvent &) {
 
       // Reset font if modified
       if (cell.bold || cell.underline) {
-        dc.SetFont(wxFontInfo(12).Family(wxFONTFAMILY_TELETYPE));
+        dc.SetFont(m_defaultFont);
       }
 
       x += charW;
@@ -215,7 +224,7 @@ void TerminalPanel::OnMouseClick(wxMouseEvent &evt) {
 
   // Calculate which cell was clicked
   wxClientDC dc(this);
-  dc.SetFont(wxFontInfo(12).Family(wxFONTFAMILY_TELETYPE));
+  dc.SetFont(m_defaultFont);
 
   const int charW = std::max(1, dc.GetCharWidth());
   const int charH = std::max(1, dc.GetCharHeight());
@@ -245,7 +254,7 @@ void TerminalPanel::OnMouseMove(wxMouseEvent &evt) {
 
   // Calculate which cell the mouse is over
   wxClientDC dc(this);
-  dc.SetFont(wxFontInfo(12).Family(wxFONTFAMILY_TELETYPE));
+  dc.SetFont(m_defaultFont);
 
   const int charW = std::max(1, dc.GetCharWidth());
   const int charH = std::max(1, dc.GetCharHeight());
