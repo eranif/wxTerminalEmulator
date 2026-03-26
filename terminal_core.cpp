@@ -226,6 +226,10 @@ void TerminalCore::PutData(const std::string &data) {
 }
 
 void TerminalCore::PutChar(char c) {
+  unsigned char uc = static_cast<unsigned char>(c);
+  // Ignore non-printable C0 control characters we don't handle
+  if (uc < 0x20 && c != '\n' && c != '\r' && c != '\b' && c != '\t')
+    return;
   switch (c) {
   case '\n':
     NewLine();
