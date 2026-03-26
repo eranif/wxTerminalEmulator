@@ -59,6 +59,9 @@ public:
   // Access a row by absolute index in the buffer
   const std::vector<Cell> &BufferRow(std::size_t absRow) const;
 
+  // Returns the visible rows (view area) as a vector of pointers to rows
+  std::vector<const std::vector<Cell> *> GetViewArea() const;
+
   std::string Flatten() const;
 
 private:

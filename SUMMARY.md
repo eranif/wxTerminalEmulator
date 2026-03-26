@@ -42,7 +42,7 @@ make -j32
 
 - **Critical bug fixed**: '[' and ']' characters were being treated as escape sequence terminators, causing sequences like `ESC[K` to fail. Fixed by excluding '[' and ']' from single-character escape terminator check.
 
-### 3. Interactive Input (terminal_panel.cpp)
+### 3. Interactive Input (terminal_view.cpp)
 - **Migrated from event tables to modern `Bind()` API**
 - **Keyboard handling**:
   - Added `wxEVT_CHAR_HOOK` to intercept ENTER/TAB/ESC before default navigation
@@ -389,35 +389,32 @@ None currently!
 
 ## Next Steps / TODO List
 
-### High Priority
-1. ~~**Remove Debug Logging**~~ ✅ **COMPLETED**
-
-   **What was done:**
-   - Removed all `std::ofstream` debug logging from terminal_panel.cpp and terminal_core.cpp
-   - Removed `#include <fstream>` as it's no longer needed
-   - Removed debug title bar updates
-   - Code is now clean and production-ready
+### Completed
+1. ~~**Remove Debug Logging**~~ ✅
+2. ~~**Mouse Wheel Scrollback**~~ ✅
 
 ### Medium Priority
-2. **Scrollback Navigation** ⏱️ ~20 mins
-   - Implement mouse wheel scrolling through terminal history
-   - Add Shift+PageUp/PageDown keyboard shortcuts
+3. **Scrollback Navigation (remaining)**
+   - Shift+PageUp/PageDown keyboard shortcuts
    - Display scrollbar when scrolled up
    - Show indicator when not at bottom
 
-3. **Font Size Control** ⏱️ ~10 mins
+4. **Font Size Control** ⏱️ ~10 mins
    - Ctrl+Plus/Ctrl+= to increase font size
    - Ctrl+Minus to decrease font size
    - Ctrl+0 to reset to default
    - Persist font size preference (optional)
 
 ### Low Priority / Nice to Have
-4. **Selection Improvements**
+5. **Selection Improvements**
    - Double-click to select word
    - Triple-click to select entire line
    - Shift+Arrow keys for keyboard selection
 
-5. **Test Complex Applications**
+6. **Persistent Command History**
+   - Save history to file so it survives app restart
+
+7. **Test Complex Applications**
    - Test with vim, less, top, htop
    - Verify all escape sequences work correctly
    - Fix any issues that arise

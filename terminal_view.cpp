@@ -140,10 +140,10 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   const int charH = dc.GetCharHeight();
   int rowIdx = 0;
   int y = 0;
-  std::size_t viewStart = m_core.ViewStart();
+  auto viewArea = m_core.GetViewArea();
 
-  for (std::size_t r = 0; r < m_core.Rows(); ++r) {
-    const auto &row = m_core.BufferRow(viewStart + r);
+  for (std::size_t r = 0; r < viewArea.size(); ++r) {
+    const auto &row = *viewArea[r];
     int x = 0;
     int colIdx = 0;
     for (const auto &cell : row) {
@@ -198,6 +198,7 @@ void TerminalView::OnPaint(wxPaintEvent &) {
 
   // Draw cursor (thin line caret) — only if shell viewport is visible
   auto cursor = m_core.Cursor();
+  std::size_t viewStart = m_core.ViewStart();
   std::size_t shellStart = m_core.ShellStart();
   if (viewStart <= shellStart &&
       shellStart + cursor.row < viewStart + m_core.Rows()) {
@@ -340,10 +341,10 @@ void TerminalView::OnCopy(wxCommandEvent &evt) {
   int maxCol = std::max(m_selection.startCol, m_selection.endCol);
   LOG_DEBUG() << "Copying content {" << minCol << "," << minRow << "} => {"
               << maxCol << "," << maxRow << "}" << std::endl;
-  std::size_t viewStart = m_core.ViewStart();
-  for (int r = minRow; r <= maxRow && r < static_cast<int>(m_core.Rows());
+  auto viewArea = m_core.GetViewArea();
+  for (int r = minRow; r <= maxRow && r < static_cast<int>(viewArea.size());
        ++r) {
-    const auto &row = m_core.BufferRow(viewStart + r);
+    const auto &row = *viewArea[r];
     for (int c = minCol; c <= maxCol && c < static_cast<int>(row.size()); ++c) {
       selectedText += static_cast<wxChar>(row[c].ch);
     }

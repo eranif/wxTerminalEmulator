@@ -57,6 +57,13 @@ const std::vector<Cell> &TerminalCore::BufferRow(std::size_t absRow) const {
   return empty;
 }
 
+std::vector<const std::vector<Cell> *> TerminalCore::GetViewArea() const {
+  std::vector<const std::vector<Cell> *> view(m_rows);
+  for (std::size_t r = 0; r < m_rows; ++r)
+    view[r] = &BufferRow(m_viewStart + r);
+  return view;
+}
+
 void TerminalCore::SetViewStart(std::size_t vs) {
   std::size_t maxVs =
       m_buffer.size() > m_rows ? m_buffer.size() - m_rows : 0;
