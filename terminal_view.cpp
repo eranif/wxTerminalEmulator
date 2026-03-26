@@ -163,6 +163,22 @@ wxString TerminalView::GetLine(std::size_t line) const {
   return result;
 }
 
+void TerminalView::SetSelection(std::size_t col, std::size_t row,
+                                std::size_t count) {
+  if (row >= m_core.TotalLines() || col >= m_core.Cols() || count == 0) {
+    ClearSelection();
+    return;
+  }
+  std::size_t endCol = std::min(col + count, m_core.Cols());
+  m_apiSelection = {row, col, endCol, true};
+  Refresh();
+}
+
+void TerminalView::ClearSelection() {
+  m_apiSelection.active = false;
+  Refresh();
+}
+
 void TerminalView::OnPaint(wxPaintEvent &) {
   wxAutoBufferedPaintDC pdc(this);
   wxGCDC dc(pdc);
@@ -188,21 +204,34 @@ void TerminalView::OnPaint(wxPaintEvent &) {
       if (cell.reverse)
         std::swap(bgColor, fgColor);
 
-      bool isSelected = false;
+      bool isMouseSelected = false;
       if (m_selection.active) {
         int minRow = std::min(m_selection.startRow, m_selection.endRow);
         int maxRow = std::max(m_selection.startRow, m_selection.endRow);
         int minCol = std::min(m_selection.startCol, m_selection.endCol);
         int maxCol = std::max(m_selection.startCol, m_selection.endCol);
-        isSelected = (rowIdx >= minRow && rowIdx <= maxRow &&
-                      colIdx >= minCol && colIdx <= maxCol);
+        isMouseSelected = (rowIdx >= minRow && rowIdx <= maxRow &&
+                           colIdx >= minCol && colIdx <= maxCol);
+      }
+
+      bool isApiSelected = false;
+      if (m_apiSelection.active) {
+        std::size_t absRow = m_core.ViewStart() + r;
+        isApiSelected = (absRow == m_apiSelection.row &&
+                         static_cast<std::size_t>(colIdx) >= m_apiSelection.col &&
+                         static_cast<std::size_t>(colIdx) < m_apiSelection.endCol);
       }
 
       dc.SetBrush(wxBrush(bgColor));
       dc.SetPen(*wxTRANSPARENT_PEN);
       dc.DrawRectangle(x, y, charW, charH);
 
-      if (isSelected) {
+      if (isApiSelected) {
+        dc.SetBrush(wxBrush(wxColour(180, 140, 50, 100)));
+        dc.SetPen(*wxTRANSPARENT_PEN);
+        dc.DrawRectangle(x, y, charW, charH);
+      }
+      if (isMouseSelected) {
         dc.SetBrush(wxBrush(wxColour(70, 130, 180, 100)));
         dc.SetPen(*wxTRANSPARENT_PEN);
         dc.DrawRectangle(x, y, charW, charH);

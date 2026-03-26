@@ -25,6 +25,8 @@ public:
   std::size_t GetBufferSize() const;
   void CenterLine(std::size_t line);
   wxString GetLine(std::size_t line) const;
+  void SetSelection(std::size_t col, std::size_t row, std::size_t count);
+  void ClearSelection();
 
   // Override to indicate this window can receive keyboard focus
   bool AcceptsFocus() const override { return true; }
@@ -55,9 +57,15 @@ private:
     bool active{false};
   };
 
+  struct ApiSelection {
+    std::size_t row{0}, col{0}, endCol{0};
+    bool active{false};
+  };
+
   terminal::TerminalCore m_core;
   std::unique_ptr<terminal::PtyBackend> m_backend;
   Selection m_selection;
+  ApiSelection m_apiSelection;
   bool m_isDragging{false};
   bool m_dirty{true};
   int m_scrollOffset{0}; // 0 = at bottom, >0 = scrolled back
