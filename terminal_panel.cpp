@@ -43,8 +43,7 @@ constexpr int kDefaultFontSize = 18;
 constexpr int kDefaultFontSize = 14;
 #endif
 
-TerminalPanel::TerminalPanel(wxWindow *parent)
-    : wxPanel(parent, wxID_ANY), m_timer(this) {
+TerminalPanel::TerminalPanel(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
 
   m_defaultFont =
@@ -61,7 +60,7 @@ TerminalPanel::TerminalPanel(wxWindow *parent)
   Bind(wxEVT_MOTION, &TerminalPanel::OnMouseMove, this);
   Bind(wxEVT_RIGHT_DOWN, &TerminalPanel::OnRightClick, this);
   Bind(wxEVT_SET_FOCUS, &TerminalPanel::OnFocus, this);
-  Bind(wxEVT_TIMER, &TerminalPanel::OnTimer, this);
+  Bind(wxEVT_IDLE, &TerminalPanel::OnIdle, this);
 
   m_backend = terminal::PtyBackend::Create();
 
@@ -70,7 +69,6 @@ TerminalPanel::TerminalPanel(wxWindow *parent)
       [this](const std::string &response) { SendInput(response); });
 
   SetTerminalSizeFromClient();
-  m_timer.Start(16); // ~60 FPS for smooth display
   SetFocus();
 }
 
@@ -81,7 +79,7 @@ TerminalPanel::~TerminalPanel() {
 
 void TerminalPanel::Feed(const std::string &data) {
   m_core.PutData(data);
-  Refresh(false);
+  m_dirty = true;
 }
 
 void TerminalPanel::SetTerminalSizeFromClient() {
@@ -630,6 +628,9 @@ void TerminalPanel::OnChar(wxKeyEvent &evt) {
   evt.Skip();
 }
 
-void TerminalPanel::OnTimer(wxTimerEvent &) {
-  Refresh(false);
+void TerminalPanel::OnIdle(wxIdleEvent &evt) {
+  if (m_dirty) {
+    m_dirty = false;
+    Refresh(false);
+  }
 }

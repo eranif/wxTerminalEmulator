@@ -3,9 +3,8 @@
 #include "pty_backend.h"
 #include "terminal_core.h"
 
-#include <wx/panel.h>
-#include <wx/timer.h>
 #include <vector>
+#include <wx/panel.h>
 
 #include <memory>
 
@@ -34,7 +33,7 @@ private:
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);
   void OnChar(wxKeyEvent &evt);
-  void OnTimer(wxTimerEvent &evt);
+  void OnIdle(wxIdleEvent &evt);
   void OnMouseClick(wxMouseEvent &evt);
   void OnMouseMove(wxMouseEvent &evt);
   void OnMouseUp(wxMouseEvent &evt);
@@ -50,10 +49,10 @@ private:
   };
 
   terminal::TerminalCore m_core;
-  wxTimer m_timer;
   std::unique_ptr<terminal::PtyBackend> m_backend;
   Selection m_selection;
   bool m_isDragging{false};
+  bool m_dirty{true};
 
   // Command history
   std::vector<std::string> m_commandHistory;
