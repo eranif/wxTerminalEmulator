@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(wxTerminalEmulator)
+project(wxterminal_lib)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,41 +34,47 @@ else()
 endif()
 add_compile_definitions(-DwxDEBUG_LEVEL=0)
 # Source files
-set(SOURCES main.cpp terminal_core.cpp terminal_logger.cpp terminal_view.cpp
-            terminal_event.cpp)
+set(LIB_SOURCES terminal_core.cpp terminal_logger.cpp terminal_view.cpp
+                terminal_event.cpp)
 
-set(HEADER_SOURCES # Common headers can be listed here if needed
-)
+set(EXAMPLE_SOURCES main.cpp)
+if(MINGW)
+  list(APPEND EXAMPLE_SOURCES wx.rc)
+endif()
 
 if(WIN32)
-  list(APPEND SOURCES pty_backend_windows.cpp)
+  list(APPEND LIB_SOURCES pty_backend_windows.cpp)
   list(APPEND HEADER_SOURCES pty_backend_windows.h)
 else()
-  list(APPEND SOURCES pty_backend_posix.cpp)
+  list(APPEND LIB_SOURCES pty_backend_posix.cpp)
   list(APPEND HEADER_SOURCES pty_backend_posix.h)
 endif()
 
-list(APPEND SOURCES ${HEADER_SOURCES})
+# Common headers can be listed here if needed
+set(HEADER_SOURCES)
 
-if(MINGW)
-  list(APPEND SOURCES wx.rc)
-endif()
+# Create library
+add_library(wxterminal_lib STATIC ${LIB_SOURCES} ${HEADER_SOURCES})
 
-# Create executable
+# Build library with PIC when required (useful when linking into other
+# binaries/shared libs)
+set_target_properties(wxterminal_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# Create example program
 if(MINGW)
-  add_executable(${PROJECT_NAME} WIN32 ${SOURCES})
+  add_executable(wxterminal WIN32 ${EXAMPLE_SOURCES})
 else()
-  add_executable(${PROJECT_NAME} ${SOURCES})
+  add_executable(wxterminal ${EXAMPLE_SOURCES})
 endif()
 
-# Link wxWidgets
-target_link_libraries(${PROJECT_NAME} ${wxWidgets_LIBRARIES})
+target_link_libraries(wxterminal PRIVATE wxterminal_lib)
 
 # Platform specific settings
 if(WIN32)
-  target_compile_definitions(${PROJECT_NAME} PRIVATE __WXMSW__)
-  target_link_libraries(${PROJECT_NAME} shell32 ole32 user32)
+  target_compile_definitions(wxterminal PRIVATE __WXMSW__)
+  target_link_libraries(wxterminal PRIVATE shell32 ole32 user32
+                                           ${wxWidgets_LIBRARIES})
 elseif(NOT APPLE)
   # Linux needs libutil for forkpty
-  target_link_libraries(${PROJECT_NAME} util)
+  target_link_libraries(wxterminal PRIVATE util ${wxWidgets_LIBRARIES})
 endif()
