@@ -40,11 +40,19 @@ set(SOURCES
   terminal_panel.cpp
 )
 
+set(HEADER_SOURCES
+  # Common headers can be listed here if needed
+)
+
 if(WIN32)
   list(APPEND SOURCES pty_backend_windows.cpp)
+  list(APPEND HEADER_SOURCES pty_backend_windows.h)
 else()
   list(APPEND SOURCES pty_backend_posix.cpp)
+  list(APPEND HEADER_SOURCES pty_backend_posix.h)
 endif()
+
+list(APPEND SOURCES ${HEADER_SOURCES})
 
 if(MINGW)
   list(APPEND SOURCES wx.rc)
