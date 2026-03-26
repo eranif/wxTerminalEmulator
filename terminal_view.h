@@ -5,6 +5,7 @@
 
 #include <vector>
 #include <wx/panel.h>
+#include <wx/timer.h>
 
 #include <memory>
 
@@ -43,7 +44,7 @@ private:
   void OnSize(wxSizeEvent &evt);
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);
-  void OnIdle(wxIdleEvent &evt);
+  void OnTimer(wxTimerEvent &evt);
   void OnMouseClick(wxMouseEvent &evt);
   void OnMouseMove(wxMouseEvent &evt);
   void OnMouseUp(wxMouseEvent &evt);
@@ -78,4 +79,5 @@ private:
   int m_historyIndex{-1};
   std::string m_currentCommand;
   wxFont m_defaultFont;
+  wxTimer m_timer;
 };

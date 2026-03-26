@@ -71,9 +71,12 @@ TerminalView::TerminalView(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   Bind(wxEVT_RIGHT_DOWN, &TerminalView::OnRightClick, this);
   Bind(wxEVT_MOUSEWHEEL, &TerminalView::OnMouseWheel, this);
   Bind(wxEVT_SET_FOCUS, &TerminalView::OnFocus, this);
-  Bind(wxEVT_IDLE, &TerminalView::OnIdle, this);
+  Bind(wxEVT_TIMER, &TerminalView::OnTimer, this);
 
   m_backend = terminal::PtyBackend::Create();
+
+  m_timer.SetOwner(this);
+  m_timer.Start(16);
 
   // Set up callback for terminal responses (e.g., cursor position reports)
   m_core.SetResponseCallback(
@@ -90,6 +93,8 @@ TerminalView::TerminalView(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
 }
 
 TerminalView::~TerminalView() {
+  if (m_timer.IsRunning())
+    m_timer.Stop();
   if (m_backend)
     m_backend->Stop();
 }
@@ -721,7 +726,7 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
   evt.Skip();
 }
 
-void TerminalView::OnIdle(wxIdleEvent &evt) {
+void TerminalView::OnTimer(wxTimerEvent &evt) {
   if (m_dirty) {
     m_dirty = false;
     Refresh(false);
