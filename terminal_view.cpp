@@ -185,8 +185,7 @@ void TerminalView::ClearSelection() {
 }
 
 void TerminalView::OnPaint(wxPaintEvent &) {
-  wxAutoBufferedPaintDC pdc(this);
-  wxGCDC dc(pdc);
+  wxAutoBufferedPaintDC dc(this);
   const auto &theme = m_core.GetTheme();
   dc.SetBackground(wxBrush(theme.bg));
   dc.Clear();

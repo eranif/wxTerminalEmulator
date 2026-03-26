@@ -21,7 +21,7 @@ public:
 
     TerminalLogger::Get().SetLevel(TerminalLogLevel::WARN);
     auto *view = new TerminalView(this);
-    view->SetTheme(wxTerminalTheme::MakeLightTheme());
+    view->SetTheme(wxTerminalTheme::MakeDarkTheme());
     view->StartProcess(""); // Empty string will use default shell
 
     Bind(wxEVT_TERMINAL_TITLE_CHANGED,
