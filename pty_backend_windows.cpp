@@ -156,7 +156,8 @@ bool WindowsPtyBackend::Start(const std::string &command,
   }
 
   m_running = true;
-  m_thread = std::thread([this] { ReaderThread(); });
+  m_readerThread = std::thread([this] { ReaderThread(); });
+  m_writerThread = std::thread([this] { WriterThread(); });
   return true;
 }
 
@@ -187,8 +188,10 @@ void WindowsPtyBackend::Stop() {
   m_running = false;
   m_cv.notify_all();
 
-  if (m_thread.joinable())
-    m_thread.join();
+  if (m_readerThread.joinable())
+    m_readerThread.join();
+  if (m_writerThread.joinable())
+    m_writerThread.join();
 
   DestroyConPty();
 }
@@ -356,16 +359,15 @@ void WindowsPtyBackend::DestroyConPty() {
   }
 }
 
-void WindowsPtyBackend::ReaderThread() {
-  char buf[4096];
-
+void WindowsPtyBackend::WriterThread() {
   while (m_running) {
-    // Drain outbound input buffer first.
     std::vector<char> pending;
     {
       std::unique_lock<std::mutex> lock(m_mutex);
-      m_cv.wait_for(lock, std::chrono::milliseconds(1),
-                    [this] { return !m_running || !m_writeBuffer.empty(); });
+      m_cv.wait(lock, [this] { return !m_running || !m_writeBuffer.empty(); });
+
+      if (!m_running)
+        break;
 
       if (!m_writeBuffer.empty()) {
         pending.swap(m_writeBuffer);
@@ -377,7 +379,13 @@ void WindowsPtyBackend::ReaderThread() {
       WriteFile(m_hInputWrite, pending.data(),
                 static_cast<DWORD>(pending.size()), &written, nullptr);
     }
+  }
+}
 
+void WindowsPtyBackend::ReaderThread() {
+  char buf[4096];
+
+  while (m_running) {
     if (m_hOutputRead) {
       DWORD read = 0;
       DWORD avail = 0;
@@ -408,6 +416,12 @@ void WindowsPtyBackend::ReaderThread() {
         }
       }
     }
+
+    // Small sleep to avoid tight loop when no data is available
+    if (!m_running) {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 }
 

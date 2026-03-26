@@ -1,12 +1,23 @@
 # Terminal Emulator Development Summary
 
 ## Project Overview
-Developing an embedded terminal emulator as a wxPanel in C++ on Windows using ConPTY. Project location: `C:\msys64\home\eran\devl\EmbeddedCmdPanel`
+Developing an embedded terminal emulator as a wxPanel in C++ on Windows using ConPTY. Project location is where this file located.
 
 **Build commands:**
+
+Windows:
+
 ```bash
-cd C:\msys64\home\eran\devl\EmbeddedCmdPanel/.build-debug
-cmake -DCMAKE_BUILD_TYPE=Debug -DWXWIN=C:/msys64/home/eran/root ..
+cd .build-debug
+cmake -DCMAKE_BUILD_TYPE=Debug -DWXWIN=C:/msys64/home/eran/root ..  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+make -j32
+```
+
+Linux:
+
+```bash
+cd .build-debug
+cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 make -j32
 ```
 
