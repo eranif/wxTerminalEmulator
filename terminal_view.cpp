@@ -53,6 +53,9 @@ TerminalView::TerminalView(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
 #ifdef __WXMAC__
       wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
              wxFONTWEIGHT_NORMAL, false, "Menlo");
+#elif defined(__WXMSW__)
+      wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
+             wxFONTWEIGHT_NORMAL, false, "Consolas");
 #else
       wxFont(wxFontInfo(kDefaultFontSize).Family(wxFONTFAMILY_TELETYPE));
 #endif
