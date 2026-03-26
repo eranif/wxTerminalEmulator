@@ -7,6 +7,7 @@
 #include <wx/app.h>
 #include <wx/clipbrd.h>
 #include <wx/dcbuffer.h>
+#include <wx/dcgraph.h>
 #include <wx/font.h>
 #include <wx/menu.h>
 #include <wx/window.h>
@@ -38,7 +39,7 @@ static const std::unordered_map<int, int> shiftMap = {
     {'`', '~'}};
 
 #ifdef __WXMAC__
-constexpr int kDefaultFontSize = 18;
+constexpr int kDefaultFontSize = 20;
 #else
 constexpr int kDefaultFontSize = 14;
 #endif
@@ -47,7 +48,12 @@ TerminalPanel::TerminalPanel(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
 
   m_defaultFont =
+#ifdef __APPLE__
+      wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
+             wxFONTWEIGHT_NORMAL, false, "Menlo");
+#else
       wxFont(wxFontInfo(kDefaultFontSize).Family(wxFONTFAMILY_TELETYPE));
+#endif
 
   // Bind events using modern API
   Bind(wxEVT_PAINT, &TerminalPanel::OnPaint, this);
@@ -114,7 +120,8 @@ void TerminalPanel::SendInput(const std::string &text) {
 std::string TerminalPanel::Contents() const { return m_core.Flatten(); }
 
 void TerminalPanel::OnPaint(wxPaintEvent &) {
-  wxAutoBufferedPaintDC dc(this);
+  wxAutoBufferedPaintDC pdc(this);
+  wxGCDC dc(pdc);
   dc.SetBackground(*wxBLACK_BRUSH);
   dc.Clear();
   dc.SetFont(m_defaultFont);
