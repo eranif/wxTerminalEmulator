@@ -34,7 +34,7 @@ else()
 endif()
 add_compile_definitions(-DwxDEBUG_LEVEL=0)
 # Source files
-set(SOURCES main.cpp terminal_core.cpp terminal_logger.cpp terminal_panel.cpp
+set(SOURCES main.cpp terminal_core.cpp terminal_logger.cpp terminal_view.cpp
             terminal_event.cpp)
 
 set(HEADER_SOURCES # Common headers can be listed here if needed

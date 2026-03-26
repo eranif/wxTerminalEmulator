@@ -1,4 +1,4 @@
-#include "terminal_panel.h"
+#include "terminal_view.h"
 
 #include "terminal_event.h"
 #include "terminal_logger.h"
@@ -46,7 +46,7 @@ constexpr int kDefaultFontSize = 20;
 constexpr int kDefaultFontSize = 14;
 #endif
 
-TerminalPanel::TerminalPanel(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
+TerminalView::TerminalView(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
 
   m_defaultFont =
@@ -58,17 +58,17 @@ TerminalPanel::TerminalPanel(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
 #endif
 
   // Bind events using modern API
-  Bind(wxEVT_PAINT, &TerminalPanel::OnPaint, this);
-  Bind(wxEVT_SIZE, &TerminalPanel::OnSize, this);
-  Bind(wxEVT_CHAR_HOOK, &TerminalPanel::OnCharHook, this);
-  Bind(wxEVT_KEY_DOWN, &TerminalPanel::OnKeyDown, this);
-  Bind(wxEVT_LEFT_DOWN, &TerminalPanel::OnMouseClick, this);
-  Bind(wxEVT_LEFT_UP, &TerminalPanel::OnMouseUp, this);
-  Bind(wxEVT_MOTION, &TerminalPanel::OnMouseMove, this);
-  Bind(wxEVT_RIGHT_DOWN, &TerminalPanel::OnRightClick, this);
-  Bind(wxEVT_MOUSEWHEEL, &TerminalPanel::OnMouseWheel, this);
-  Bind(wxEVT_SET_FOCUS, &TerminalPanel::OnFocus, this);
-  Bind(wxEVT_IDLE, &TerminalPanel::OnIdle, this);
+  Bind(wxEVT_PAINT, &TerminalView::OnPaint, this);
+  Bind(wxEVT_SIZE, &TerminalView::OnSize, this);
+  Bind(wxEVT_CHAR_HOOK, &TerminalView::OnCharHook, this);
+  Bind(wxEVT_KEY_DOWN, &TerminalView::OnKeyDown, this);
+  Bind(wxEVT_LEFT_DOWN, &TerminalView::OnMouseClick, this);
+  Bind(wxEVT_LEFT_UP, &TerminalView::OnMouseUp, this);
+  Bind(wxEVT_MOTION, &TerminalView::OnMouseMove, this);
+  Bind(wxEVT_RIGHT_DOWN, &TerminalView::OnRightClick, this);
+  Bind(wxEVT_MOUSEWHEEL, &TerminalView::OnMouseWheel, this);
+  Bind(wxEVT_SET_FOCUS, &TerminalView::OnFocus, this);
+  Bind(wxEVT_IDLE, &TerminalView::OnIdle, this);
 
   m_backend = terminal::PtyBackend::Create();
 
@@ -86,18 +86,18 @@ TerminalPanel::TerminalPanel(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   SetFocus();
 }
 
-TerminalPanel::~TerminalPanel() {
+TerminalView::~TerminalView() {
   if (m_backend)
     m_backend->Stop();
 }
 
-void TerminalPanel::Feed(const std::string &data) {
+void TerminalView::Feed(const std::string &data) {
   m_core.PutData(data);
   m_core.SetViewStart(m_core.ShellStart());
   m_dirty = true;
 }
 
-void TerminalPanel::SetTerminalSizeFromClient() {
+void TerminalView::SetTerminalSizeFromClient() {
   wxClientDC dc(this);
   dc.SetFont(m_defaultFont);
 
@@ -113,23 +113,23 @@ void TerminalPanel::SetTerminalSizeFromClient() {
     m_backend->Resize(static_cast<int>(cols), static_cast<int>(rows));
 }
 
-bool TerminalPanel::StartProcess(const std::string &command) {
+bool TerminalView::StartProcess(const std::string &command) {
   if (!m_backend)
     m_backend = terminal::PtyBackend::Create();
   return m_backend && m_backend->Start(command, [this](const std::string &out) {
-    CallAfter(&TerminalPanel::Feed, out);
+    CallAfter(&TerminalView::Feed, out);
   });
 }
 
-void TerminalPanel::SendInput(const std::string &text) {
+void TerminalView::SendInput(const std::string &text) {
   if (m_backend) {
     m_backend->Write(text);
   }
 }
 
-std::string TerminalPanel::Contents() const { return m_core.Flatten(); }
+std::string TerminalView::Contents() const { return m_core.Flatten(); }
 
-void TerminalPanel::OnPaint(wxPaintEvent &) {
+void TerminalView::OnPaint(wxPaintEvent &) {
   wxAutoBufferedPaintDC pdc(this);
   wxGCDC dc(pdc);
   dc.SetBackground(*wxBLACK_BRUSH);
@@ -201,8 +201,7 @@ void TerminalPanel::OnPaint(wxPaintEvent &) {
   std::size_t shellStart = m_core.ShellStart();
   if (viewStart <= shellStart &&
       shellStart + cursor.row < viewStart + m_core.Rows()) {
-    int screenRow =
-        static_cast<int>(shellStart - viewStart + cursor.row);
+    int screenRow = static_cast<int>(shellStart - viewStart + cursor.row);
     dc.SetPen(wxPen(*wxWHITE, 2));
     int cx = cursor.col * charW;
     int cy = screenRow * charH;
@@ -210,12 +209,12 @@ void TerminalPanel::OnPaint(wxPaintEvent &) {
   }
 }
 
-void TerminalPanel::OnSize(wxSizeEvent &evt) {
+void TerminalView::OnSize(wxSizeEvent &evt) {
   SetTerminalSizeFromClient();
   evt.Skip();
 }
 
-void TerminalPanel::OnMouseClick(wxMouseEvent &evt) {
+void TerminalView::OnMouseClick(wxMouseEvent &evt) {
   SetFocus();
 
   // Clear any existing selection when starting a new one
@@ -245,7 +244,7 @@ void TerminalPanel::OnMouseClick(wxMouseEvent &evt) {
   evt.Skip();
 }
 
-void TerminalPanel::OnMouseMove(wxMouseEvent &evt) {
+void TerminalView::OnMouseMove(wxMouseEvent &evt) {
   if (!m_isDragging) {
     evt.Skip();
     return;
@@ -273,7 +272,7 @@ void TerminalPanel::OnMouseMove(wxMouseEvent &evt) {
   evt.Skip();
 }
 
-void TerminalPanel::OnMouseUp(wxMouseEvent &evt) {
+void TerminalView::OnMouseUp(wxMouseEvent &evt) {
   m_isDragging = false;
 
   // If we have a selection, it's now complete
@@ -289,7 +288,7 @@ void TerminalPanel::OnMouseUp(wxMouseEvent &evt) {
   evt.Skip();
 }
 
-void TerminalPanel::OnMouseWheel(wxMouseEvent &evt) {
+void TerminalView::OnMouseWheel(wxMouseEvent &evt) {
   m_wheelAccum += evt.GetWheelRotation();
   int delta = evt.GetWheelDelta();
   int lines = m_wheelAccum / delta;
@@ -309,7 +308,7 @@ void TerminalPanel::OnMouseWheel(wxMouseEvent &evt) {
   m_dirty = true;
 }
 
-void TerminalPanel::OnRightClick(wxMouseEvent &evt) {
+void TerminalView::OnRightClick(wxMouseEvent &evt) {
   wxMenu menu;
 
   if (m_selection.active) {
@@ -317,14 +316,14 @@ void TerminalPanel::OnRightClick(wxMouseEvent &evt) {
   }
   menu.Append(wxID_PASTE, "Paste");
 
-  menu.Bind(wxEVT_MENU, &TerminalPanel::OnCopy, this, wxID_COPY);
-  menu.Bind(wxEVT_MENU, &TerminalPanel::OnPaste, this, wxID_PASTE);
+  menu.Bind(wxEVT_MENU, &TerminalView::OnCopy, this, wxID_COPY);
+  menu.Bind(wxEVT_MENU, &TerminalView::OnPaste, this, wxID_PASTE);
 
   PopupMenu(&menu);
   evt.Skip();
 }
 
-void TerminalPanel::OnCopy(wxCommandEvent &evt) {
+void TerminalView::OnCopy(wxCommandEvent &evt) {
   if (!m_selection.active)
     return;
 
@@ -340,8 +339,7 @@ void TerminalPanel::OnCopy(wxCommandEvent &evt) {
   for (int r = minRow; r <= maxRow && r < static_cast<int>(m_core.Rows());
        ++r) {
     const auto &row = m_core.BufferRow(viewStart + r);
-    for (int c = minCol; c <= maxCol && c < static_cast<int>(row.size());
-         ++c) {
+    for (int c = minCol; c <= maxCol && c < static_cast<int>(row.size()); ++c) {
       selectedText += static_cast<char>(row[c].ch);
     }
     if (r < maxRow) {
@@ -359,7 +357,7 @@ void TerminalPanel::OnCopy(wxCommandEvent &evt) {
   Refresh();
 }
 
-void TerminalPanel::OnPaste(wxCommandEvent &evt) {
+void TerminalView::OnPaste(wxCommandEvent &evt) {
   if (!wxTheClipboard->Open())
     return;
 
@@ -378,12 +376,12 @@ void TerminalPanel::OnPaste(wxCommandEvent &evt) {
   evt.Skip();
 }
 
-void TerminalPanel::OnFocus(wxFocusEvent &evt) {
+void TerminalView::OnFocus(wxFocusEvent &evt) {
   // Ensure we can receive keyboard events
   evt.Skip();
 }
 
-void TerminalPanel::OnCharHook(wxKeyEvent &evt) {
+void TerminalView::OnCharHook(wxKeyEvent &evt) {
   // This event is sent before the key is processed by the default handlers
   // We intercept navigation keys (Enter, Tab, Escape) here
   int key = evt.GetKeyCode();
@@ -453,7 +451,7 @@ void TerminalPanel::OnCharHook(wxKeyEvent &evt) {
   evt.Skip();
 }
 
-void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
+void TerminalView::OnKeyDown(wxKeyEvent &evt) {
   const int key = evt.GetKeyCode();
 
   // Handle Ctrl combinations
@@ -634,7 +632,7 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
   evt.Skip();
 }
 
-void TerminalPanel::OnIdle(wxIdleEvent &evt) {
+void TerminalView::OnIdle(wxIdleEvent &evt) {
   if (m_dirty) {
     m_dirty = false;
     Refresh(false);

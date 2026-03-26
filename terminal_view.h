@@ -8,10 +8,10 @@
 
 #include <memory>
 
-class TerminalPanel : public wxPanel {
+class TerminalView : public wxPanel {
 public:
-  explicit TerminalPanel(wxWindow *parent);
-  ~TerminalPanel() override;
+  explicit TerminalView(wxWindow *parent);
+  ~TerminalView() override;
 
   void Feed(const std::string &data);
   bool StartProcess(const std::string &command);

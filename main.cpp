@@ -1,4 +1,4 @@
-#include "terminal_panel.h"
+#include "terminal_view.h"
 
 #include "terminal_event.h"
 #include "terminal_logger.h"
@@ -20,7 +20,7 @@ public:
     Centre(); // Center the window on screen
 
     TerminalLogger::Get().SetLevel(TerminalLogLevel::WARN);
-    auto *panel = new TerminalPanel(this);
+    auto *panel = new TerminalView(this);
     panel->StartProcess(""); // Empty string will use default shell
 
     Bind(wxEVT_TERMINAL_TITLE_CHANGED,
