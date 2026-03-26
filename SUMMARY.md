@@ -67,7 +67,9 @@ make -j32
 - ✅ Typing characters (lowercase/uppercase with Shift)
 - ✅ ENTER key submits commands
 - ✅ Special keys (arrows, backspace, tab, function keys)
-- ✅ Ctrl combinations (e.g., Ctrl+C)
+- ✅ Ctrl combinations (Ctrl+C for SIGINT/copy, Ctrl+V for paste)
+- ✅ Ctrl+L to clear screen
+- ✅ Ctrl+U to clear current line
 - ✅ Full ANSI color support (16/256/RGB)
 - ✅ Text attributes (bold, underline, reverse)
 - ✅ Cursor movement and positioning
@@ -79,6 +81,7 @@ make -j32
 - ✅ OSC sequence handling fixed (window titles no longer bleed into output)
 - ✅ Debug logging removed - production ready code
 - ✅ Command history with Up/Down arrows
+- ✅ Common keyboard shortcuts (Ctrl+L, Ctrl+U)
 
 ## Recent Changes - Terminal Resize Implementation
 
@@ -287,6 +290,124 @@ This created a conflict where characters were potentially being double-sent or i
 - Shell history (cmd.exe/PowerShell) would conflict with our tracking
 - Application-level gives us more control and consistent behavior
 - Future enhancement: Could save history to file for persistence
+
+## Recent Changes - Common Keyboard Shortcuts
+
+### Features Added
+Added support for common Unix-style keyboard shortcuts that are standard in most terminal emulators.
+
+### Shortcuts Implemented
+
+1. **Ctrl+L - Clear Screen**
+   - Clears the entire terminal display
+   - Processes ANSI escape sequences `ESC[2J` (clear screen) + `ESC[H` (move to home) via `Feed()`
+   - Also sends same sequences to the shell to keep it synchronized
+   - Uses `Feed()` to directly process escape sequences in terminal core
+   - This ensures both display and cursor position are updated correctly
+   - Equivalent to typing `cls` (Windows) or `clear` (Unix)
+
+2. **Ctrl+U - Clear Current Line**
+   - Clears everything typed on the current line (line kill)
+   - Sends backspace sequences to erase the current command
+   - Clears the internal `m_currentCommand` buffer
+   - Resets history navigation index
+   - Standard behavior in Unix shells (bash, zsh, etc.)
+
+### Changes Made
+**terminal_panel.cpp - OnKeyDown()**:
+- Added Ctrl+L handler before the general Ctrl+A-Z handler
+- Added Ctrl+U handler before the general Ctrl+A-Z handler
+- Ctrl+L implementation:
+  - Calls `Feed("\x1b[2J\x1b[H")` to process escape sequences directly
+  - Sends `\x03\r` (Ctrl+C + Enter) to shell to cancel line and get fresh prompt
+  - Shell redraws its prompt at the top, keeping cursor position synchronized
+  - Clears `m_currentCommand` buffer (important for history navigation)
+  - Resets `m_historyIndex` to -1
+  - This ensures command history works correctly after screen clear
+  - Forces refresh to update display
+- Ctrl+U implementation:
+  - Generates backspace sequences to erase current line
+  - Clears `m_currentCommand` buffer
+- Both handlers return early to prevent falling through to generic Ctrl key handling
+
+### Bug Fixes
+1. **Initial Issue**: Sending `\f` (form feed) displayed as `^L` on screen
+   - **Fix**: Changed to ANSI escape sequences `\x1b[2J\x1b[H`
+
+2. **Ctrl+L Does Nothing**: Sending sequences only to shell didn't work
+   - **Root Cause**: Shell doesn't echo escape sequences back to terminal
+   - **Fix**: Use `Feed()` to process sequences directly in terminal core
+   - Also send to shell to keep its state synchronized
+
+3. **Cursor Position Issue**: After clearing, cursor remained at previous location
+   - **Root Cause**: Only calling `m_core.ClearScreen()` without moving cursor
+   - **Fix**: Send complete clear sequence `ESC[2J` + `ESC[H` (move to home)
+   - Process via `Feed()` so terminal core handles both clear and cursor move
+   - This keeps shell cursor position and display cursor position synchronized
+
+4. **History Navigation After Ctrl+L**: Arrow Up places command in wrong location
+   - **Root Cause**: `m_currentCommand` buffer still contained old line content
+   - History navigation uses `m_currentCommand.length()` to calculate backspaces
+   - **Fix**: Clear `m_currentCommand` and reset `m_historyIndex` when clearing screen
+
+5. **History Misplaced on Second Arrow Up After Ctrl+L**
+   - **Root Cause**: Shell's cursor position not synchronized after escape sequences
+   - **Fix**: Send `\x03\r` (Ctrl+C + Enter) to force shell to redraw prompt at top
+
+### Testing
+- **Ctrl+L**: Type some commands, then press Ctrl+L → screen should clear and cursor at top-left
+- **Ctrl+U**: Type a partial command like `echo hello`, press Ctrl+U → line should clear completely
+
+## Keyboard Shortcuts Reference
+
+### Editing & Navigation
+- **Backspace** - Delete previous character
+- **Delete** - Delete character at cursor
+- **Left/Right Arrows** - Move cursor
+- **Home** - Move to beginning of line
+- **End** - Move to end of line
+- **Tab** - Command completion (shell-dependent)
+
+### Command History
+- **Up Arrow** - Previous command in history
+- **Down Arrow** - Next command in history
+
+### Line & Screen Control
+- **Ctrl+C** - Copy selected text (if selection exists), otherwise send SIGINT
+- **Ctrl+V** - Paste from clipboard
+- **Ctrl+L** - Clear screen
+- **Ctrl+U** - Clear current line
+- **Ctrl+A through Z** - Send control characters (standard terminal behavior)
+
+### Function Keys
+- **F1-F12** - Function keys (application-dependent)
+
+## Quick Test Plan for New Features
+
+### Test Command History
+```
+1. Type: echo test1 [Enter]
+2. Type: echo test2 [Enter]
+3. Press Up → should show "echo test2"
+4. Press Up → should show "echo test1"
+5. Press Down → should show "echo test2"
+6. Press Down → should clear line
+```
+
+### Test Ctrl+L (Clear Screen)
+```
+1. Run several commands (dir, echo hello, etc.)
+2. Press Ctrl+L
+3. Screen should clear completely
+```
+
+### Test Ctrl+U (Clear Line)
+```
+1. Type: echo this is a test
+2. Press Ctrl+U (without pressing Enter)
+3. The line should be cleared
+4. Type a new command and press Enter - it should work normally
+```
 
 ## Known Issues to Address
 None currently!

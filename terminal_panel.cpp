@@ -359,7 +359,8 @@ void TerminalPanel::OnCharHook(wxKeyEvent &evt) {
     // Save current command to history (if not empty)
     if (!m_currentCommand.empty()) {
       // Don't add duplicate consecutive commands
-      if (m_commandHistory.empty() || m_commandHistory.back() != m_currentCommand) {
+      if (m_commandHistory.empty() ||
+          m_commandHistory.back() != m_currentCommand) {
         m_commandHistory.push_back(m_currentCommand);
       }
       m_currentCommand.clear();
@@ -382,8 +383,8 @@ void TerminalPanel::OnCharHook(wxKeyEvent &evt) {
     if (!m_commandHistory.empty()) {
       // If we're at the current command (historyIndex == -1), save it
       if (m_historyIndex == -1) {
-        // Save whatever is currently typed (in case user wants to get back to it)
-        // This is stored but not added to permanent history yet
+        // Save whatever is currently typed (in case user wants to get back to
+        // it) This is stored but not added to permanent history yet
       }
 
       // Move back in history
@@ -394,9 +395,10 @@ void TerminalPanel::OnCharHook(wxKeyEvent &evt) {
       }
 
       // Clear current line and replace with history item
-      std::string clearAndReplace = std::string(m_currentCommand.length(), '\b') +
-                                    std::string(m_currentCommand.length(), ' ') +
-                                    std::string(m_currentCommand.length(), '\b');
+      std::string clearAndReplace =
+          std::string(m_currentCommand.length(), '\b') +
+          std::string(m_currentCommand.length(), ' ') +
+          std::string(m_currentCommand.length(), '\b');
       SendInput(clearAndReplace);
       SendInput(m_commandHistory[m_historyIndex]);
       m_currentCommand = m_commandHistory[m_historyIndex];
@@ -458,6 +460,21 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
       return;
     }
 
+    // Handle Ctrl+U - Clear current line (Unix-style line kill)
+    if (key == 'U' || key == 'u') {
+      // Clear everything typed on the current line
+      if (!m_currentCommand.empty()) {
+        // Send backspaces to clear the line
+        std::string clearLine = std::string(m_currentCommand.length(), '\b') +
+                                std::string(m_currentCommand.length(), ' ') +
+                                std::string(m_currentCommand.length(), '\b');
+        SendInput(clearLine);
+        m_currentCommand.clear();
+        m_historyIndex = -1;
+      }
+      return;
+    }
+
     if (key >= 'A' && key <= 'Z') {
       // Ctrl+A through Ctrl+Z
       char ch = key - 'A' + 1;
@@ -486,7 +503,7 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
       m_currentCommand.pop_back();
     }
     m_historyIndex = -1; // Any edit resets history navigation
-    SendInput("\x7f"); // Send DEL (0x7F)
+    SendInput("\x7f");   // Send DEL (0x7F)
     return;
   } else if (key == WXK_UP || key == WXK_DOWN) {
     // UP and DOWN are now handled in OnCharHook for command history
