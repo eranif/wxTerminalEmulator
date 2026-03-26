@@ -285,7 +285,11 @@ void TerminalCore::PutCell(char32_t cp) {
 
 void TerminalCore::NewLine() {
   if (m_cursor.row == m_scrollBottom) {
-    ScrollRegionUp();
+    // Full-screen scroll region: grow the buffer (preserves scrollback)
+    if (m_scrollTop == 0 && m_scrollBottom == m_rows - 1)
+      ScrollUp();
+    else
+      ScrollRegionUp();
   } else if (m_cursor.row >= m_rows - 1) {
     ScrollUp();
   } else {
