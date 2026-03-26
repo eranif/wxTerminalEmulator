@@ -58,10 +58,12 @@ private:
   void ScrollUp();
   void ParseEscape(const std::string &seq);
   void PutPrintable(char c);
+  void PutPrintable(char32_t cp);
   void ApplySgr(const std::string &params);
   void PutString(const std::string &text);
   void HandleCsi(const std::string &seq);
   void PutCell(char c);
+  void PutCell(char32_t cp);
 
   std::size_t m_rows{24};
   std::size_t m_cols{80};
@@ -73,6 +75,7 @@ private:
   std::string m_escape;
   Cell m_attr{};
   std::function<void(const std::string &)> m_responseCallback;
+  std::string m_utf8Buf;
 };
 
 } // namespace terminal

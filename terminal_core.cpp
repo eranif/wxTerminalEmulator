@@ -3,6 +3,10 @@
 #include <algorithm>
 #include <sstream>
 
+#include <wx/string.h>
+
+#include <wx/string.h>
+
 namespace terminal {
 
 namespace {
@@ -187,11 +191,37 @@ void TerminalCore::PutData(const std::string &data) {
     }
 
     if (c == '\x1b') {
+      if (!m_utf8Buf.empty()) {
+        wxString ws = wxString::FromUTF8(m_utf8Buf);
+        for (size_t i = 0; i < ws.length(); ++i)
+          PutPrintable(static_cast<char32_t>(ws[i].GetValue()));
+        m_utf8Buf.clear();
+      }
       m_inEscape = true;
       m_escape.clear();
       continue;
     }
+    // Accumulate printable bytes (may be UTF-8 multi-byte)
+    unsigned char uc = static_cast<unsigned char>(c);
+    if (uc >= 0x20 && uc != 0x7f) {
+      m_utf8Buf.push_back(c);
+      continue;
+    }
+    // Control character — flush accumulated text first, then handle it
+    if (!m_utf8Buf.empty()) {
+      wxString ws = wxString::FromUTF8(m_utf8Buf);
+      for (size_t i = 0; i < ws.length(); ++i)
+        PutPrintable(static_cast<char32_t>(ws[i].GetValue()));
+      m_utf8Buf.clear();
+    }
     PutChar(c);
+  }
+  // Flush any remaining accumulated text
+  if (!m_utf8Buf.empty()) {
+    wxString ws = wxString::FromUTF8(m_utf8Buf);
+    for (size_t i = 0; i < ws.length(); ++i)
+      PutPrintable(static_cast<char32_t>(ws[i].GetValue()));
+    m_utf8Buf.clear();
   }
 }
 
@@ -234,6 +264,21 @@ void TerminalCore::PutCell(char c) {
 }
 
 void TerminalCore::PutPrintable(char c) { PutCell(c); }
+
+void TerminalCore::PutPrintable(char32_t cp) { PutCell(cp); }
+
+void TerminalCore::PutCell(char32_t cp) {
+  if (m_cursor.row >= m_screen.size())
+    ScrollUp();
+  if (m_cursor.row < m_screen.size() && m_cursor.col < m_cols) {
+    auto cell = m_attr;
+    cell.ch = cp;
+    m_screen[m_cursor.row][m_cursor.col] = cell;
+    ++m_cursor.col;
+    if (m_cursor.col >= m_cols)
+      NewLine();
+  }
+}
 
 void TerminalCore::NewLine() {
   // In standard VT100, LF (\n) only moves down one line, it doesn't reset
@@ -543,14 +588,19 @@ void TerminalCore::ApplySgr(const std::string &params) {
     return;
   }
 
+  // Build a flat list of codes, treating both ';' and ':' as separators.
+  // The colon form (e.g. 38:5:75) is the ISO 8613-6 sub-parameter syntax
+  // and is functionally equivalent to the semicolon form (38;5;75) for our
+  // purposes.
   std::vector<int> codes;
   std::size_t start = 0;
   while (start <= params.size()) {
-    const std::size_t end = params.find(';', start);
+    const std::size_t semi = params.find(';', start);
+    const std::size_t colon = params.find(':', start);
+    const std::size_t end = std::min(semi, colon);
     const std::string token = params.substr(
         start, end == std::string::npos ? std::string::npos : end - start);
 
-    // Parse integer safely
     int value = 0;
     if (!token.empty()) {
       try {

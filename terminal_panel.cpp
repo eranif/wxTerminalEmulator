@@ -441,6 +441,25 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
 
   // Handle Ctrl combinations
   const bool ctrl = evt.RawControlDown();
+
+#ifdef __APPLE__
+  // On macOS, Cmd+C/V for copy/paste (ControlDown() = Cmd key)
+  if (evt.ControlDown() && !evt.AltDown()) {
+    if (key == 'C' || key == 'c') {
+      if (m_selection.active) {
+        wxCommandEvent copyEvt(wxEVT_MENU, wxID_COPY);
+        OnCopy(copyEvt);
+        return;
+      }
+    }
+    if (key == 'V' || key == 'v') {
+      wxCommandEvent pasteEvt(wxEVT_MENU, wxID_PASTE);
+      OnPaste(pasteEvt);
+      return;
+    }
+  }
+#endif
+
   if (ctrl && !evt.AltDown()) {
     // Handle Ctrl+C - Copy if text is selected, otherwise send SIGINT
     if (key == 'C' || key == 'c') {
