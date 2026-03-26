@@ -23,13 +23,14 @@ struct CursorPos {
 
 class TerminalCore {
 public:
-  TerminalCore(std::size_t rows = 24, std::size_t cols = 80, std::size_t scrollback = 2000);
+  TerminalCore(std::size_t rows = 24, std::size_t cols = 80,
+               std::size_t scrollback = 2000);
 
   void Resize(std::size_t rows, std::size_t cols);
   void Reset();
-  void PutData(const std::string& data);
+  void PutData(const std::string &data);
   void SetViewportSize(std::size_t rows, std::size_t cols);
-  void AppendLine(const std::string& line);
+  void AppendLine(const std::string &line);
   void ClearScreen();
   void MoveCursor(std::size_t row, std::size_t col);
 
@@ -37,8 +38,8 @@ public:
   std::size_t Cols() const { return m_cols; }
   CursorPos Cursor() const { return m_cursor; }
 
-  const std::vector<std::vector<Cell>>& Screen() const { return m_screen; }
-  const std::vector<std::string>& Scrollback() const { return m_scrollback; }
+  const std::vector<std::vector<Cell>> &Screen() const { return m_screen; }
+  const std::vector<std::string> &Scrollback() const { return m_scrollback; }
 
   std::string Flatten() const;
 
@@ -49,11 +50,11 @@ private:
   void Backspace();
   void Tab();
   void ScrollUp();
-  void ParseEscape(const std::string& seq);
+  void ParseEscape(const std::string &seq);
   void PutPrintable(char c);
-  void ApplySgr(const std::string& params);
-  void PutString(const std::string& text);
-  void HandleCsi(const std::string& seq);
+  void ApplySgr(const std::string &params);
+  void PutString(const std::string &text);
+  void HandleCsi(const std::string &seq);
   void PutCell(char c);
 
   std::size_t m_rows{24};
