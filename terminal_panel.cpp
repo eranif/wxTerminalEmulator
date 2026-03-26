@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <unordered_map>
 
 #include <wx/app.h>
 #include <wx/clipbrd.h>
@@ -9,6 +10,32 @@
 #include <wx/font.h>
 #include <wx/menu.h>
 #include <wx/window.h>
+
+// Map of character key codes to their shifted values
+static const std::unordered_map<int, int> shiftMap = {
+    // Numbers
+    {'0', ')'},
+    {'1', '!'},
+    {'2', '@'},
+    {'3', '#'},
+    {'4', '$'},
+    {'5', '%'},
+    {'6', '^'},
+    {'7', '&'},
+    {'8', '*'},
+    {'9', '('},
+    // Special characters
+    {'\'', '"'},
+    {'/', '?'},
+    {';', ':'},
+    {'[', '{'},
+    {']', '}'},
+    {'\\', '|'},
+    {',', '<'},
+    {'.', '>'},
+    {'-', '_'},
+    {'=', '+'},
+    {'`', '~'}};
 
 TerminalPanel::TerminalPanel(wxWindow *parent)
     : wxPanel(parent, wxID_ANY), m_timer(this) {
@@ -112,7 +139,8 @@ void TerminalPanel::OnPaint(wxPaintEvent &) {
         int minCol = std::min(m_selection.startCol, m_selection.endCol);
         int maxCol = std::max(m_selection.startCol, m_selection.endCol);
 
-        isSelected = (rowIdx >= minRow && rowIdx <= maxRow && colIdx >= minCol && colIdx <= maxCol);
+        isSelected = (rowIdx >= minRow && rowIdx <= maxRow &&
+                      colIdx >= minCol && colIdx <= maxCol);
       }
 
       // Draw background
@@ -122,7 +150,8 @@ void TerminalPanel::OnPaint(wxPaintEvent &) {
 
       // Draw selection highlight (on top of background, before text)
       if (isSelected) {
-        dc.SetBrush(wxBrush(wxColour(70, 130, 180, 100))); // Semi-transparent steel blue
+        dc.SetBrush(wxBrush(
+            wxColour(70, 130, 180, 100))); // Semi-transparent steel blue
         dc.SetPen(*wxTRANSPARENT_PEN);
         dc.DrawRectangle(x, y, charW, charH);
       }
@@ -263,7 +292,8 @@ void TerminalPanel::OnRightClick(wxMouseEvent &evt) {
 }
 
 void TerminalPanel::OnCopy(wxCommandEvent &evt) {
-  if (!m_selection.active) return;
+  if (!m_selection.active)
+    return;
 
   // Get the selected text
   std::string selectedText;
@@ -273,13 +303,15 @@ void TerminalPanel::OnCopy(wxCommandEvent &evt) {
   int minCol = std::min(m_selection.startCol, m_selection.endCol);
   int maxCol = std::max(m_selection.startCol, m_selection.endCol);
 
-  const auto& screen = m_core.Screen();
-  for (int r = minRow; r <= maxRow && r < static_cast<int>(screen.size()); ++r) {
-    for (int c = minCol; c <= maxCol && c < static_cast<int>(screen[r].size()); ++c) {
+  const auto &screen = m_core.Screen();
+  for (int r = minRow; r <= maxRow && r < static_cast<int>(screen.size());
+       ++r) {
+    for (int c = minCol; c <= maxCol && c < static_cast<int>(screen[r].size());
+         ++c) {
       selectedText += static_cast<char>(screen[r][c].ch);
     }
     if (r < maxRow) {
-      selectedText += "\r\n";  // Add newline between rows
+      selectedText += "\r\n"; // Add newline between rows
     }
   }
 
@@ -291,7 +323,8 @@ void TerminalPanel::OnCopy(wxCommandEvent &evt) {
 }
 
 void TerminalPanel::OnPaste(wxCommandEvent &evt) {
-  if (!wxTheClipboard->Open()) return;
+  if (!wxTheClipboard->Open())
+    return;
 
   if (wxTheClipboard->IsSupported(wxDF_TEXT)) {
     wxTextDataObject data;
@@ -332,7 +365,7 @@ void TerminalPanel::OnCharHook(wxKeyEvent &evt) {
 }
 
 void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
-  
+
   const int key = evt.GetKeyCode();
 
   // Handle Ctrl combinations
@@ -346,14 +379,14 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
       }
       // No selection - send Ctrl+C to terminal (SIGINT)
     }
-    
+
     // Handle Ctrl+V - Paste
     if (key == 'V' || key == 'v') {
       wxCommandEvent pasteEvt(wxEVT_MENU, wxID_PASTE);
       OnPaste(pasteEvt);
       return;
     }
-    
+
     if (key >= 'A' && key <= 'Z') {
       // Ctrl+A through Ctrl+Z
       char ch = key - 'A' + 1;
@@ -377,7 +410,7 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
   // Handle special keys
   // Note: ENTER, TAB, and ESCAPE are handled in OnCharHook
   if (key == WXK_BACK) {
-    SendInput("\x7f");  // Send DEL (0x7F)
+    SendInput("\x7f"); // Send DEL (0x7F)
     return;
   } else if (key == WXK_UP) {
     SendInput("\x1b[A");
@@ -433,18 +466,19 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
     }
     SendInput(std::string(1, ch));
     return;
-  } else if (key >= '0' && key <= '9') {
-    // Number keys - handle shift for symbols
+  }
+
+  // Handle characters that have shift variants (numbers and special characters)
+  auto it = shiftMap.find(key);
+  if (it != shiftMap.end()) {
     if (!evt.ShiftDown()) {
+      // No shift - send the key as-is
       SendInput(std::string(1, static_cast<char>(key)));
-      return;
+    } else {
+      // Shift pressed - send the shifted character
+      SendInput(std::string(1, static_cast<char>(it->second)));
     }
-    // Shift+number = symbols, handle these
-    const char* shiftNumbers = ")!@#$%^&*(";
-    if (key >= '0' && key <= '9') {
-      SendInput(std::string(1, shiftNumbers[key - '0']));
-      return;
-    }
+    return;
   }
 
   // Handle other printable characters
@@ -455,7 +489,7 @@ void TerminalPanel::OnKeyDown(wxKeyEvent &evt) {
   }
 
   // Unknown key - skip it
-    evt.Skip();
+  evt.Skip();
 }
 
 void TerminalPanel::OnChar(wxKeyEvent &evt) {

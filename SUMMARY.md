@@ -168,6 +168,27 @@ make -j32
 - `\r` (CR) moves to column 0
 - `\r\n` together gives expected "next line" behavior
 
+### 4. Special Character Input with Shift (terminal_panel.cpp)
+**Problem**: When typing special characters with Shift modifier (e.g., `"` by pressing Shift+'), the terminal was printing the wrong character (e.g., `'` instead of `"`).
+
+**Root Cause**: The keyboard event handler was sending the raw key code without considering Shift state for special characters.
+
+**Fix**:
+- Created a comprehensive `shiftMap` (std::unordered_map<int, int>) that maps key codes to their Shift-modified values
+- Map includes:
+  - **Numbers**: `0-9` → `)!@#$%^&*(`
+  - **Special characters**:
+    - `'` → `"`
+    - `/` → `?`
+    - `;` → `:`
+    - `[` → `{`, `]` → `}`
+    - `\` → `|`
+    - `,` → `<`, `.` → `>`
+    - `-` → `_`, `=` → `+`
+    - `` ` `` → `~`
+- Updated `OnKeyDown` to look up keys in the shift map and send the appropriate character based on Shift state
+- This provides a clean, maintainable solution for all Shift-modified characters
+
 ## Known Issues to Address
 None currently!
 
@@ -212,6 +233,6 @@ None currently!
 ## Files Modified
 1. `pty_backend_windows.cpp` - ConPTY handling, ReadFile fix, error diagnostics
 2. `terminal_core.cpp` - Escape sequence parser, color support, erase operations, OSC handling, line feed fix
-3. `terminal_panel.cpp` - Event handling (Bind API), keyboard input, rendering, copy/paste, backspace fix
+3. `terminal_panel.cpp` - Event handling (Bind API), keyboard input with shift map, rendering, copy/paste, backspace fix
 4. `terminal_panel.h` - Event handler declarations, AcceptsFocus overrides
 5. `main.cpp` - Removed confusing initial message

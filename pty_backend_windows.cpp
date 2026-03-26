@@ -45,7 +45,6 @@ struct ConPtyApi {
     ClosePseudoConsole = reinterpret_cast<ClosePseudoConsoleFn>(
         GetProcAddress(hKernel, "ClosePseudoConsole"));
 
-
     hKernelBase = LoadLibraryW(L"kernelbase.dll");
     if (hKernelBase) {
       CreatePseudoConsoleDirect = reinterpret_cast<CreatePseudoConsoleDirectFn>(
@@ -174,7 +173,7 @@ void WindowsPtyBackend::Resize(int cols, int rows) {
     return;
 
   auto resizePc = Api().ResizePseudoConsole ? Api().ResizePseudoConsole
-                                             : Api().ResizePseudoConsoleDirect;
+                                            : Api().ResizePseudoConsoleDirect;
   if (!resizePc)
     return;
 
@@ -237,7 +236,9 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
   if (FAILED(hr)) {
     if (m_onOutput) {
       char buf[128];
-      snprintf(buf, sizeof(buf), "[CreatePseudoConsole failed with HRESULT 0x%08lX]\r\n", static_cast<unsigned long>(hr));
+      snprintf(buf, sizeof(buf),
+               "[CreatePseudoConsole failed with HRESULT 0x%08lX]\r\n",
+               static_cast<unsigned long>(hr));
       m_onOutput(buf);
     }
     CloseHandle(inWrite);
@@ -259,7 +260,9 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
                                          &attrListSize)) {
     if (m_onOutput) {
       char buf[128];
-      snprintf(buf, sizeof(buf), "[InitializeProcThreadAttributeList failed: %lu]\r\n", GetLastError());
+      snprintf(buf, sizeof(buf),
+               "[InitializeProcThreadAttributeList failed: %lu]\r\n",
+               GetLastError());
       m_onOutput(buf);
     }
     DestroyConPty();
@@ -273,7 +276,8 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
                                  sizeof(m_hPC), nullptr, nullptr)) {
     if (m_onOutput) {
       char buf[128];
-      snprintf(buf, sizeof(buf), "[UpdateProcThreadAttribute failed: %lu]\r\n", GetLastError());
+      snprintf(buf, sizeof(buf), "[UpdateProcThreadAttribute failed: %lu]\r\n",
+               GetLastError());
       m_onOutput(buf);
     }
     DeleteProcThreadAttributeList(siex.lpAttributeList);
@@ -303,7 +307,8 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
   if (!ok) {
     if (m_onOutput) {
       char buf[128];
-      snprintf(buf, sizeof(buf), "[CreateProcessW failed: %lu]\r\n", GetLastError());
+      snprintf(buf, sizeof(buf), "[CreateProcessW failed: %lu]\r\n",
+               GetLastError());
       m_onOutput(buf);
     }
     DestroyConPty();
@@ -378,7 +383,8 @@ void WindowsPtyBackend::ReaderThread() {
       DWORD avail = 0;
 
       // Check if there's data available before attempting to read
-      if (PeekNamedPipe(m_hOutputRead, nullptr, 0, nullptr, &avail, nullptr) && avail > 0) {
+      if (PeekNamedPipe(m_hOutputRead, nullptr, 0, nullptr, &avail, nullptr) &&
+          avail > 0) {
         // Limit read to buffer size
         DWORD toRead = (avail < sizeof(buf)) ? avail : sizeof(buf);
         BOOL ok = ReadFile(m_hOutputRead, buf, toRead, &read, nullptr);

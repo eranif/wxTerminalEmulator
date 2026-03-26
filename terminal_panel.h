@@ -1,7 +1,7 @@
 #pragma once
 
-#include "terminal_core.h"
 #include "pty_backend.h"
+#include "terminal_core.h"
 
 #include <wx/panel.h>
 #include <wx/timer.h>
@@ -10,12 +10,12 @@
 
 class TerminalPanel : public wxPanel {
 public:
-  explicit TerminalPanel(wxWindow* parent);
+  explicit TerminalPanel(wxWindow *parent);
   ~TerminalPanel() override;
 
-  void Feed(const std::string& data);
-  bool StartProcess(const std::string& command);
-  void SendInput(const std::string& text);
+  void Feed(const std::string &data);
+  bool StartProcess(const std::string &command);
+  void SendInput(const std::string &text);
   void SetTerminalSizeFromClient();
   std::string Contents() const;
 
@@ -28,19 +28,19 @@ public:
   wxBorder GetDefaultBorder() const override { return wxBORDER_NONE; }
 
 private:
-  void OnPaint(wxPaintEvent& evt);
-  void OnSize(wxSizeEvent& evt);
-  void OnCharHook(wxKeyEvent& evt);
-  void OnKeyDown(wxKeyEvent& evt);
-  void OnChar(wxKeyEvent& evt);
-  void OnTimer(wxTimerEvent& evt);
-  void OnMouseClick(wxMouseEvent& evt);
-  void OnMouseMove(wxMouseEvent& evt);
-  void OnMouseUp(wxMouseEvent& evt);
-  void OnRightClick(wxMouseEvent& evt);
-  void OnFocus(wxFocusEvent& evt);
-  void OnCopy(wxCommandEvent& evt);
-  void OnPaste(wxCommandEvent& evt);
+  void OnPaint(wxPaintEvent &evt);
+  void OnSize(wxSizeEvent &evt);
+  void OnCharHook(wxKeyEvent &evt);
+  void OnKeyDown(wxKeyEvent &evt);
+  void OnChar(wxKeyEvent &evt);
+  void OnTimer(wxTimerEvent &evt);
+  void OnMouseClick(wxMouseEvent &evt);
+  void OnMouseMove(wxMouseEvent &evt);
+  void OnMouseUp(wxMouseEvent &evt);
+  void OnRightClick(wxMouseEvent &evt);
+  void OnFocus(wxFocusEvent &evt);
+  void OnCopy(wxCommandEvent &evt);
+  void OnPaste(wxCommandEvent &evt);
 
   struct Selection {
     int startRow{-1}, startCol{-1};
