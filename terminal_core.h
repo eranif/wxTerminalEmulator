@@ -164,7 +164,7 @@ private:
   void ApplySgr(const std::string &params);
   void PutString(const std::string &text);
   void HandleCsi(const std::string &seq);
-  void PutCell(char c);
+  void PutCell(char c) { PutCell(static_cast<char32_t>(c)); }
   void PutCell(char32_t cp);
 
   // Convert viewport-relative row to absolute buffer row

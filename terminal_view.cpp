@@ -192,6 +192,24 @@ void TerminalView::ClearSelection() {
   m_apiSelection.active = false;
   Refresh();
 }
+void TerminalView::DebugDumpViewArea() {
+  auto viewArea = m_core.GetViewArea();
+  size_t row_num{0};
+  for (const auto &row : viewArea) {
+    std::string line;
+    line.reserve(row->size());
+    for (const auto &cell : *row) {
+      if (cell.IsEmpty()) {
+        line.append(1, '_');
+      } else {
+        line.append(1, cell.ch);
+      }
+    }
+    wxString line_utf8 = wxString::FromUTF8(line);
+    LOG_DEBUG() << wxString::Format("%03d", row_num) << line_utf8 << std::endl;
+    row_num++;
+  }
+}
 
 void TerminalView::OnPaint(wxPaintEvent &) {
   wxAutoBufferedPaintDC dc(this);
@@ -205,6 +223,7 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   int rowIdx = 0;
   int y = 0;
   auto viewArea = m_core.GetViewArea();
+  //DebugDumpViewArea();
 
   for (std::size_t r = 0; r < viewArea.size(); ++r) {
     const auto &row = *viewArea[r];

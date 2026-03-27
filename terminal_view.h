@@ -53,6 +53,8 @@ private:
   void OnFocus(wxFocusEvent &evt);
   void OnCopy(wxCommandEvent &evt);
   void OnPaste(wxCommandEvent &evt);
+  void DebugDumpViewArea();
+
   /**
    * Handles terminal-specific special key events by translating supported
    * wxWidgets key codes into ANSI escape sequences and sending them to the

@@ -251,24 +251,16 @@ void TerminalCore::PutString(const std::string &text) {
     PutChar(c);
 }
 
-void TerminalCore::PutCell(char c) {
-  std::size_t abs = AbsRow(m_cursor.row);
-  if (abs < m_buffer.size() && m_cursor.col < m_cols) {
-    auto cell = m_attr;
-    cell.ch = static_cast<unsigned char>(c);
-    m_buffer[abs][m_cursor.col] = cell;
-    ++m_cursor.col;
-    if (m_cursor.col >= m_cols) {
-      m_cursor.col = 0;
-      NewLine();
-    }
-  }
-}
-
 void TerminalCore::PutPrintable(char c) { PutCell(c); }
 void TerminalCore::PutPrintable(char32_t cp) { PutCell(cp); }
 
 void TerminalCore::PutCell(char32_t cp) {
+  if (m_cursor.col >= m_cols) {
+    m_cursor.col = 0;
+    NewLine();
+    CarriageReturn();
+  }
+
   std::size_t abs = AbsRow(m_cursor.row);
   if (abs < m_buffer.size() && m_cursor.col < m_cols) {
     auto cell = m_attr;
@@ -276,10 +268,6 @@ void TerminalCore::PutCell(char32_t cp) {
     m_buffer[abs][m_cursor.col] = cell;
     m_lastChar = cp;
     ++m_cursor.col;
-    if (m_cursor.col >= m_cols) {
-      m_cursor.col = 0;
-      NewLine();
-    }
   }
 }
 
