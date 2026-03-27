@@ -70,8 +70,8 @@ public:
   std::size_t GetBufferSize() const;
   void CenterLine(std::size_t line);
   wxString GetLine(std::size_t line) const;
-  void SetSelection(std::size_t col, std::size_t row, std::size_t count);
-  void ClearSelection();
+  void SetUserSelection(std::size_t col, std::size_t row, std::size_t count);
+  void ClearUserSelection();
 
   // Override to indicate this window can receive keyboard focus
   bool AcceptsFocus() const override { return true; }
@@ -99,7 +99,7 @@ private:
   void OnCopy(wxCommandEvent &evt);
   void OnPaste(wxCommandEvent &evt);
   void DebugDumpViewArea();
-  wxRect ViewCellToPixelsRect(const wxRect& viewrect) const;
+  wxRect ViewCellToPixelsRect(const wxRect &viewrect) const;
   /**
    * Handles terminal-specific special key events by translating supported
    * wxWidgets key codes into ANSI escape sequences and sending them to the
@@ -121,6 +121,10 @@ private:
     wxRect rect; // Logical selection (rows / cols)
     bool active{false};
     inline bool empty() const { return rect.width == 0 && rect.height == 0; }
+    inline void clear() {
+      rect = {};
+      active = false;
+    }
   };
 
   struct ApiSelection {
@@ -131,7 +135,7 @@ private:
   terminal::TerminalCore m_core;
   std::unique_ptr<terminal::PtyBackend> m_backend;
   Selection m_selection;
-  ApiSelection m_apiSelection;
+  ApiSelection m_userSelection;
   bool m_isDragging{false};
   bool m_dirty{true};
   int m_scrollOffset{0}; // 0 = at bottom, >0 = scrolled back

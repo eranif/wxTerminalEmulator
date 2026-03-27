@@ -189,21 +189,19 @@ wxString TerminalView::GetLine(std::size_t line) const {
   return result;
 }
 
-void TerminalView::SetSelection(std::size_t col, std::size_t row,
-                                std::size_t count) {
+void TerminalView::SetUserSelection(std::size_t col, std::size_t row,
+                                    std::size_t count) {
   if (row >= m_core.TotalLines() || col >= m_core.Cols() || count == 0) {
-    ClearSelection();
+    ClearUserSelection();
     return;
   }
   std::size_t endCol = std::min(col + count, m_core.Cols());
-  m_apiSelection = {row, col, endCol, true};
+  m_userSelection = {row, col, endCol, true};
   Refresh();
 }
 
-void TerminalView::ClearSelection() {
-  m_apiSelection.active = false;
-  m_selection = {};
-  m_selection.active = false;
+void TerminalView::ClearUserSelection() {
+  m_userSelection.active = false;
   Refresh();
 }
 
@@ -287,12 +285,12 @@ void TerminalView::OnPaint(wxPaintEvent &) {
       bool isMouseSelected = false;
       wxPoint current_pos(colIdx, rowIdx);
       bool isApiSelected = false;
-      if (m_apiSelection.active) {
+      if (m_userSelection.active) {
         std::size_t absRow = m_core.ViewStart() + r;
         isApiSelected =
-            (absRow == m_apiSelection.row &&
-             static_cast<std::size_t>(colIdx) >= m_apiSelection.col &&
-             static_cast<std::size_t>(colIdx) < m_apiSelection.endCol);
+            (absRow == m_userSelection.row &&
+             static_cast<std::size_t>(colIdx) >= m_userSelection.col &&
+             static_cast<std::size_t>(colIdx) < m_userSelection.endCol);
       }
 
       // Skip empty cells unless they are selected
@@ -371,7 +369,7 @@ void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
   // If a selection already exists, a click should clear it and stop here
   // rather than starting a new 1-cell selection.
   if (m_selection.active) {
-    ClearSelection();
+    m_selection.clear();
     m_isDragging = false;
     return;
   }

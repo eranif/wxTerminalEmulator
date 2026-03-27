@@ -146,9 +146,9 @@ public:
       return;
     }
 
-    m_view->SetSelection(static_cast<std::size_t>(colStart - 1),
-                         static_cast<std::size_t>(lineNumber - 1),
-                         static_cast<std::size_t>(count));
+    m_view->SetUserSelection(static_cast<std::size_t>(colStart - 1),
+                             static_cast<std::size_t>(lineNumber - 1),
+                             static_cast<std::size_t>(count));
   }
 
   void OnPrintLine(wxCommandEvent &event) {
