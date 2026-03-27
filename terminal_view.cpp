@@ -205,6 +205,12 @@ void TerminalView::ClearUserSelection() {
   Refresh();
 }
 
+void TerminalView::ClearMouseSelection() {
+  m_selection.clear();
+  m_isDragging = false;
+  Refresh();
+}
+
 void TerminalView::DebugDumpViewArea() {
   auto viewArea = m_core.GetViewArea();
   size_t row_num{0};
@@ -547,6 +553,10 @@ void TerminalView::OnCharHook(wxKeyEvent &evt) {
     SendInput("\t");
     return;
   } else if (key == WXK_ESCAPE) {
+    if (m_selection.active) {
+      ClearMouseSelection();
+      return;
+    }
     SendInput("\x1b");
     return;
   }

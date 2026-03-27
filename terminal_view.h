@@ -72,6 +72,7 @@ public:
   wxString GetLine(std::size_t line) const;
   void SetUserSelection(std::size_t col, std::size_t row, std::size_t count);
   void ClearUserSelection();
+  void ClearMouseSelection();
 
   // Override to indicate this window can receive keyboard focus
   bool AcceptsFocus() const override { return true; }
