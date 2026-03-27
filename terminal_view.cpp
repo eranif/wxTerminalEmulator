@@ -368,7 +368,10 @@ void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
   x = std::max(0, std::min(x, static_cast<int>(m_core.Cols()) - 1));
   y = std::max(0, std::min(y, static_cast<int>(m_core.Rows()) - 1));
 
-  m_selection.rect = wxRect(wxPoint(x, y), wxSize(0, 0));
+  // Start with a 1x1 rectangle so a simple click selects the line/cell
+  // under the mouse. A zero-sized wxRect is considered empty and will not
+  // paint or copy anything.
+  m_selection.rect = wxRect(wxPoint(x, y), wxSize(1, 1));
   m_selection.active = true;
   m_isDragging = true;
 }
@@ -393,6 +396,12 @@ void TerminalView::OnMouseMove(wxMouseEvent &evt) {
   wxPoint pt1 = m_selection.rect.GetPosition();
   wxPoint pt2{x, y};
   m_selection.rect = MakeRect(pt1, pt2);
+  if (m_selection.rect.width == 0) {
+    m_selection.rect.width = 1;
+  }
+  if (m_selection.rect.height == 0) {
+    m_selection.rect.height = 1;
+  }
   m_selection.active = true;
   Refresh();
 }
