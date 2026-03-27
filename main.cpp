@@ -7,13 +7,11 @@
 #include <wx/frame.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
+#include <wx/textdlg.h>
 
 class MyFrame : public wxFrame {
 public:
-  enum {
-    ID_ThemeDark = wxID_HIGHEST + 1,
-    ID_ThemeLight
-  };
+  enum { ID_ThemeDark = wxID_HIGHEST + 1, ID_ThemeLight, ID_CenterLine };
 
   MyFrame() : wxFrame(nullptr, wxID_ANY, "wxTerminalEmulator") {
     // Get the primary display size
@@ -43,12 +41,15 @@ public:
     auto *optionsMenu = new wxMenu();
     optionsMenu->AppendRadioItem(ID_ThemeDark, "Dark theme");
     optionsMenu->AppendRadioItem(ID_ThemeLight, "Light theme");
+    optionsMenu->AppendSeparator();
+    optionsMenu->Append(ID_CenterLine, "Center Line...");
     optionsMenu->Check(ID_ThemeDark, true);
     menuBar->Append(optionsMenu, "Options");
     SetMenuBar(menuBar);
 
     Bind(wxEVT_MENU, &MyFrame::OnDarkTheme, this, ID_ThemeDark);
     Bind(wxEVT_MENU, &MyFrame::OnLightTheme, this, ID_ThemeLight);
+    Bind(wxEVT_MENU, &MyFrame::OnCenterLine, this, ID_CenterLine);
   }
 
   void OnDarkTheme(wxCommandEvent &event) {
@@ -65,6 +66,33 @@ public:
       m_view->SetTheme(wxTerminalTheme::MakeLightTheme());
       m_themeIsDark = false;
     }
+  }
+
+  void OnCenterLine(wxCommandEvent &event) {
+    wxUnusedVar(event);
+    if (!m_view) {
+      return;
+    }
+
+    const std::size_t totalLines = m_view->GetLineCount();
+    const wxString prompt = wxString::Format("Enter line number (1-%zu):",
+                                             totalLines > 0 ? totalLines : 1);
+
+    wxString value =
+        wxGetTextFromUser(prompt, "Center Line", wxEmptyString, this);
+    if (value.empty()) {
+      return;
+    }
+
+    long lineNumber = 0;
+    if (!value.ToLong(&lineNumber) || lineNumber < 1 ||
+        static_cast<std::size_t>(lineNumber) > totalLines) {
+      wxMessageBox("Invalid line number.", "Center Line", wxOK | wxICON_WARNING,
+                   this);
+      return;
+    }
+
+    m_view->CenterLine(static_cast<std::size_t>(lineNumber - 1));
   }
 
   void OnTerminated(wxTerminalEvent &event) {
