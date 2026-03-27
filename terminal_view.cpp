@@ -17,6 +17,7 @@
 #include <wx/window.h>
 
 #ifdef __WXMSW__
+// We need GCDC on Windows to properly display Unicode characters.
 constexpr bool kAlwaysGCDC = true;
 #else
 constexpr bool kAlwaysGCDC = false;
