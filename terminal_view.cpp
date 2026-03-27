@@ -102,9 +102,7 @@ TerminalView::TerminalView(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
     event.SetEventObject(this);
     AddPendingEvent(event);
   });
-
-  SetTerminalSizeFromClient();
-  SetFocus();
+  CallAfter(&TerminalView::SetFocus);
 }
 
 TerminalView::~TerminalView() {
@@ -129,8 +127,9 @@ void TerminalView::SetTerminalSizeFromClient() {
   const std::size_t rows = std::max(1, sz.GetHeight() / m_charH);
 
   m_core.SetViewportSize(rows, cols);
-  if (m_backend)
+  if (m_backend) {
     m_backend->Resize(static_cast<int>(cols), static_cast<int>(rows));
+  }
 }
 
 bool TerminalView::StartProcess(const std::string &command) {
@@ -201,8 +200,11 @@ void TerminalView::SetSelection(std::size_t col, std::size_t row,
 
 void TerminalView::ClearSelection() {
   m_apiSelection.active = false;
+  m_selection = {};
+  m_selection.active = false;
   Refresh();
 }
+
 void TerminalView::DebugDumpViewArea() {
   auto viewArea = m_core.GetViewArea();
   size_t row_num{0};
@@ -255,6 +257,11 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   dc->SetBackground(wxBrush(theme.bg));
   dc->Clear();
   dc->SetFont(m_defaultFont);
+
+  if (m_charH == 0 && m_charW == 0) {
+    // first time
+    CallAfter(&TerminalView::SetTerminalSizeFromClient);
+  }
 
   m_charW = dc->GetCharWidth();
   m_charH = dc->GetCharHeight();
@@ -358,8 +365,14 @@ void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
   if (m_charW == 0 || m_charH == 0) {
     return;
   }
-  // Clear any existing selection when starting a new one
-  m_selection.rect = {};
+
+  // If a selection already exists, a click should clear it and stop here
+  // rather than starting a new 1-cell selection.
+  if (m_selection.active) {
+    ClearSelection();
+    m_isDragging = false;
+    return;
+  }
 
   int x = evt.GetX() / m_charW;
   int y = evt.GetY() / m_charH;
@@ -460,7 +473,6 @@ void TerminalView::OnRightClick(wxMouseEvent &evt) {
 
 void TerminalView::OnCopy(wxCommandEvent &evt) {
   LOG_DEBUG() << "Copy is called!" << std::endl;
-  LOG_DEBUG() << "Copy is called!" << std::endl;
   if (!m_selection.active) {
     LOG_DEBUG() << "No selection is active - will do nothing" << std::endl;
     return;
@@ -487,8 +499,8 @@ void TerminalView::OnCopy(wxCommandEvent &evt) {
     selection.RemoveLast();
   }
 
-  LOG_DEBUG() << "Copying:" << selection.size() << " chars. " << selection
-              << std::endl;
+  LOG_DEBUG() << "Copying:" << selection.size() << " chars. Content:\n"
+              << selection << std::endl;
   // Copy to clipboard
   if (wxTheClipboard->Open()) {
     wxTheClipboard->SetData(new wxTextDataObject(selection));
