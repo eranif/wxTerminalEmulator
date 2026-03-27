@@ -101,11 +101,6 @@ struct Cell {
   }
 };
 
-struct CursorPos {
-  std::size_t row{0};
-  std::size_t col{0};
-};
-
 class TerminalCore {
 public:
   TerminalCore(std::size_t rows = 24, std::size_t cols = 80,
@@ -135,7 +130,7 @@ public:
   void SetMaxLines(std::size_t maxLines) { m_maxLines = maxLines; }
 
   // Cursor position relative to viewport
-  CursorPos Cursor() const;
+  wxPoint Cursor() const;
 
   // View into the buffer: returns rows [viewStart .. viewStart+m_rows)
   std::size_t ViewStart() const { return m_viewStart; }
@@ -150,6 +145,12 @@ public:
   std::vector<const std::vector<Cell> *> GetViewArea() const;
 
   std::string Flatten() const;
+
+  // Convert viewport-relative row to absolute buffer row
+  std::size_t AbsRow(std::size_t viewportRow) const;
+
+  // Convert abs-row row to viewport row, return std::nullopt if it out of range
+  std::optional<std::size_t> ViewPortRow(std::size_t absrow) const;
 
 private:
   void PutChar(char c);
@@ -167,9 +168,6 @@ private:
   void PutCell(char c) { PutCell(static_cast<char32_t>(c)); }
   void PutCell(char32_t cp);
 
-  // Convert viewport-relative row to absolute buffer row
-  std::size_t AbsRow(std::size_t viewportRow) const;
-
   // Scroll helpers (respect scroll region)
   void ScrollRegionUp();
   void ScrollRegionDown();
@@ -181,14 +179,14 @@ private:
   std::deque<std::vector<Cell>> m_buffer;
   std::size_t m_viewStart{0};
   std::size_t m_shellStart{0};
-  CursorPos m_cursor{};
+  wxPoint m_cursor{};
 
   // Scroll region (0-based, inclusive)
   std::size_t m_scrollTop{0};
   std::size_t m_scrollBottom{23}; // m_rows - 1
 
   // Saved cursor (for ESC[s / ESC[u)
-  CursorPos m_savedCursor{};
+  wxPoint m_savedCursor{};
 
   // Last printed character (for ESC[b repeat)
   char32_t m_lastChar{U' '};
@@ -198,7 +196,7 @@ private:
     std::deque<std::vector<Cell>> buffer;
     std::size_t viewStart{0};
     std::size_t shellStart{0};
-    CursorPos cursor{};
+    wxPoint cursor{};
     std::size_t scrollTop{0};
     std::size_t scrollBottom{0};
   };

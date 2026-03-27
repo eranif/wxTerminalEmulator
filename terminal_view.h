@@ -2,9 +2,9 @@
 
 #include "pty_backend.h"
 #include "terminal_core.h"
+#include <wx/panel.h>
 
 #include <vector>
-#include <wx/panel.h>
 #include <wx/timer.h>
 
 #include <memory>
@@ -45,7 +45,7 @@ private:
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);
   void OnTimer(wxTimerEvent &evt);
-  void OnMouseClick(wxMouseEvent &evt);
+  void OnMouseLeftDown(wxMouseEvent &evt);
   void OnMouseMove(wxMouseEvent &evt);
   void OnMouseUp(wxMouseEvent &evt);
   void OnRightClick(wxMouseEvent &evt);
@@ -73,8 +73,7 @@ private:
    */
   bool HandleSpecialKeys(wxKeyEvent &key_event);
   struct Selection {
-    int startRow{-1}, startCol{-1};
-    int endRow{-1}, endCol{-1};
+    wxRect rect;
     bool active{false};
   };
 

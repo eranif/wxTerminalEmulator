@@ -86,6 +86,23 @@ TerminalLogger::LogEntry::operator<<(const wxString &s) {
 }
 
 TerminalLogger::LogEntry &
+TerminalLogger::LogEntry::operator<<(const wxRect &rect) {
+  if (m_enabled) {
+    m_ss << "Rect{" << rect.x << "," << rect.y << "," << rect.width << ","
+         << rect.height << "}";
+  }
+  return *this;
+}
+
+TerminalLogger::LogEntry &
+TerminalLogger::LogEntry::operator<<(const wxPoint &point) {
+  if (m_enabled) {
+    m_ss << "Point{" << point.x << "," << point.y << "}";
+  }
+  return *this;
+}
+
+TerminalLogger::LogEntry &
 TerminalLogger::LogEntry::operator<<(const wxArrayString &arr) {
   if (m_enabled) {
     m_ss << "[";

@@ -11,9 +11,18 @@
 #include <wx/dcgraph.h>
 #include <wx/font.h>
 #include <wx/frame.h>
+#include <wx/gdicmn.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
 #include <wx/window.h>
+
+inline wxRect MakeRect(const wxPoint &p1, const wxPoint &p2) {
+  const int x = std::min(p1.x, p2.x);
+  const int y = std::min(p1.y, p2.y);
+  const int w = std::abs(p2.x - p1.x);
+  const int h = std::abs(p2.y - p1.y);
+  return wxRect{x, y, w, h};
+}
 
 // Map of character key codes to their shifted values
 static const std::unordered_map<int, int> shiftMap = {
@@ -49,7 +58,6 @@ constexpr int kDefaultFontSize = 14;
 
 TerminalView::TerminalView(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
-
   m_defaultFont =
 #ifdef __WXMAC__
       wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
@@ -66,7 +74,7 @@ TerminalView::TerminalView(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   Bind(wxEVT_SIZE, &TerminalView::OnSize, this);
   Bind(wxEVT_CHAR_HOOK, &TerminalView::OnCharHook, this);
   Bind(wxEVT_KEY_DOWN, &TerminalView::OnKeyDown, this);
-  Bind(wxEVT_LEFT_DOWN, &TerminalView::OnMouseClick, this);
+  Bind(wxEVT_LEFT_DOWN, &TerminalView::OnMouseLeftDown, this);
   Bind(wxEVT_LEFT_UP, &TerminalView::OnMouseUp, this);
   Bind(wxEVT_MOTION, &TerminalView::OnMouseMove, this);
   Bind(wxEVT_RIGHT_DOWN, &TerminalView::OnRightClick, this);
@@ -223,8 +231,6 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   int rowIdx = 0;
   int y = 0;
   auto viewArea = m_core.GetViewArea();
-  //DebugDumpViewArea();
-
   for (std::size_t r = 0; r < viewArea.size(); ++r) {
     const auto &row = *viewArea[r];
     int x = 0;
@@ -232,14 +238,9 @@ void TerminalView::OnPaint(wxPaintEvent &) {
     for (const auto &cell : row) {
       // Check selections before skipping empty cells
       bool isMouseSelected = false;
-      if (m_selection.active) {
-        int minRow = std::min(m_selection.startRow, m_selection.endRow);
-        int maxRow = std::max(m_selection.startRow, m_selection.endRow);
-        int minCol = std::min(m_selection.startCol, m_selection.endCol);
-        int maxCol = std::max(m_selection.startCol, m_selection.endCol);
-        isMouseSelected = (rowIdx >= minRow && rowIdx <= maxRow &&
-                           colIdx >= minCol && colIdx <= maxCol);
-      }
+      wxPoint current_pos(colIdx, rowIdx);
+      isMouseSelected =
+          m_selection.active && m_selection.rect.Contains(current_pos);
 
       bool isApiSelected = false;
       if (m_apiSelection.active) {
@@ -306,10 +307,10 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   std::size_t viewStart = m_core.ViewStart();
   std::size_t shellStart = m_core.ShellStart();
   if (viewStart <= shellStart &&
-      shellStart + cursor.row < viewStart + m_core.Rows()) {
-    int screenRow = static_cast<int>(shellStart - viewStart + cursor.row);
+      shellStart + cursor.y < viewStart + m_core.Rows()) {
+    int screenRow = static_cast<int>(shellStart - viewStart + cursor.y);
     dc.SetPen(wxPen(theme.cursorColour, 2));
-    int cx = cursor.col * charW;
+    int cx = cursor.x * charW;
     int cy = screenRow * charH;
     dc.DrawLine(cx, cy, cx, cy + charH);
   }
@@ -320,11 +321,11 @@ void TerminalView::OnSize(wxSizeEvent &evt) {
   evt.Skip();
 }
 
-void TerminalView::OnMouseClick(wxMouseEvent &evt) {
+void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
   SetFocus();
 
   // Clear any existing selection when starting a new one
-  m_selection.active = false;
+  m_selection.rect = {};
 
   // Calculate which cell was clicked
   wxClientDC dc(this);
@@ -333,25 +334,23 @@ void TerminalView::OnMouseClick(wxMouseEvent &evt) {
   const int charW = std::max(1, dc.GetCharWidth());
   const int charH = std::max(1, dc.GetCharHeight());
 
-  int col = evt.GetX() / charW;
-  int row = evt.GetY() / charH;
+  int x = evt.GetX() / charW;
+  int y = evt.GetY() / charH;
 
   // Clamp to valid range
-  col = std::max(0, std::min(col, static_cast<int>(m_core.Cols()) - 1));
-  row = std::max(0, std::min(row, static_cast<int>(m_core.Rows()) - 1));
+  x = std::max(0, std::min(x, static_cast<int>(m_core.Cols()) - 1));
+  y = std::max(0, std::min(y, static_cast<int>(m_core.Rows()) - 1));
 
-  m_selection.startRow = row;
-  m_selection.startCol = col;
-  m_selection.endRow = row;
-  m_selection.endCol = col;
+  m_selection.rect = wxRect(wxPoint(x, y), wxSize(0, 0));
+  m_selection.active = true;
   m_isDragging = true;
-
+  LOG_DEBUG() << "Selection rect:" << m_selection.rect << std::endl;
   Refresh();
   evt.Skip();
 }
 
 void TerminalView::OnMouseMove(wxMouseEvent &evt) {
-  if (!m_isDragging) {
+  if (!m_isDragging || !m_selection.active) {
     evt.Skip();
     return;
   }
@@ -363,16 +362,19 @@ void TerminalView::OnMouseMove(wxMouseEvent &evt) {
   const int charW = std::max(1, dc.GetCharWidth());
   const int charH = std::max(1, dc.GetCharHeight());
 
-  int col = evt.GetX() / charW;
-  int row = evt.GetY() / charH;
+  int x = evt.GetX() / charW;
+  int y = evt.GetY() / charH;
 
   // Clamp to valid range
-  col = std::max(0, std::min(col, static_cast<int>(m_core.Cols()) - 1));
-  row = std::max(0, std::min(row, static_cast<int>(m_core.Rows()) - 1));
+  x = std::max(0, std::min(x, static_cast<int>(m_core.Cols()) - 1));
+  y = std::max(0, std::min(y, static_cast<int>(m_core.Rows()) - 1));
 
-  m_selection.endRow = row;
-  m_selection.endCol = col;
+  wxPoint pt1 = m_selection.rect.GetPosition();
+  wxPoint pt2{x, y};
+  m_selection.rect = MakeRect(pt1, pt2);
   m_selection.active = true;
+
+  LOG_DEBUG() << "Selection rect:" << m_selection.rect << std::endl;
 
   Refresh();
   evt.Skip();
@@ -382,8 +384,7 @@ void TerminalView::OnMouseUp(wxMouseEvent &evt) {
   m_isDragging = false;
 
   // If we have a selection, it's now complete
-  if (m_selection.startRow != m_selection.endRow ||
-      m_selection.startCol != m_selection.endCol) {
+  if (!m_selection.rect.IsEmpty()) {
     m_selection.active = true;
   } else {
     // Just a click, no drag - clear selection
@@ -411,6 +412,8 @@ void TerminalView::OnMouseWheel(wxMouseEvent &evt) {
   else
     m_core.SetViewStart(vs + static_cast<std::size_t>(-lines));
 
+  m_selection.active = false; // Cancel any selection when scrolling or the
+                              // selected area will scroll with us
   m_dirty = true;
 }
 
@@ -438,31 +441,31 @@ void TerminalView::OnCopy(wxCommandEvent &evt) {
   }
 
   // Get the selected text
-  wxString selectedText;
-
-  int minRow = std::min(m_selection.startRow, m_selection.endRow);
-  int maxRow = std::max(m_selection.startRow, m_selection.endRow);
-  int minCol = std::min(m_selection.startCol, m_selection.endCol);
-  int maxCol = std::max(m_selection.startCol, m_selection.endCol);
-  LOG_DEBUG() << "Copying content {" << minCol << "," << minRow << "} => {"
-              << maxCol << "," << maxRow << "}" << std::endl;
+  std::string selectedText;
+  wxRect rect = m_selection.rect;
+  LOG_DEBUG() << "Copying content: " << rect << std::endl;
   auto viewArea = m_core.GetViewArea();
-  for (int r = minRow; r <= maxRow && r < static_cast<int>(viewArea.size());
-       ++r) {
-    const auto &row = *viewArea[r];
-    for (int c = minCol; c <= maxCol && c < static_cast<int>(row.size()); ++c) {
-      selectedText += static_cast<wxChar>(row[c].ch);
+  for (int y = rect.GetTopLeft().y;
+       y <= rect.GetBottomLeft().y && y < static_cast<int>(viewArea.size());
+       ++y) {
+    const auto &row = *viewArea[y];
+    for (int x = rect.GetTopLeft().x;
+         x <= rect.GetTopRight().x && x < static_cast<int>(row.size()); ++x) {
+      selectedText += static_cast<char>(row[x].ch);
     }
-    if (r < maxRow && !selectedText.EndsWith("\n")) {
-      selectedText += "\n"; // Add newline between rows
-    }
+    selectedText += "\n"; // Add newline between rows
   }
 
-  LOG_DEBUG() << "Copying:" << selectedText.size() << " chars. " << selectedText
+  wxString selection = wxString::FromUTF8(selectedText);
+  if (!selection.empty()) {
+    selection.RemoveLast();
+  }
+
+  LOG_DEBUG() << "Copying:" << selection.size() << " chars. " << selection
               << std::endl;
   // Copy to clipboard
   if (wxTheClipboard->Open()) {
-    wxTheClipboard->SetData(new wxTextDataObject(selectedText));
+    wxTheClipboard->SetData(new wxTextDataObject(selection));
     wxTheClipboard->Flush();
     wxTheClipboard->Close();
   }

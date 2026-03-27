@@ -26,7 +26,14 @@ std::size_t TerminalCore::AbsRow(std::size_t viewportRow) const {
   return m_shellStart + viewportRow;
 }
 
-CursorPos TerminalCore::Cursor() const { return m_cursor; }
+std::optional<std::size_t> TerminalCore::ViewPortRow(std::size_t absrow) const {
+  if (absrow < m_viewStart || absrow >= m_viewStart + m_rows)
+    return std::nullopt;
+
+  return absrow - m_viewStart;
+}
+
+wxPoint TerminalCore::Cursor() const { return m_cursor; }
 
 const std::vector<Cell> &TerminalCore::BufferRow(std::size_t absRow) const {
   static const std::vector<Cell> empty;
@@ -80,10 +87,10 @@ void TerminalCore::Resize(std::size_t rows, std::size_t cols) {
   }
 
   // Clamp cursor
-  if (m_cursor.row >= m_rows)
-    m_cursor.row = m_rows - 1;
-  if (m_cursor.col >= m_cols)
-    m_cursor.col = m_cols - 1;
+  if (m_cursor.y >= m_rows)
+    m_cursor.y = m_rows - 1;
+  if (m_cursor.x >= m_cols)
+    m_cursor.x = m_cols - 1;
 
   // Reset scroll region to full screen on resize
   m_scrollTop = 0;
@@ -110,8 +117,8 @@ void TerminalCore::ClearScreen() {
 }
 
 void TerminalCore::MoveCursor(std::size_t row, std::size_t col) {
-  m_cursor.row = std::min(row, m_rows - 1);
-  m_cursor.col = std::min(col, m_cols - 1);
+  m_cursor.y = std::min(row, m_rows - 1);
+  m_cursor.x = std::min(col, m_cols - 1);
 }
 
 void TerminalCore::Reset() {
@@ -255,45 +262,46 @@ void TerminalCore::PutPrintable(char c) { PutCell(c); }
 void TerminalCore::PutPrintable(char32_t cp) { PutCell(cp); }
 
 void TerminalCore::PutCell(char32_t cp) {
-  if (m_cursor.col >= m_cols) {
-    m_cursor.col = 0;
+  if (m_cursor.x >= m_cols) {
+    m_cursor.x = 0;
     NewLine();
     CarriageReturn();
   }
 
-  std::size_t abs = AbsRow(m_cursor.row);
-  if (abs < m_buffer.size() && m_cursor.col < m_cols) {
+  std::size_t abs = AbsRow(m_cursor.y);
+  if (abs < m_buffer.size() && m_cursor.x < m_cols) {
     auto cell = m_attr;
     cell.ch = cp;
-    m_buffer[abs][m_cursor.col] = cell;
+    m_buffer[abs][m_cursor.x] = cell;
     m_lastChar = cp;
-    ++m_cursor.col;
+    ++m_cursor.x;
   }
 }
 
 void TerminalCore::NewLine() {
-  if (m_cursor.row == m_scrollBottom) {
+  if (m_cursor.y == m_scrollBottom) {
     // Full-screen scroll region: grow the buffer (preserves scrollback)
     if (m_scrollTop == 0 && m_scrollBottom == m_rows - 1)
       ScrollUp();
     else
       ScrollRegionUp();
-  } else if (m_cursor.row >= m_rows - 1) {
+  } else if (m_cursor.y >= m_rows - 1) {
     ScrollUp();
   } else {
-    ++m_cursor.row;
+    ++m_cursor.y;
   }
 }
 
-void TerminalCore::CarriageReturn() { m_cursor.col = 0; }
+void TerminalCore::CarriageReturn() { m_cursor.x = 0; }
 
 void TerminalCore::Backspace() {
-  if (m_cursor.col > 0)
-    --m_cursor.col;
+  if (m_cursor.x > 0)
+    --m_cursor.x;
 }
 
 void TerminalCore::Tab() {
-  m_cursor.col = std::min(m_cols - 1, ((m_cursor.col / 8) + 1) * 8);
+  m_cursor.x =
+      std::min(static_cast<int>(m_cols - 1), ((m_cursor.x / 8) + 1) * 8);
 }
 
 void TerminalCore::ScrollUp() {
@@ -340,41 +348,40 @@ void TerminalCore::ParseEscape(const std::string &seq) {
     oss << "ESC [";
     for (unsigned char ch : seq)
       oss << std::hex << std::setfill('0') << std::setw(2) << (int)ch << " ";
-    oss << "] cursor=(" << std::dec << m_cursor.row << "," << m_cursor.col
-        << ")";
+    oss << "] cursor=(" << std::dec << m_cursor.y << "," << m_cursor.x << ")";
     LOG_TRACE() << oss.str() << std::endl;
   }
 
   if (seq.size() == 1) {
     switch (seq[0]) {
     case 'M': // Reverse Index — cursor up, scroll down if at top
-      if (m_cursor.row == m_scrollTop)
+      if (m_cursor.y == m_scrollTop)
         ScrollRegionDown();
-      else if (m_cursor.row > 0)
-        --m_cursor.row;
+      else if (m_cursor.y > 0)
+        --m_cursor.y;
       break;
     case 'D': // Index — cursor down, scroll up if at bottom
-      if (m_cursor.row == m_scrollBottom)
+      if (m_cursor.y == m_scrollBottom)
         ScrollRegionUp();
-      else if (m_cursor.row < m_rows - 1)
-        ++m_cursor.row;
+      else if (m_cursor.y < m_rows - 1)
+        ++m_cursor.y;
       break;
     case 'E': // Next Line
-      m_cursor.col = 0;
-      if (m_cursor.row == m_scrollBottom)
+      m_cursor.x = 0;
+      if (m_cursor.y == m_scrollBottom)
         ScrollRegionUp();
-      else if (m_cursor.row < m_rows - 1)
-        ++m_cursor.row;
+      else if (m_cursor.y < m_rows - 1)
+        ++m_cursor.y;
       break;
     case '7': // Save Cursor (DECSC)
       m_savedCursor = m_cursor;
       break;
     case '8': // Restore Cursor (DECRC)
       m_cursor = m_savedCursor;
-      if (m_cursor.row >= m_rows)
-        m_cursor.row = m_rows - 1;
-      if (m_cursor.col >= m_cols)
-        m_cursor.col = m_cols - 1;
+      if (m_cursor.y >= m_rows)
+        m_cursor.y = m_rows - 1;
+      if (m_cursor.x >= m_cols)
+        m_cursor.x = m_cols - 1;
       break;
     default:
       break;
@@ -481,14 +488,14 @@ void TerminalCore::ParseEscape(const std::string &seq) {
 
   if (final_ch == 'n') {
     if (!paramList.empty() && paramList[0] == 6 && m_responseCallback) {
-      m_responseCallback("\x1b[" + std::to_string(m_cursor.row + 1) + ";" +
-                         std::to_string(m_cursor.col + 1) + "R");
+      m_responseCallback("\x1b[" + std::to_string(m_cursor.y + 1) + ";" +
+                         std::to_string(m_cursor.x + 1) + "R");
     }
     return;
   }
 
   // Helper to get absolute row for cursor
-  auto cursorAbsRow = [&]() { return AbsRow(m_cursor.row); };
+  auto cursorAbsRow = [&]() { return AbsRow(m_cursor.y); };
 
   switch (final_ch) {
   case 'm':
@@ -499,51 +506,51 @@ void TerminalCore::ParseEscape(const std::string &seq) {
     std::size_t n = paramList.empty()
                         ? 1
                         : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.row = (m_cursor.row > n) ? (m_cursor.row - n) : 0;
+    m_cursor.y = (m_cursor.y > n) ? (m_cursor.y - n) : 0;
     break;
   }
   case 'B': {
     std::size_t n = paramList.empty()
                         ? 1
                         : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.row = std::min(m_rows - 1, m_cursor.row + n);
+    m_cursor.y = std::min(m_rows - 1, m_cursor.y + n);
     break;
   }
   case 'C': {
     std::size_t n = paramList.empty()
                         ? 1
                         : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.col = std::min(m_cols - 1, m_cursor.col + n);
+    m_cursor.x = std::min(m_cols - 1, m_cursor.x + n);
     break;
   }
   case 'D': {
     std::size_t n = paramList.empty()
                         ? 1
                         : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.col = (m_cursor.col > n) ? (m_cursor.col - n) : 0;
+    m_cursor.x = (m_cursor.x > n) ? (m_cursor.x - n) : 0;
     break;
   }
   case 'E': {
     std::size_t n = paramList.empty()
                         ? 1
                         : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.row = std::min(m_rows - 1, m_cursor.row + n);
-    m_cursor.col = 0;
+    m_cursor.y = std::min(m_rows - 1, m_cursor.y + n);
+    m_cursor.x = 0;
     break;
   }
   case 'F': {
     std::size_t n = paramList.empty()
                         ? 1
                         : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.row = (m_cursor.row > n) ? (m_cursor.row - n) : 0;
-    m_cursor.col = 0;
+    m_cursor.y = (m_cursor.y > n) ? (m_cursor.y - n) : 0;
+    m_cursor.x = 0;
     break;
   }
   case 'G': {
     std::size_t col = paramList.empty()
                           ? 1
                           : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.col = std::min(m_cols - 1, col - 1);
+    m_cursor.x = std::min(m_cols - 1, col - 1);
     break;
   }
   case 'H':
@@ -562,16 +569,16 @@ void TerminalCore::ParseEscape(const std::string &seq) {
     if (mode == 0) {
       std::size_t abs = cursorAbsRow();
       if (abs < m_buffer.size())
-        for (std::size_t c = m_cursor.col; c < m_cols; ++c)
+        for (std::size_t c = m_cursor.x; c < m_cols; ++c)
           m_buffer[abs][c] = Cell{};
-      for (std::size_t r = m_cursor.row + 1; r < m_rows; ++r) {
+      for (std::size_t r = m_cursor.y + 1; r < m_rows; ++r) {
         std::size_t a = AbsRow(r);
         if (a < m_buffer.size())
           for (std::size_t c = 0; c < m_cols; ++c)
             m_buffer[a][c] = Cell{};
       }
     } else if (mode == 1) {
-      for (std::size_t r = 0; r < m_cursor.row; ++r) {
+      for (std::size_t r = 0; r < m_cursor.y; ++r) {
         std::size_t a = AbsRow(r);
         if (a < m_buffer.size())
           for (std::size_t c = 0; c < m_cols; ++c)
@@ -579,7 +586,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
       }
       std::size_t abs = cursorAbsRow();
       if (abs < m_buffer.size())
-        for (std::size_t c = 0; c <= m_cursor.col && c < m_cols; ++c)
+        for (std::size_t c = 0; c <= m_cursor.x && c < m_cols; ++c)
           m_buffer[abs][c] = Cell{};
     } else if (mode == 2 || mode == 3) {
       ClearScreen();
@@ -594,10 +601,10 @@ void TerminalCore::ParseEscape(const std::string &seq) {
       break;
     auto &row = m_buffer[abs];
     if (mode == 0) {
-      for (std::size_t c = m_cursor.col; c < m_cols; ++c)
+      for (std::size_t c = m_cursor.x; c < m_cols; ++c)
         row[c] = Cell{};
     } else if (mode == 1) {
-      for (std::size_t c = 0; c <= m_cursor.col && c < m_cols; ++c)
+      for (std::size_t c = 0; c <= m_cursor.x && c < m_cols; ++c)
         row[c] = Cell{};
     } else if (mode == 2) {
       for (std::size_t c = 0; c < m_cols; ++c)
@@ -623,7 +630,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
     std::size_t abs = cursorAbsRow();
     if (abs < m_buffer.size()) {
       auto &row = m_buffer[abs];
-      for (std::size_t c = m_cursor.col; c + n < m_cols; ++c)
+      for (std::size_t c = m_cursor.x; c + n < m_cols; ++c)
         row[c] = row[c + n];
       for (std::size_t c = m_cols > n ? m_cols - n : 0; c < m_cols; ++c)
         row[c] = Cell{};
@@ -638,10 +645,9 @@ void TerminalCore::ParseEscape(const std::string &seq) {
     std::size_t abs = cursorAbsRow();
     if (abs < m_buffer.size()) {
       auto &row = m_buffer[abs];
-      for (std::size_t c = m_cols - 1; c >= m_cursor.col + n; --c)
+      for (std::size_t c = m_cols - 1; c >= m_cursor.x + n; --c)
         row[c] = row[c - n];
-      for (std::size_t c = m_cursor.col; c < m_cursor.col + n && c < m_cols;
-           ++c)
+      for (std::size_t c = m_cursor.x; c < m_cursor.x + n && c < m_cols; ++c)
         row[c] = Cell{};
     }
     break;
@@ -663,7 +669,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
     for (std::size_t i = 0; i < n; ++i) {
       // Shift rows from cursor down to scroll bottom
       std::size_t bot = AbsRow(m_scrollBottom);
-      std::size_t cur = AbsRow(m_cursor.row);
+      std::size_t cur = AbsRow(m_cursor.y);
       if (cur < m_buffer.size() && bot < m_buffer.size()) {
         for (std::size_t r = bot; r > cur; --r)
           m_buffer[r] = m_buffer[r - 1];
@@ -679,7 +685,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
                         : static_cast<std::size_t>(std::max(1, paramList[0]));
     for (std::size_t i = 0; i < n; ++i) {
       std::size_t bot = AbsRow(m_scrollBottom);
-      std::size_t cur = AbsRow(m_cursor.row);
+      std::size_t cur = AbsRow(m_cursor.y);
       if (cur < m_buffer.size() && bot < m_buffer.size()) {
         for (std::size_t r = cur; r < bot; ++r)
           m_buffer[r] = m_buffer[r + 1];
@@ -695,8 +701,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
                         : static_cast<std::size_t>(std::max(1, paramList[0]));
     std::size_t abs = cursorAbsRow();
     if (abs < m_buffer.size()) {
-      for (std::size_t c = m_cursor.col; c < m_cursor.col + n && c < m_cols;
-           ++c)
+      for (std::size_t c = m_cursor.x; c < m_cursor.x + n && c < m_cols; ++c)
         m_buffer[abs][c] = Cell{};
     }
     break;
@@ -708,10 +713,10 @@ void TerminalCore::ParseEscape(const std::string &seq) {
 
   case 'u': // Restore Cursor Position
     m_cursor = m_savedCursor;
-    if (m_cursor.row >= m_rows)
-      m_cursor.row = m_rows - 1;
-    if (m_cursor.col >= m_cols)
-      m_cursor.col = m_cols - 1;
+    if (m_cursor.y >= m_rows)
+      m_cursor.y = m_rows - 1;
+    if (m_cursor.x >= m_cols)
+      m_cursor.x = m_cols - 1;
     break;
 
   case 'r': { // Set Scroll Region (DECSTBM)
@@ -724,8 +729,8 @@ void TerminalCore::ParseEscape(const std::string &seq) {
       m_scrollTop = top;
       m_scrollBottom = bot;
     }
-    m_cursor.row = 0;
-    m_cursor.col = 0;
+    m_cursor.y = 0;
+    m_cursor.x = 0;
     break;
   }
 
@@ -736,7 +741,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
     std::size_t row = paramList.empty()
                           ? 1
                           : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.row = std::min(m_rows - 1, row - 1);
+    m_cursor.y = std::min(m_rows - 1, row - 1);
     break;
   }
 

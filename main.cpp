@@ -20,7 +20,7 @@ public:
     SetSize(width, height);
     CentreOnScreen(); // Center the window on screen
 
-    TerminalLogger::Get().SetLevel(TerminalLogLevel::kDebug);
+    TerminalLogger::Get().SetLevel(TerminalLogLevel::kError);
     auto *view = new TerminalView(this);
     view->SetTheme(wxTerminalTheme::MakeDarkTheme());
     view->StartProcess(""); // Empty string will use default shell

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "wx/gdicmn.h"
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -46,6 +47,8 @@ public:
 
     // wx-specific types
     LogEntry &operator<<(const wxString &s);
+    LogEntry &operator<<(const wxRect &s);
+    LogEntry &operator<<(const wxPoint &s);
     LogEntry &operator<<(const wxArrayString &arr);
     LogEntry &operator<<(const std::vector<wxString> &arr);
 
