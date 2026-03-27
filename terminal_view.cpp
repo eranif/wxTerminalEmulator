@@ -16,6 +16,12 @@
 #include <wx/msgdlg.h>
 #include <wx/window.h>
 
+#ifdef __WXMSW__
+constexpr bool kAlwaysGCDC = true;
+#else
+constexpr bool kAlwaysGCDC = false;
+#endif
+
 inline wxRect MakeRect(const wxPoint &p1, const wxPoint &p2) {
   const int x = std::min(p1.x, p2.x);
   const int y = std::min(p1.y, p2.y);
@@ -115,15 +121,12 @@ void TerminalView::Feed(const std::string &data) {
 }
 
 void TerminalView::SetTerminalSizeFromClient() {
-  wxClientDC dc(this);
-  dc.SetFont(m_defaultFont);
-
-  const int cw = std::max(1, dc.GetCharWidth());
-  const int ch = std::max(1, dc.GetCharHeight());
+  if (m_charH == 0 || m_charW == 0) {
+    return;
+  }
   const wxSize sz = GetClientSize();
-
-  const std::size_t cols = std::max(1, sz.GetWidth() / cw);
-  const std::size_t rows = std::max(1, sz.GetHeight() / ch);
+  const std::size_t cols = std::max(1, sz.GetWidth() / m_charW);
+  const std::size_t rows = std::max(1, sz.GetHeight() / m_charH);
 
   m_core.SetViewportSize(rows, cols);
   if (m_backend)
@@ -219,15 +222,49 @@ void TerminalView::DebugDumpViewArea() {
   }
 }
 
-void TerminalView::OnPaint(wxPaintEvent &) {
-  wxAutoBufferedPaintDC dc(this);
-  const auto &theme = m_core.GetTheme();
-  dc.SetBackground(wxBrush(theme.bg));
-  dc.Clear();
-  dc.SetFont(m_defaultFont);
+std::unique_ptr<PaintDC> TerminalView::MakePaintDC() {
+  return std::make_unique<PaintDC>(this, kAlwaysGCDC);
+}
 
-  const int charW = dc.GetCharWidth();
-  const int charH = dc.GetCharHeight();
+std::unique_ptr<ClientDC> TerminalView::MakeClientDC() {
+  return std::make_unique<ClientDC>(this, kAlwaysGCDC);
+}
+
+wxRect TerminalView::ViewCellToPixelsRect(const wxRect &viewrect) const {
+  if (m_charH == 0 || m_charW == 0) {
+    return {};
+  }
+  if (viewrect.IsEmpty()) {
+    return {};
+  }
+
+  int rect_width = viewrect.GetWidth() * m_charW;
+  int rect_height = viewrect.GetHeight() * m_charH;
+  int rect_x = viewrect.GetX() * m_charW;
+  int rect_y = viewrect.GetY() * m_charH;
+
+  return wxRect(rect_x, rect_y, rect_width, rect_height);
+}
+
+void TerminalView::OnPaint(wxPaintEvent &) {
+  auto paint_dc = MakePaintDC();
+  wxDC *dc = &paint_dc->GetDC();
+
+  const auto &theme = m_core.GetTheme();
+  wxRect client_rect = GetClientRect();
+  dc->SetBackground(wxBrush(theme.bg));
+  dc->Clear();
+  dc->SetFont(m_defaultFont);
+
+  m_charW = dc->GetCharWidth();
+  m_charH = dc->GetCharHeight();
+
+  if (m_selection.active && !m_selection.empty()) {
+    dc->SetBrush(wxBrush(theme.selectionBg));
+    dc->SetPen(*wxTRANSPARENT_PEN);
+    dc->DrawRectangle(ViewCellToPixelsRect(m_selection.rect));
+  }
+
   int rowIdx = 0;
   int y = 0;
   auto viewArea = m_core.GetViewArea();
@@ -235,13 +272,11 @@ void TerminalView::OnPaint(wxPaintEvent &) {
     const auto &row = *viewArea[r];
     int x = 0;
     int colIdx = 0;
+    wxString row_string;
     for (const auto &cell : row) {
       // Check selections before skipping empty cells
       bool isMouseSelected = false;
       wxPoint current_pos(colIdx, rowIdx);
-      isMouseSelected =
-          m_selection.active && m_selection.rect.Contains(current_pos);
-
       bool isApiSelected = false;
       if (m_apiSelection.active) {
         std::size_t absRow = m_core.ViewStart() + r;
@@ -252,53 +287,50 @@ void TerminalView::OnPaint(wxPaintEvent &) {
       }
 
       // Skip empty cells unless they are selected
-      if (cell.IsEmpty() && !isMouseSelected && !isApiSelected) {
-        x += charW;
+      if (cell.IsEmpty() && !isApiSelected) {
+        x += m_charW;
         colIdx++;
         continue;
       }
 
       wxColour bgColor = cell.GetBgColour().value_or(theme.bg);
       wxColour fgColor = cell.GetFgColour().value_or(theme.fg);
-      if (cell.reverse)
+      if (cell.reverse) {
         std::swap(bgColor, fgColor);
+      }
 
-      if (!cell.IsEmpty()) {
-        dc.SetBrush(wxBrush(bgColor));
-        dc.SetPen(*wxTRANSPARENT_PEN);
-        dc.DrawRectangle(x, y, charW, charH);
+      if (!cell.IsEmpty() && !m_selection.rect.Contains(current_pos) &&
+          !isApiSelected) {
+        dc->SetBrush(wxBrush(bgColor));
+        dc->SetPen(*wxTRANSPARENT_PEN);
+        dc->DrawRectangle(x, y, m_charW, m_charH);
       }
 
       if (isApiSelected) {
-        dc.SetBrush(wxBrush(theme.highlightBg));
-        dc.SetPen(*wxTRANSPARENT_PEN);
-        dc.DrawRectangle(x, y, charW, charH);
-      }
-      if (isMouseSelected) {
-        dc.SetBrush(wxBrush(theme.selectionBg));
-        dc.SetPen(*wxTRANSPARENT_PEN);
-        dc.DrawRectangle(x, y, charW, charH);
+        dc->SetBrush(wxBrush(theme.highlightBg));
+        dc->SetPen(*wxTRANSPARENT_PEN);
+        dc->DrawRectangle(x, y, m_charW, m_charH);
       }
 
-      dc.SetTextForeground(fgColor);
-      wxFont font = dc.GetFont();
+      dc->SetTextForeground(fgColor);
+      wxFont font = dc->GetFont();
       if (cell.bold)
         font.MakeBold();
       if (cell.underline)
         font.MakeUnderlined();
-      dc.SetFont(font);
+      dc->SetFont(font);
 
-      wxString ch;
-      ch.Append(static_cast<wxChar>(cell.ch));
-      dc.DrawText(ch, x, y);
+      wxString ch{wxUniChar(cell.ch), 1};
+      row_string << ch;
+      dc->DrawText(ch, x, y);
 
       if (cell.bold || cell.underline)
-        dc.SetFont(m_defaultFont);
+        dc->SetFont(m_defaultFont);
 
-      x += charW;
+      x += m_charW;
       colIdx++;
     }
-    y += charH;
+    y += m_charH;
     rowIdx++;
   }
 
@@ -309,10 +341,10 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   if (viewStart <= shellStart &&
       shellStart + cursor.y < viewStart + m_core.Rows()) {
     int screenRow = static_cast<int>(shellStart - viewStart + cursor.y);
-    dc.SetPen(wxPen(theme.cursorColour, 2));
-    int cx = cursor.x * charW;
-    int cy = screenRow * charH;
-    dc.DrawLine(cx, cy, cx, cy + charH);
+    dc->SetPen(wxPen(theme.cursorColour, 2));
+    int cx = cursor.x * m_charW;
+    int cy = screenRow * m_charH;
+    dc->DrawLine(cx, cy, cx, cy + m_charH);
   }
 }
 
@@ -322,20 +354,15 @@ void TerminalView::OnSize(wxSizeEvent &evt) {
 }
 
 void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
-  SetFocus();
-
+  evt.Skip();
+  if (m_charW == 0 || m_charH == 0) {
+    return;
+  }
   // Clear any existing selection when starting a new one
   m_selection.rect = {};
 
-  // Calculate which cell was clicked
-  wxClientDC dc(this);
-  dc.SetFont(m_defaultFont);
-
-  const int charW = std::max(1, dc.GetCharWidth());
-  const int charH = std::max(1, dc.GetCharHeight());
-
-  int x = evt.GetX() / charW;
-  int y = evt.GetY() / charH;
+  int x = evt.GetX() / m_charW;
+  int y = evt.GetY() / m_charH;
 
   // Clamp to valid range
   x = std::max(0, std::min(x, static_cast<int>(m_core.Cols()) - 1));
@@ -344,26 +371,20 @@ void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
   m_selection.rect = wxRect(wxPoint(x, y), wxSize(0, 0));
   m_selection.active = true;
   m_isDragging = true;
-  LOG_DEBUG() << "Selection rect:" << m_selection.rect << std::endl;
-  Refresh();
-  evt.Skip();
 }
 
 void TerminalView::OnMouseMove(wxMouseEvent &evt) {
+  evt.Skip();
   if (!m_isDragging || !m_selection.active) {
-    evt.Skip();
     return;
   }
 
-  // Calculate which cell the mouse is over
-  wxClientDC dc(this);
-  dc.SetFont(m_defaultFont);
+  if (m_charW == 0 || m_charH == 0) {
+    return;
+  }
 
-  const int charW = std::max(1, dc.GetCharWidth());
-  const int charH = std::max(1, dc.GetCharHeight());
-
-  int x = evt.GetX() / charW;
-  int y = evt.GetY() / charH;
+  int x = evt.GetX() / m_charW;
+  int y = evt.GetY() / m_charH;
 
   // Clamp to valid range
   x = std::max(0, std::min(x, static_cast<int>(m_core.Cols()) - 1));
@@ -373,18 +394,14 @@ void TerminalView::OnMouseMove(wxMouseEvent &evt) {
   wxPoint pt2{x, y};
   m_selection.rect = MakeRect(pt1, pt2);
   m_selection.active = true;
-
-  LOG_DEBUG() << "Selection rect:" << m_selection.rect << std::endl;
-
   Refresh();
-  evt.Skip();
 }
 
 void TerminalView::OnMouseUp(wxMouseEvent &evt) {
   m_isDragging = false;
 
   // If we have a selection, it's now complete
-  if (!m_selection.rect.IsEmpty()) {
+  if (!m_selection.empty()) {
     m_selection.active = true;
   } else {
     // Just a click, no drag - clear selection

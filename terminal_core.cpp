@@ -215,8 +215,9 @@ void TerminalCore::PutData(const std::string &data) {
 
     if (!m_utf8Buf.empty()) {
       wxString ws = wxString::FromUTF8(m_utf8Buf);
-      for (size_t i = 0; i < ws.length(); ++i)
+      for (size_t i = 0; i < ws.length(); ++i) {
         PutPrintable(static_cast<char32_t>(ws[i].GetValue()));
+      }
       m_utf8Buf.clear();
     }
     PutChar(c);

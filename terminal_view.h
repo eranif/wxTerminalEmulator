@@ -2,12 +2,54 @@
 
 #include "pty_backend.h"
 #include "terminal_core.h"
+#include <wx/dcbuffer.h>
+#include <wx/dcgraph.h>
 #include <wx/panel.h>
 
-#include <vector>
+#include <wx/dc.h>
 #include <wx/timer.h>
 
 #include <memory>
+
+struct PaintDC {
+  std::optional<std::unique_ptr<wxAutoBufferedPaintDC>> bpdc;
+  std::unique_ptr<wxDC> dc{nullptr};
+  wxDC &GetDC() { return *dc; }
+
+  /**
+   * @brief Constructs a paint device context for the given window, optionally
+   * enabling GCDC rendering.
+   *
+   */
+  PaintDC(wxWindow *win, bool use_gcdc) {
+    if (use_gcdc) {
+      bpdc = std::make_unique<wxAutoBufferedPaintDC>(win);
+      dc = std::make_unique<wxGCDC>(*bpdc.value());
+    } else {
+      dc = std::make_unique<wxAutoBufferedPaintDC>(win);
+    }
+  }
+};
+
+struct ClientDC {
+  std::optional<std::unique_ptr<wxMemoryDC>> mem_dc;
+  wxBitmap bmp{1, 1};
+  std::unique_ptr<wxDC> dc{nullptr};
+  wxDC &GetDC() { return *dc; }
+
+  /**
+   * @brief Constructs a client drawing context, optionally wrapped in a
+   * graphics context.
+   */
+  ClientDC(wxWindow *win, bool use_gcdc) {
+    if (use_gcdc) {
+      mem_dc = std::make_unique<wxMemoryDC>(bmp);
+      dc = std::make_unique<wxGCDC>(*mem_dc.value());
+    } else {
+      dc = std::make_unique<wxClientDC>(win);
+    }
+  }
+};
 
 class TerminalView : public wxPanel {
 public:
@@ -40,6 +82,9 @@ public:
   wxBorder GetDefaultBorder() const override { return wxBORDER_NONE; }
 
 private:
+  std::unique_ptr<PaintDC> MakePaintDC();
+  std::unique_ptr<ClientDC> MakeClientDC();
+
   void OnPaint(wxPaintEvent &evt);
   void OnSize(wxSizeEvent &evt);
   void OnCharHook(wxKeyEvent &evt);
@@ -54,7 +99,7 @@ private:
   void OnCopy(wxCommandEvent &evt);
   void OnPaste(wxCommandEvent &evt);
   void DebugDumpViewArea();
-
+  wxRect ViewCellToPixelsRect(const wxRect& viewrect) const;
   /**
    * Handles terminal-specific special key events by translating supported
    * wxWidgets key codes into ANSI escape sequences and sending them to the
@@ -73,8 +118,9 @@ private:
    */
   bool HandleSpecialKeys(wxKeyEvent &key_event);
   struct Selection {
-    wxRect rect;
+    wxRect rect; // Logical selection (rows / cols)
     bool active{false};
+    inline bool empty() const { return rect.width == 0 && rect.height == 0; }
   };
 
   struct ApiSelection {
@@ -93,4 +139,6 @@ private:
 
   wxFont m_defaultFont;
   wxTimer m_timer;
+  int m_charW{0};
+  int m_charH{0};
 };
