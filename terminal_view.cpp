@@ -545,9 +545,7 @@ void TerminalView::OnCharHook(wxKeyEvent &evt) {
   int key = evt.GetKeyCode();
 
   if (key == WXK_RETURN || key == WXK_NUMPAD_ENTER) {
-    LOG_TRACE() << "Handling WXK_RETURN" << std::endl;
     SendInput("\r");
-    LOG_TRACE() << "SendInput is called with \\r" << std::endl;
     return;
   } else if (key == WXK_TAB) {
     SendInput("\t");

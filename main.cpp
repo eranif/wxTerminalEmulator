@@ -16,7 +16,8 @@ public:
     ID_ThemeLight,
     ID_CenterLine,
     ID_SetSelection,
-    ID_PrintLine
+    ID_PrintLine,
+    ID_SendInput
   };
 
   MyFrame() : wxFrame(nullptr, wxID_ANY, "wxTerminalEmulator") {
@@ -51,6 +52,7 @@ public:
     optionsMenu->Append(ID_CenterLine, "Center Line...");
     optionsMenu->Append(ID_SetSelection, "Set Selection...");
     optionsMenu->Append(ID_PrintLine, "Print Line...");
+    optionsMenu->Append(ID_SendInput, "Send Input...");
     optionsMenu->Check(ID_ThemeDark, true);
     menuBar->Append(optionsMenu, "Options");
     SetMenuBar(menuBar);
@@ -60,6 +62,7 @@ public:
     Bind(wxEVT_MENU, &MyFrame::OnCenterLine, this, ID_CenterLine);
     Bind(wxEVT_MENU, &MyFrame::OnSetSelection, this, ID_SetSelection);
     Bind(wxEVT_MENU, &MyFrame::OnPrintLine, this, ID_PrintLine);
+    Bind(wxEVT_MENU, &MyFrame::OnSendInput, this, ID_SendInput);
   }
 
   void OnDarkTheme(wxCommandEvent &event) {
@@ -178,6 +181,21 @@ public:
         m_view->GetLine(static_cast<std::size_t>(lineNumber - 1));
     wxMessageBox(content.empty() ? "<empty line>" : content, "Line Content",
                  wxOK | wxICON_INFORMATION, this);
+  }
+
+  void OnSendInput(wxCommandEvent &event) {
+    wxUnusedVar(event);
+    if (!m_view) {
+      return;
+    }
+
+    wxString input = wxGetTextFromUser(
+        "Enter text to send to terminal:", "Send Input", wxEmptyString, this);
+    if (input.empty()) {
+      return;
+    }
+    m_view->SendInput(input.ToStdString(wxConvUTF8));
+    m_view->SendInput("\r"); // Flush it
   }
 
   void OnTerminated(wxTerminalEvent &event) {

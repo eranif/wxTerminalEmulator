@@ -58,6 +58,17 @@ public:
 
   void Feed(const std::string &data);
   bool StartProcess(const std::string &command);
+  /**
+   * @brief Sends input text to the terminal backend.
+   *
+   * In the context of TerminalView, this forwards the provided text to the
+   * active backend if one is available. If no backend is attached, the call has
+   * no effect.
+   *
+   * @param text const std::string& The input text to write to the terminal.
+   *
+   * @return void. This function does not return a value.
+   */
   void SendInput(const std::string &text);
   void SetTerminalSizeFromClient();
   std::string Contents() const;
