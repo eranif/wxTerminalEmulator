@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+option(BUILD_WXTERMINAL_DEMO "Build the wxterminal demo application" ON)
+
 # find wxWidgets once
 if(MINGW)
   if(NOT WXWIN)
@@ -61,20 +63,22 @@ add_library(wxterminal_lib STATIC ${LIB_SOURCES} ${HEADER_SOURCES})
 set_target_properties(wxterminal_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Create example program
-if(MINGW)
-  add_executable(wxterminal WIN32 ${EXAMPLE_SOURCES})
-else()
-  add_executable(wxterminal ${EXAMPLE_SOURCES})
-endif()
+if(BUILD_WXTERMINAL_DEMO)
+  if(MINGW)
+    add_executable(wxterminal WIN32 ${EXAMPLE_SOURCES})
+  else()
+    add_executable(wxterminal ${EXAMPLE_SOURCES})
+  endif()
 
-target_link_libraries(wxterminal PRIVATE wxterminal_lib)
+  target_link_libraries(wxterminal PRIVATE wxterminal_lib)
 
-# Platform specific settings
-if(WIN32)
-  target_compile_definitions(wxterminal PRIVATE __WXMSW__)
-  target_link_libraries(wxterminal PRIVATE shell32 ole32 user32
-                                           ${wxWidgets_LIBRARIES})
-elseif(NOT APPLE)
-  # Linux needs libutil for forkpty
-  target_link_libraries(wxterminal PRIVATE util ${wxWidgets_LIBRARIES})
+  # Platform specific settings
+  if(WIN32)
+    target_compile_definitions(wxterminal PRIVATE __WXMSW__)
+    target_link_libraries(wxterminal PRIVATE shell32 ole32 user32
+                                             ${wxWidgets_LIBRARIES})
+  elseif(NOT APPLE)
+    # Linux needs libutil for forkpty
+    target_link_libraries(wxterminal PRIVATE util ${wxWidgets_LIBRARIES})
+  endif()
 endif()
