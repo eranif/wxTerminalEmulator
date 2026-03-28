@@ -726,7 +726,11 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
 
     // Handle Ctrl+U - Clear current line (Unix-style line kill)
     if (key == 'U' || key == 'u') {
+#ifdef __WXMSW__
+      SendEscape();
+#else
       SendInput(std::string(1, '\x15'));
+#endif
       return;
     }
 
