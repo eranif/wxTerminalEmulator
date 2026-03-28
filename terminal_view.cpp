@@ -168,6 +168,7 @@ std::string TerminalView::Contents() const { return m_core.Flatten(); }
 
 void TerminalView::SetTheme(const wxTerminalTheme &theme) {
   m_core.SetTheme(theme);
+  UpdateFontCache();
   m_dirty = true;
   PostSizeEvent();
 }
