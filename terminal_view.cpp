@@ -258,17 +258,20 @@ wxRect TerminalView::ViewCellToPixelsRect(const wxRect &viewrect) const {
 }
 
 wxColour
-TerminalView::GetColourFromTheme(std::optional<terminal::ColourIndex> idx,
+TerminalView::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
                                  bool foreground) const {
-  LOG_DEBUG() << "Searching for colour:"
-              << (idx.has_value() ? idx.value().index : -1) << std::endl;
   const auto &theme = m_core.GetTheme();
-  if (!idx.has_value() || idx->index < 0) {
+  if (!spec.has_value() || spec->kind == ColourSpec::Kind::Default)
     return foreground ? theme.fg : theme.bg;
-  }
-  if (idx->index < 8) {
-    return idx->bright ? theme.GetAnsiColor(idx->index, true)
-                       : theme.GetAnsiColor(idx->index, false);
+  switch (spec->kind) {
+  case ColourSpec::Kind::Ansi:
+    return theme.GetAnsiColor(spec->ansi.index, spec->ansi.bright);
+  case ColourSpec::Kind::Palette256:
+    return terminal::ToColour(theme.Get256Color(spec->paletteIndex));
+  case ColourSpec::Kind::TrueColor:
+    return terminal::ToColour(spec->rgb);
+  case ColourSpec::Kind::Default:
+    return foreground ? theme.fg : theme.bg;
   }
   return foreground ? theme.fg : theme.bg;
 }
@@ -300,22 +303,6 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   int rowIdx = 0;
   int y = 0;
   auto viewArea = m_core.GetViewArea();
-  auto resolveColour = [&theme](const std::optional<ColourSpec> &spec,
-                                bool foreground) -> wxColour {
-    if (!spec.has_value() || spec->kind == ColourSpec::Kind::Default)
-      return foreground ? theme.fg : theme.bg;
-    switch (spec->kind) {
-    case ColourSpec::Kind::Ansi:
-      return theme.GetAnsiColor(spec->ansi.index, spec->ansi.bright);
-    case ColourSpec::Kind::Palette256:
-      return terminal::ToColour(theme.Get256Color(spec->paletteIndex));
-    case ColourSpec::Kind::TrueColor:
-      return terminal::ToColour(spec->rgb);
-    case ColourSpec::Kind::Default:
-      return foreground ? theme.fg : theme.bg;
-    }
-    return foreground ? theme.fg : theme.bg;
-  };
   for (std::size_t r = 0; r < viewArea.size(); ++r) {
     const auto &row = *viewArea[r];
     int x = 0;
@@ -341,10 +328,10 @@ void TerminalView::OnPaint(wxPaintEvent &) {
         continue;
       }
 
-      wxColour bgColor =
-          resolveColour(cell.colours ? cell.colours->bg : std::nullopt, false);
-      wxColour fgColor =
-          resolveColour(cell.colours ? cell.colours->fg : std::nullopt, true);
+      wxColour bgColor = GetColourFromTheme(
+          cell.colours ? cell.colours->bg : std::nullopt, false);
+      wxColour fgColor = GetColourFromTheme(
+          cell.colours ? cell.colours->fg : std::nullopt, true);
       if (cell.reverse) {
         std::swap(bgColor, fgColor);
       }
