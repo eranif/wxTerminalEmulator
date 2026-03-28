@@ -607,7 +607,7 @@ void TerminalView::OnCopy(wxCommandEvent &evt) {
   }
 
   // Get the selected text
-  std::string selectedText;
+  wxString selection;
   wxRect rect = m_selection.rect;
   LOG_DEBUG() << "Copying content: " << rect << std::endl;
   auto viewArea = m_core.GetViewArea();
@@ -617,12 +617,11 @@ void TerminalView::OnCopy(wxCommandEvent &evt) {
     const auto &row = *viewArea[y];
     for (int x = rect.GetTopLeft().x;
          x <= rect.GetTopRight().x && x < static_cast<int>(row.size()); ++x) {
-      selectedText += static_cast<char>(row[x].ch);
+      selection += wxUniChar(row[x].ch);
     }
-    selectedText += "\n"; // Add newline between rows
+    selection += "\n"; // Add newline between rows
   }
 
-  wxString selection = wxString::FromUTF8(selectedText);
   if (!selection.empty()) {
     selection.RemoveLast();
   }
