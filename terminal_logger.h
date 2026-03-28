@@ -8,6 +8,7 @@
 #include <wx/arrstr.h>
 #include <wx/ffile.h>
 #include <wx/filename.h>
+#include <wx/stopwatch.h>
 #include <wx/string.h>
 
 enum class TerminalLogLevel { kTrace = 0, kDebug = 1, kWarn = 2, kError = 3 };
@@ -75,3 +76,15 @@ private:
 #define LOG_WARN() LOG(TerminalLogLevel::kWarn)
 #define LOG_ERROR() LOG(TerminalLogLevel::kError)
 #define LOG_TRACE() LOG(TerminalLogLevel::kTrace)
+
+struct LogFunction {
+  wxString function_name;
+  wxStopWatch sw;
+  LogFunction(const wxString &funcname) : function_name{funcname} {
+    sw.Start();
+  }
+  ~LogFunction() {
+    LOG_DEBUG() << "Function: " << function_name
+                << " completed in:" << sw.TimeInMicro().ToLong() << std::endl;
+  }
+};

@@ -3,6 +3,7 @@
 #include "terminal_event.h"
 #include "terminal_logger.h"
 #include <wx/app.h>
+#include <wx/cmdline.h>
 #include <wx/display.h>
 #include <wx/frame.h>
 #include <wx/menu.h>
@@ -33,7 +34,6 @@ public:
 
     BuildMenuBar();
 
-    TerminalLogger::Get().SetLevel(TerminalLogLevel::kError);
     m_view = new TerminalView(this);
     m_view->SetTheme(wxTerminalTheme::MakeDarkTheme());
     m_themeIsDark = true;
@@ -215,6 +215,39 @@ private:
 class MyApp : public wxApp {
 public:
   bool OnInit() override {
+    static const wxCmdLineEntryDesc cmdLineDesc[] = {
+        {wxCMD_LINE_SWITCH, "h", "help", "show help", wxCMD_LINE_VAL_NONE,
+         wxCMD_LINE_OPTION_HELP},
+        {wxCMD_LINE_OPTION, "l", "log-level",
+         "set log level: trace, debug, warn, error", wxCMD_LINE_VAL_STRING, 0},
+        {wxCMD_LINE_NONE}};
+
+    wxCmdLineParser parser(cmdLineDesc, argc, argv);
+    if (parser.Parse() != 0) {
+      return false;
+    }
+
+    wxString logLevelStr;
+    if (parser.Found("log-level", &logLevelStr)) {
+      logLevelStr = logLevelStr.Lower();
+      TerminalLogLevel level = TerminalLogLevel::kDebug;
+      if (logLevelStr == "trace") {
+        level = TerminalLogLevel::kTrace;
+      } else if (logLevelStr == "debug") {
+        level = TerminalLogLevel::kDebug;
+      } else if (logLevelStr == "warn" || logLevelStr == "warning") {
+        level = TerminalLogLevel::kWarn;
+      } else if (logLevelStr == "error") {
+        level = TerminalLogLevel::kError;
+      } else {
+        wxLogError("Unknown log level: %s", logLevelStr);
+        return false;
+      }
+      TerminalLogger::Get().SetLevel(level);
+    } else {
+      TerminalLogger::Get().SetLevel(TerminalLogLevel::kError);
+    }
+
     auto *frame = new MyFrame();
     frame->Show();
     return true;

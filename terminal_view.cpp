@@ -290,6 +290,7 @@ TerminalView::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
 }
 
 void TerminalView::OnPaint(wxPaintEvent &) {
+  LogFunction func_timer{"TerminalView::OnPaint"};
   auto paint_dc = MakePaintDC();
   wxDC *dc = &paint_dc->GetDC();
 
