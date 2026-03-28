@@ -10,6 +10,21 @@
 
 namespace terminal {
 
+static std::string OscRgbResponse(const wxColour &c, int oscId) {
+  const auto to16 = [](std::uint32_t c) {
+    return static_cast<unsigned int>((c & 0xFFu) * 257u);
+  };
+  const unsigned int r = to16(c.Red());
+  const unsigned int g = to16(c.Green());
+  const unsigned int b = to16(c.Blue());
+
+  std::ostringstream oss;
+  oss << "\x1b]";
+  oss << oscId << ";rgb:" << std::hex << std::setfill('0') << std::setw(4) << r
+      << "/" << std::setw(4) << g << "/" << std::setw(4) << b << "\x1b\\";
+  return oss.str();
+}
+
 TerminalCore::TerminalCore(std::size_t rows, std::size_t cols,
                            std::size_t maxLines)
     : m_rows(rows), m_cols(cols), m_maxLines(maxLines) {
@@ -391,6 +406,18 @@ void TerminalCore::ParseEscape(const std::string &seq) {
   }
 
   if (seq[0] == ']') {
+    if (seq.size() > 3 && seq[1] == '1' && seq[2] == '1' && seq[3] == ';') {
+      if (seq.find('?') != std::string::npos && m_responseCallback) {
+        m_responseCallback(OscRgbResponse(m_theme.bg, 11));
+      }
+      return;
+    }
+    if (seq.size() > 3 && seq[1] == '1' && seq[2] == '0' && seq[3] == ';') {
+      if (seq.find('?') != std::string::npos && m_responseCallback) {
+        m_responseCallback(OscRgbResponse(m_theme.fg, 10));
+      }
+      return;
+    }
     if (seq.size() > 2 && (seq[1] == '0' || seq[1] == '2') && seq[2] == ';') {
       std::string title = seq.substr(3);
       if (!title.empty() && (title.back() == '\x07' || title.back() == '\\'))
