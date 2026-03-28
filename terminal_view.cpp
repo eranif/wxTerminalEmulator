@@ -290,7 +290,10 @@ TerminalView::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
 }
 
 void TerminalView::OnPaint(wxPaintEvent &) {
+  // For logging purposes
   LogFunction func_timer{"TerminalView::OnPaint"};
+  auto &draw_text_calls = func_timer.AddCounter("DrawText calls");
+
   auto paint_dc = MakePaintDC();
   wxDC *dc = &paint_dc->GetDC();
 
@@ -367,6 +370,7 @@ void TerminalView::OnPaint(wxPaintEvent &) {
 
       wxString ch{wxUniChar(cell.ch), 1};
       dc->DrawText(ch, x, y);
+      draw_text_calls++;
 
       if (cell.bold || cell.underline) {
         // Restore font

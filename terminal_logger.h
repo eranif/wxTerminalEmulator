@@ -80,11 +80,55 @@ private:
 struct LogFunction {
   wxString function_name;
   wxStopWatch sw;
+  std::array<size_t, 10> counters{};
+  std::array<wxString, 10> counter_names{};
+  size_t next_counter{0};
+
+  /**
+   * @brief Starts timing a function scope for later debug logging.
+   *
+   * The timer begins immediately and the supplied function name is stored so
+   * the destructor can report which function completed.
+   *
+   * @param funcname Name of the function/scope being measured.
+   */
   LogFunction(const wxString &funcname) : function_name{funcname} {
     sw.Start();
   }
+
+  /**
+   * @brief Emits the elapsed time and any registered counters.
+   *
+   * When the object goes out of scope, it logs the total execution time and
+   * then logs each counter added through AddCounter().
+   */
   ~LogFunction() {
     LOG_DEBUG() << "Function: " << function_name
                 << " completed in:" << sw.TimeInMicro().ToLong() << std::endl;
+    // Print counters
+    for (size_t i = 0; i < next_counter; ++i) {
+      LOG_DEBUG() << counter_names[i] << ": " << counters[i] << std::endl;
+    }
+  }
+
+  /**
+   * @brief Registers a named counter for the current scope.
+   *
+   * The returned reference can be incremented by the caller during the scope.
+   * Up to 10 counters may be tracked. If the limit is exceeded, a dummy counter
+   * is returned.
+   *
+   * @param name Human-readable label for the counter.
+   * @return Reference to the stored counter value.
+   */
+  size_t &AddCounter(const wxString &name) {
+    if (next_counter >= 10) {
+      static size_t null_counter{0};
+      return null_counter;
+    }
+    counter_names[next_counter] = name;
+    size_t &counter = counters[next_counter];
+    next_counter++;
+    return counter;
   }
 };
