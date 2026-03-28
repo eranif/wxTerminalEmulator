@@ -97,6 +97,8 @@ private:
   std::unique_ptr<PaintDC> MakePaintDC();
   std::unique_ptr<ClientDC> MakeClientDC();
 
+  wxColour GetColourFromTheme(std::optional<terminal::ColourIndex> index,
+                              bool foreground) const;
   void OnPaint(wxPaintEvent &evt);
   void OnSize(wxSizeEvent &evt);
   void OnCharHook(wxKeyEvent &evt);

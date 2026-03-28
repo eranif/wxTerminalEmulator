@@ -37,6 +37,33 @@ void TerminalCore::SetTheme(const wxTerminalTheme &theme) {
   m_attr.SetColours(m_theme);
 }
 
+static ColourIndex MakeColourIndex(int index, bool bright = false) {
+  return ColourIndex{index, bright};
+}
+
+static void ResetColours(Cell &cell) { cell.colours = CellColours{}; }
+
+static ColourSpec MakeAnsiSpec(int index, bool bright = false) {
+  ColourSpec s;
+  s.kind = ColourSpec::Kind::Ansi;
+  s.ansi = ColourIndex{index, bright};
+  return s;
+}
+
+static ColourSpec MakePaletteSpec(int index) {
+  ColourSpec s;
+  s.kind = ColourSpec::Kind::Palette256;
+  s.paletteIndex = index;
+  return s;
+}
+
+static ColourSpec MakeTrueColorSpec(std::uint32_t rgb) {
+  ColourSpec s;
+  s.kind = ColourSpec::Kind::TrueColor;
+  s.rgb = rgb;
+  return s;
+}
+
 std::size_t TerminalCore::AbsRow(std::size_t viewportRow) const {
   return m_shellStart + viewportRow;
 }
@@ -846,7 +873,7 @@ void TerminalCore::ApplySgr(const std::string &params) {
     case 35:
     case 36:
     case 37:
-      m_attr.SetFgColour(m_theme.GetAnsiColor(code - 30, false));
+      m_attr.SetFgColour(MakeAnsiSpec(code - 30, false));
       break;
     case 90:
     case 91:
@@ -856,7 +883,7 @@ void TerminalCore::ApplySgr(const std::string &params) {
     case 95:
     case 96:
     case 97:
-      m_attr.SetFgColour(m_theme.GetAnsiColor(code - 90, true));
+      m_attr.SetFgColour(MakeAnsiSpec(code - 90, true));
       break;
     case 40:
     case 41:
@@ -866,7 +893,7 @@ void TerminalCore::ApplySgr(const std::string &params) {
     case 45:
     case 46:
     case 47:
-      m_attr.SetBgColour(m_theme.GetAnsiColor(code - 40, false));
+      m_attr.SetBgColour(MakeAnsiSpec(code - 40, false));
       break;
     case 100:
     case 101:
@@ -876,16 +903,17 @@ void TerminalCore::ApplySgr(const std::string &params) {
     case 105:
     case 106:
     case 107:
-      m_attr.SetBgColour(m_theme.GetAnsiColor(code - 100, true));
+      m_attr.SetBgColour(MakeAnsiSpec(code - 100, true));
       break;
     case 38:
       if (i + 1 < codes.size()) {
         if (codes[i + 1] == 5 && i + 2 < codes.size()) {
-          m_attr.SetFgColour(m_theme.Get256Color(codes[i + 2]));
+          m_attr.SetFgColour(MakePaletteSpec(codes[i + 2]));
           i += 2;
         } else if (codes[i + 1] == 2 && i + 4 < codes.size()) {
-          m_attr.SetFgColour((codes[i + 2] << 16) | (codes[i + 3] << 8) |
-                             codes[i + 4]);
+          m_attr.SetFgColour(MakeTrueColorSpec((codes[i + 2] << 16) |
+                                               (codes[i + 3] << 8) |
+                                               codes[i + 4]));
           i += 4;
         }
       }
@@ -893,20 +921,25 @@ void TerminalCore::ApplySgr(const std::string &params) {
     case 48:
       if (i + 1 < codes.size()) {
         if (codes[i + 1] == 5 && i + 2 < codes.size()) {
-          m_attr.SetBgColour(m_theme.Get256Color(codes[i + 2]));
+          m_attr.SetBgColour(MakePaletteSpec(codes[i + 2]));
           i += 2;
         } else if (codes[i + 1] == 2 && i + 4 < codes.size()) {
-          m_attr.SetBgColour((codes[i + 2] << 16) | (codes[i + 3] << 8) |
-                             codes[i + 4]);
+          m_attr.SetBgColour(MakeTrueColorSpec((codes[i + 2] << 16) |
+                                               (codes[i + 3] << 8) |
+                                               codes[i + 4]));
           i += 4;
         }
       }
       break;
     case 39:
-      m_attr.SetFgColour(wxTerminalTheme::ToU32(m_theme.fg));
+      if (!m_attr.colours)
+        m_attr.colours = CellColours{};
+      m_attr.colours->fg = std::nullopt;
       break;
     case 49:
-      m_attr.SetBgColour(wxTerminalTheme::ToU32(m_theme.bg));
+      if (!m_attr.colours)
+        m_attr.colours = CellColours{};
+      m_attr.colours->bg = std::nullopt;
       break;
     default:
       break;

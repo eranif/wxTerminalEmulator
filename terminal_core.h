@@ -13,9 +13,21 @@
 
 namespace terminal {
 
+struct ColourIndex {
+  int index{-1};
+  bool bright{false};
+};
+
+struct ColourSpec {
+  enum class Kind { Default, Ansi, Palette256, TrueColor } kind{Kind::Default};
+  ColourIndex ansi{};
+  int paletteIndex{-1};
+  std::uint32_t rgb{0};
+};
+
 struct CellColours {
-  std::uint32_t bg{0x00000000};
-  std::uint32_t fg{0x00C0C0C0};
+  std::optional<ColourSpec> bg{std::nullopt};
+  std::optional<ColourSpec> fg{std::nullopt};
 };
 
 /**
@@ -33,6 +45,13 @@ inline wxColour ToColour(std::uint32_t c) {
   return wxColour((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
 }
 
+struct ThemeColourMap {
+  wxColour fg;
+  wxColour bg;
+  wxColour ansi[8];
+  wxColour ansiBright[8];
+};
+
 struct Cell {
   char32_t ch{U' '};
   std::optional<CellColours> colours{std::nullopt};
@@ -46,38 +65,21 @@ struct Cell {
   }
 
   inline void SetColours(const wxColour &bg, const wxColour &fg) {
-    colours = CellColours{
-        .bg = wxTerminalTheme::ToU32(bg),
-        .fg = wxTerminalTheme::ToU32(fg),
-    };
+    colours = CellColours{};
   }
 
-  inline void SetFgColour(std::uint32_t c) {
+  inline void SetFgColour(ColourSpec c) {
     if (IsEmpty()) {
       colours = CellColours{};
     }
     colours.value().fg = c;
   }
 
-  inline void SetBgColour(std::uint32_t c) {
+  inline void SetBgColour(ColourSpec c) {
     if (IsEmpty()) {
       colours = CellColours{};
     }
     colours.value().bg = c;
-  }
-
-  inline std::optional<wxColour> GetBgColour() const {
-    if (IsEmpty()) {
-      return std::nullopt;
-    }
-    return ToColour(colours.value().bg);
-  }
-
-  inline std::optional<wxColour> GetFgColour() const {
-    if (IsEmpty()) {
-      return std::nullopt;
-    }
-    return ToColour(colours.value().fg);
   }
 
   /**
