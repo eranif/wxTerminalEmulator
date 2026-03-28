@@ -632,7 +632,7 @@ void TerminalView::OnCopy(wxCommandEvent &evt) {
     wxTheClipboard->Flush();
     wxTheClipboard->Close();
   }
-  m_selection.active = false;
+  ClearMouseSelection();
   Refresh();
 }
 
