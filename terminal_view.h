@@ -113,6 +113,9 @@ private:
   void OnCopy(wxCommandEvent &evt);
   void OnPaste(wxCommandEvent &evt);
   void DebugDumpViewArea();
+  void UpdateFontCache();
+  const wxFont &GetCachedFont(bool bold, bool underlined) const;
+
   wxRect ViewCellToPixelsRect(const wxRect &viewrect) const;
   /**
    * Handles terminal-specific special key events by translating supported
@@ -156,6 +159,9 @@ private:
   int m_wheelAccum{0};
 
   wxFont m_defaultFont;
+  wxFont m_defaultFontBold;
+  wxFont m_defaultFontUnderlined;
+  wxFont m_defaultFontBoldUnderlined;
   wxTimer m_timer;
   int m_charW{0};
   int m_charH{0};

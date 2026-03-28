@@ -68,16 +68,7 @@ constexpr int kDefaultFontSize = 14;
 
 TerminalView::TerminalView(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
-  m_defaultFont =
-#ifdef __WXMAC__
-      wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
-             wxFONTWEIGHT_NORMAL, false, "Menlo");
-#elif defined(__WXMSW__)
-      wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
-             wxFONTWEIGHT_NORMAL, false, "Consolas");
-#else
-      wxFont(wxFontInfo(kDefaultFontSize).Family(wxFONTFAMILY_TELETYPE));
-#endif
+  UpdateFontCache();
 
   // Bind events using modern API
   Bind(wxEVT_PAINT, &TerminalView::OnPaint, this);
@@ -212,6 +203,28 @@ void TerminalView::ClearMouseSelection() {
   m_selection.clear();
   m_isDragging = false;
   Refresh();
+}
+
+void TerminalView::UpdateFontCache() {
+  m_defaultFont =
+#ifdef __WXMAC__
+      wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
+             wxFONTWEIGHT_NORMAL, false, "Menlo");
+#elif defined(__WXMSW__)
+      wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
+             wxFONTWEIGHT_NORMAL, false, "Consolas");
+#else
+      wxFont(wxFontInfo(kDefaultFontSize).Family(wxFONTFAMILY_TELETYPE));
+#endif
+  m_defaultFontBold = m_defaultFont;
+  m_defaultFontBold.MakeBold();
+
+  m_defaultFontUnderlined = m_defaultFont;
+  m_defaultFontUnderlined.MakeUnderlined();
+
+  m_defaultFontBoldUnderlined = m_defaultFont;
+  m_defaultFontBoldUnderlined.MakeBold();
+  m_defaultFontBoldUnderlined.MakeUnderlined();
 }
 
 void TerminalView::DebugDumpViewArea() {
@@ -350,12 +363,7 @@ void TerminalView::OnPaint(wxPaintEvent &) {
       }
 
       dc->SetTextForeground(fgColor);
-      wxFont font = dc->GetFont();
-      if (cell.bold)
-        font.MakeBold();
-      if (cell.underline)
-        font.MakeUnderlined();
-      dc->SetFont(font);
+      dc->SetFont(GetCachedFont(cell.bold, cell.underline));
 
       wxString ch{wxUniChar(cell.ch), 1};
       row_string << ch;
@@ -763,5 +771,17 @@ void TerminalView::OnTimer(wxTimerEvent &evt) {
   if (m_dirty) {
     m_dirty = false;
     Refresh(false);
+  }
+}
+
+const wxFont &TerminalView::GetCachedFont(bool bold, bool underlined) const {
+  if (bold && underlined) [[unlikely]] {
+    return m_defaultFontBoldUnderlined;
+  } else if (bold) [[unlikely]] {
+    return m_defaultFontBold;
+  } else if (underlined) [[unlikely]] {
+    return m_defaultFontUnderlined;
+  } else [[likely]] {
+    return m_defaultFont;
   }
 }
