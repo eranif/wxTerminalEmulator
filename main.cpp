@@ -23,7 +23,11 @@ public:
     ID_SendInput
   };
 
-  MyFrame() : wxFrame(nullptr, wxID_ANY, "wxTerminalEmulator") {
+  MyFrame(const wxCmdLineParser &parser)
+      : wxFrame(nullptr, wxID_ANY, "wxTerminalEmulator") {
+    wxString shellCommand;
+    parser.Found("shell", &shellCommand);
+
     // Get the primary display size
     wxDisplay display(wxDisplay::GetFromWindow(this));
     wxRect screen = display.GetClientArea();
@@ -36,10 +40,9 @@ public:
 
     BuildMenuBar();
 
-    m_view = new TerminalView(this);
+    m_view = new TerminalView(this, shellCommand.ToStdString(wxConvUTF8));
     m_view->SetTheme(wxTerminalTheme::MakeDarkTheme());
     m_themeIsDark = true;
-    m_view->StartProcess(""); // Empty string will use default shell
 
     m_view->Bind(wxEVT_TERMINAL_TITLE_CHANGED, &MyFrame::OnTitleChanged, this);
     m_view->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
@@ -244,6 +247,9 @@ public:
          wxCMD_LINE_OPTION_HELP},
         {wxCMD_LINE_OPTION, "l", "log-level",
          "set log level: trace, debug, warn, error", wxCMD_LINE_VAL_STRING, 0},
+        {wxCMD_LINE_OPTION, "s", "shell",
+         "shell command to launch instead of the default shell",
+         wxCMD_LINE_VAL_STRING, 0},
         {wxCMD_LINE_NONE}};
 
     wxCmdLineParser parser(cmdLineDesc, argc, argv);
@@ -272,8 +278,9 @@ public:
       TerminalLogger::Get().SetLevel(TerminalLogLevel::kError);
     }
 
-    auto *frame = new MyFrame();
+    auto frame = new MyFrame(parser);
     frame->Show();
+    SetTopWindow(frame);
     return true;
   }
 };

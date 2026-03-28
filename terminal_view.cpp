@@ -65,7 +65,8 @@ static const std::unordered_map<int, int> shiftMap = {
     {'=', '+'},
     {'`', '~'}};
 
-TerminalView::TerminalView(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
+TerminalView::TerminalView(wxWindow *parent, const wxString &shellCommand)
+    : wxPanel(parent, wxID_ANY) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   UpdateFontCache();
 
@@ -89,11 +90,10 @@ TerminalView::TerminalView(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
     }
   });
   Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent &) {});
-
-  m_backend = terminal::PtyBackend::Create(GetEventHandler());
+  StartProcess(shellCommand);
 
   m_timer.SetOwner(this);
-  m_timer.Start(16);
+  m_timer.Start(16); // Roughly 60fps
 
   // Set up callback for terminal responses (e.g., cursor position reports)
   m_core.SetResponseCallback(
@@ -134,12 +134,16 @@ void TerminalView::SetTerminalSizeFromClient() {
   }
 }
 
-bool TerminalView::StartProcess(const std::string &command) {
-  if (!m_backend)
+bool TerminalView::StartProcess(const wxString &command) {
+  if (!m_backend) {
     m_backend = terminal::PtyBackend::Create(GetEventHandler());
-  return m_backend && m_backend->Start(command, [this](const std::string &out) {
-    CallAfter(&TerminalView::Feed, out);
-  });
+  }
+  m_shell_command = command;
+  LOG_DEBUG() << "Starting shell with command: " << command << std::endl;
+  return m_backend && m_backend->Start(m_shell_command.ToStdString(wxConvUTF8),
+                                       [this](const std::string &out) {
+                                         CallAfter(&TerminalView::Feed, out);
+                                       });
 }
 
 void TerminalView::SendInput(const std::string &text) {
@@ -730,15 +734,14 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
   // Handle Ctrl combinations
   const bool ctrl = evt.RawControlDown();
 
-#ifdef __APPLE__
+#ifdef __WXMAC__
   // On macOS, Cmd+C/V for copy/paste (ControlDown() = Cmd key)
   if (evt.ControlDown() && !evt.AltDown()) {
-    if (key == 'C' || key == 'c') {
-      if (m_selection.active) {
-        wxCommandEvent copyEvt(wxEVT_MENU, wxID_COPY);
-        OnCopy(copyEvt);
-        return;
-      }
+    if (IsSelectionRectHasMinSize(m_mouseSelectionRect) &&
+        (key == 'C' || key == 'c')) {
+      wxCommandEvent copyEvt(wxEVT_MENU, wxID_COPY);
+      OnCopy(copyEvt);
+      return;
     }
     if (key == 'V' || key == 'v') {
       wxCommandEvent pasteEvt(wxEVT_MENU, wxID_PASTE);
@@ -759,16 +762,20 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
     // Handle Ctrl+U - Clear current line (Unix-style line kill)
     if (key == 'U' || key == 'u') {
 #ifdef __WXMSW__
-      SendEscape();
-#else
-      SendInput(std::string(1, '\x15'));
+      if (m_shell_command.empty()) {
+        SendEscape();
+        return;
+      }
 #endif
+      // User is using a custom shell on Windows or non Windows code, anyways,
+      // use the standard
+      SendInput(std::string(1, '\x15'));
       return;
     }
 
 #ifdef __WXMSW__
-    // Windows style "Ctrl-L"
-    if (key == 'L' || key == 'l') {
+    if (m_shell_command.empty() && key == 'L' || key == 'l') {
+      // Windows style "Ctrl-L" for CMD / PS
       SendInput("cls\r");
       return;
     }

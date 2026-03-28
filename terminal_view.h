@@ -13,11 +13,9 @@
 
 class TerminalView : public wxPanel {
 public:
-  explicit TerminalView(wxWindow *parent);
+  TerminalView(wxWindow *parent, const wxString &shellCommand);
   ~TerminalView() override;
 
-  void Feed(const std::string &data);
-  bool StartProcess(const std::string &command);
   /**
    * @brief Sends input text to the terminal backend.
    *
@@ -76,6 +74,9 @@ public:
   wxBorder GetDefaultBorder() const override { return wxBORDER_NONE; }
 
 private:
+  void Feed(const std::string &data);
+  bool StartProcess(const wxString &command);
+
   wxColour GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
                               bool foreground) const;
   void OnPaint(wxPaintEvent &evt);
@@ -140,4 +141,5 @@ private:
   int m_charW{0};
   int m_charH{0};
   bool m_contextMenuShowing{false};
+  wxString m_shell_command;
 };
