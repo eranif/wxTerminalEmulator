@@ -45,13 +45,6 @@ inline wxColour ToColour(std::uint32_t c) {
   return wxColour((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
 }
 
-struct ThemeColourMap {
-  wxColour fg;
-  wxColour bg;
-  wxColour ansi[8];
-  wxColour ansiBright[8];
-};
-
 struct Cell {
   char32_t ch{U' '};
   std::optional<CellColours> colours{std::nullopt};

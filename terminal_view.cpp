@@ -320,7 +320,6 @@ void TerminalView::OnPaint(wxPaintEvent &) {
     const auto &row = *viewArea[r];
     int x = 0;
     int colIdx = 0;
-    wxString row_string;
     for (const auto &cell : row) {
       // Check selections before skipping empty cells
       bool isMouseSelected = false;
@@ -366,11 +365,12 @@ void TerminalView::OnPaint(wxPaintEvent &) {
       dc->SetFont(GetCachedFont(cell.bold, cell.underline));
 
       wxString ch{wxUniChar(cell.ch), 1};
-      row_string << ch;
       dc->DrawText(ch, x, y);
 
-      if (cell.bold || cell.underline)
+      if (cell.bold || cell.underline) {
+        // Restore font
         dc->SetFont(m_defaultFont);
+      }
 
       x += m_charW;
       colIdx++;
