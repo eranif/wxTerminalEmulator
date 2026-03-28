@@ -33,7 +33,7 @@ public:
 
     BuildMenuBar();
 
-    TerminalLogger::Get().SetLevel(TerminalLogLevel::kDebug);
+    TerminalLogger::Get().SetLevel(TerminalLogLevel::kError);
     m_view = new TerminalView(this);
     m_view->SetTheme(wxTerminalTheme::MakeDarkTheme());
     m_themeIsDark = true;
