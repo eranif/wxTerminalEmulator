@@ -544,7 +544,7 @@ void TerminalView::OnMouseMove(wxMouseEvent &evt) {
     m_selection.rect.height = 1;
   }
   m_selection.active = true;
-  Refresh();
+  m_dirty = true; // Will get refreshed by the timer
 }
 
 void TerminalView::OnMouseUp(wxMouseEvent &evt) {
