@@ -141,6 +141,35 @@ void TerminalView::SendInput(const std::string &text) {
   }
 }
 
+// Helper methods for sending special characters
+void TerminalView::SendEnter() { SendInput("\r"); }
+
+void TerminalView::SendTab() { SendInput("\t"); }
+
+void TerminalView::SendEscape() { SendInput("\x1b"); }
+
+void TerminalView::SendBackspace() { SendInput("\x7f"); }
+
+void TerminalView::SendArrowUp() { SendInput("\x1b[A"); }
+
+void TerminalView::SendArrowDown() { SendInput("\x1b[B"); }
+
+void TerminalView::SendArrowRight() { SendInput("\x1b[C"); }
+
+void TerminalView::SendArrowLeft() { SendInput("\x1b[D"); }
+
+void TerminalView::SendHome() { SendInput("\x1b[H"); }
+
+void TerminalView::SendEnd() { SendInput("\x1b[F"); }
+
+void TerminalView::SendDelete() { SendInput("\x1b[3~"); }
+
+void TerminalView::SendInsert() { SendInput("\x1b[2~"); }
+
+void TerminalView::SendPageUp() { SendInput("\x1b[5~"); }
+
+void TerminalView::SendPageDown() { SendInput("\x1b[6~"); }
+
 std::string TerminalView::Contents() const { return m_core.Flatten(); }
 
 void TerminalView::SetTheme(const wxTerminalTheme &theme) {
@@ -635,17 +664,17 @@ void TerminalView::OnCharHook(wxKeyEvent &evt) {
   int key = evt.GetKeyCode();
 
   if (key == WXK_RETURN || key == WXK_NUMPAD_ENTER) {
-    SendInput("\r");
+    SendEnter();
     return;
   } else if (key == WXK_TAB) {
-    SendInput("\t");
+    SendTab();
     return;
   } else if (key == WXK_ESCAPE) {
     if (m_selection.active) {
       ClearMouseSelection();
       return;
     }
-    SendInput("\x1b");
+    SendEscape();
     return;
   }
 
@@ -728,7 +757,7 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
 
   // Handle Alt combinations (send ESC prefix)
   if (evt.AltDown() && !ctrl && key >= 32 && key < 127) {
-    SendInput("\x1b");
+    SendEscape();
     SendInput(std::string(1, static_cast<char>(key)));
     return;
   }
@@ -736,7 +765,7 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
   // Handle special keys
   // Note: ENTER, TAB, and ESCAPE are handled in OnCharHook
   if (key == WXK_BACK) {
-    SendInput("\x7f");
+    SendBackspace();
     return;
   }
 
@@ -784,31 +813,31 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
 bool TerminalView::HandleSpecialKeys(wxKeyEvent &key_event) {
   auto key = key_event.GetKeyCode();
   if (key == WXK_UP || key == WXK_DOWN) {
-    SendInput(key == WXK_UP ? "\x1b[A" : "\x1b[B");
+    key == WXK_UP ? SendArrowUp() : SendArrowDown();
     return true;
   } else if (key == WXK_RIGHT) {
-    SendInput("\x1b[C");
+    SendArrowRight();
     return true;
   } else if (key == WXK_LEFT) {
-    SendInput("\x1b[D");
+    SendArrowLeft();
     return true;
   } else if (key == WXK_HOME) {
-    SendInput("\x1b[H");
+    SendHome();
     return true;
   } else if (key == WXK_END) {
-    SendInput("\x1b[F");
+    SendEnd();
     return true;
   } else if (key == WXK_DELETE) {
-    SendInput("\x1b[3~");
+    SendDelete();
     return true;
   } else if (key == WXK_INSERT) {
-    SendInput("\x1b[2~");
+    SendInsert();
     return true;
   } else if (key == WXK_PAGEUP) {
-    SendInput("\x1b[5~");
+    SendPageUp();
     return true;
   } else if (key == WXK_PAGEDOWN) {
-    SendInput("\x1b[6~");
+    SendPageDown();
     return true;
   } else if (key >= WXK_F1 && key <= WXK_F12) {
     // Function keys F1-F12

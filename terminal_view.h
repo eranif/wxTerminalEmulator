@@ -72,6 +72,23 @@ public:
   void SendInput(const std::string &text);
   void SetTerminalSizeFromClient();
   std::string Contents() const;
+
+  // Helper methods for sending special characters
+  void SendEnter();
+  void SendTab();
+  void SendEscape();
+  void SendBackspace();
+  void SendArrowUp();
+  void SendArrowDown();
+  void SendArrowLeft();
+  void SendArrowRight();
+  void SendHome();
+  void SendEnd();
+  void SendDelete();
+  void SendInsert();
+  void SendPageUp();
+  void SendPageDown();
+
   void SetTheme(const wxTerminalTheme &theme);
   const wxTerminalTheme &GetTheme() const;
 
@@ -84,6 +101,10 @@ public:
   void SetUserSelection(std::size_t col, std::size_t row, std::size_t count);
   void ClearUserSelection();
   void ClearMouseSelection();
+  void SendCommand(const wxString &command) {
+    SendInput(command.ToStdString(wxConvUTF8));
+    SendEnter();
+  }
 
   // Override to indicate this window can receive keyboard focus
   bool AcceptsFocus() const override { return true; }

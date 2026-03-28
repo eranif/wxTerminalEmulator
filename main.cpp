@@ -194,8 +194,7 @@ public:
     if (input.empty()) {
       return;
     }
-    m_view->SendInput(input.ToStdString(wxConvUTF8));
-    m_view->SendInput("\r"); // Flush it
+    m_view->SendCommand(input);
   }
 
   void OnTerminated(wxTerminalEvent &event) {
