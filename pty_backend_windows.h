@@ -20,6 +20,7 @@ public:
   bool Start(const std::string &command, OutputCallback on_output) override;
   void Write(const std::string &data) override;
   void Resize(int cols, int rows) override;
+  void SendBreak() override;
   void Stop() override;
 
 private:

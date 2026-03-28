@@ -5,6 +5,7 @@
 #include <wx/app.h>
 #include <wx/cmdline.h>
 #include <wx/display.h>
+#include <wx/fontdlg.h>
 #include <wx/frame.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
@@ -15,6 +16,7 @@ public:
   enum {
     ID_ThemeDark = wxID_HIGHEST + 1,
     ID_ThemeLight,
+    ID_ChangeFont,
     ID_CenterLine,
     ID_SetSelection,
     ID_PrintLine,
@@ -49,6 +51,7 @@ public:
     optionsMenu->AppendRadioItem(ID_ThemeDark, "Dark theme");
     optionsMenu->AppendRadioItem(ID_ThemeLight, "Light theme");
     optionsMenu->AppendSeparator();
+    optionsMenu->Append(ID_ChangeFont, "Change Font...");
     optionsMenu->Append(ID_CenterLine, "Center Line...");
     optionsMenu->Append(ID_SetSelection, "Set Selection...");
     optionsMenu->Append(ID_PrintLine, "Print Line...");
@@ -59,6 +62,7 @@ public:
 
     Bind(wxEVT_MENU, &MyFrame::OnDarkTheme, this, ID_ThemeDark);
     Bind(wxEVT_MENU, &MyFrame::OnLightTheme, this, ID_ThemeLight);
+    Bind(wxEVT_MENU, &MyFrame::OnChangeFont, this, ID_ChangeFont);
     Bind(wxEVT_MENU, &MyFrame::OnCenterLine, this, ID_CenterLine);
     Bind(wxEVT_MENU, &MyFrame::OnSetSelection, this, ID_SetSelection);
     Bind(wxEVT_MENU, &MyFrame::OnPrintLine, this, ID_PrintLine);
@@ -79,6 +83,27 @@ public:
       m_view->SetTheme(wxTerminalTheme::MakeLightTheme());
       m_themeIsDark = false;
     }
+  }
+
+  void OnChangeFont(wxCommandEvent &event) {
+    wxUnusedVar(event);
+    if (!m_view) {
+      return;
+    }
+
+    wxFontData fontData;
+    fontData.EnableEffects(false);
+    fontData.SetInitialFont(m_view->GetTheme().font);
+
+    wxFontDialog dlg(this, fontData);
+    if (dlg.ShowModal() != wxID_OK) {
+      return;
+    }
+
+    wxTerminalTheme theme = m_view->GetTheme();
+    theme.font = dlg.GetFontData().GetChosenFont();
+    m_view->SetTheme(theme);
+    m_view->Refresh();
   }
 
   void OnCenterLine(wxCommandEvent &event) {

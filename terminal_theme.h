@@ -56,7 +56,7 @@ struct wxTerminalTheme {
                   wxFONTWEIGHT_NORMAL, false, "Menlo");
 #elif defined(__WXMSW__)
     return wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
-                  wxFONTWEIGHT_NORMAL, false, "Consolas");
+                  wxFONTWEIGHT_NORMAL, false, "JetBrains Mono");
 #else
     return wxFont(wxFontInfo(kDefaultFontSize).Family(wxFONTFAMILY_TELETYPE));
 #endif

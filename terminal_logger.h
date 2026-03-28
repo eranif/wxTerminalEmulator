@@ -103,11 +103,11 @@ struct LogFunction {
    * then logs each counter added through AddCounter().
    */
   ~LogFunction() {
-    LOG_DEBUG() << "Function: " << function_name
+    LOG_TRACE() << "Function: " << function_name
                 << " completed in:" << sw.TimeInMicro().ToLong() << std::endl;
     // Print counters
     for (size_t i = 0; i < next_counter; ++i) {
-      LOG_DEBUG() << counter_names[i] << ": " << counters[i] << std::endl;
+      LOG_TRACE() << counter_names[i] << ": " << counters[i] << std::endl;
     }
   }
 

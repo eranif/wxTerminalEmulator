@@ -11,46 +11,6 @@
 
 #include <memory>
 
-struct PaintDC {
-  std::optional<std::unique_ptr<wxAutoBufferedPaintDC>> bpdc;
-  std::unique_ptr<wxDC> dc{nullptr};
-  wxDC &GetDC() { return *dc; }
-
-  /**
-   * @brief Constructs a paint device context for the given window, optionally
-   * enabling GCDC rendering.
-   *
-   */
-  PaintDC(wxWindow *win, bool use_gcdc) {
-    if (use_gcdc) {
-      bpdc = std::make_unique<wxAutoBufferedPaintDC>(win);
-      dc = std::make_unique<wxGCDC>(*bpdc.value());
-    } else {
-      dc = std::make_unique<wxAutoBufferedPaintDC>(win);
-    }
-  }
-};
-
-struct ClientDC {
-  std::optional<std::unique_ptr<wxMemoryDC>> mem_dc;
-  wxBitmap bmp{1, 1};
-  std::unique_ptr<wxDC> dc{nullptr};
-  wxDC &GetDC() { return *dc; }
-
-  /**
-   * @brief Constructs a client drawing context, optionally wrapped in a
-   * graphics context.
-   */
-  ClientDC(wxWindow *win, bool use_gcdc) {
-    if (use_gcdc) {
-      mem_dc = std::make_unique<wxMemoryDC>(bmp);
-      dc = std::make_unique<wxGCDC>(*mem_dc.value());
-    } else {
-      dc = std::make_unique<wxClientDC>(win);
-    }
-  }
-};
-
 class TerminalView : public wxPanel {
 public:
   explicit TerminalView(wxWindow *parent);
@@ -88,6 +48,7 @@ public:
   void SendInsert();
   void SendPageUp();
   void SendPageDown();
+  void SendCtrlC();
 
   void SetTheme(const wxTerminalTheme &theme);
   const wxTerminalTheme &GetTheme() const;
@@ -115,13 +76,10 @@ public:
   wxBorder GetDefaultBorder() const override { return wxBORDER_NONE; }
 
 private:
-  std::unique_ptr<PaintDC> MakePaintDC();
-  std::unique_ptr<ClientDC> MakeClientDC();
-
   wxColour GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
                               bool foreground) const;
   void OnPaint(wxPaintEvent &evt);
-  void RenderRaw(wxDC *dc, int y, int rowIdx,
+  void RenderRaw(wxDC &dc, int y, int rowIdx,
                  const std::vector<terminal::Cell> &row,
                  size_t &draw_text_calls);
   void OnSize(wxSizeEvent &evt);

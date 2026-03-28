@@ -23,7 +23,6 @@ constexpr bool kAlwaysGCDC = true;
 constexpr bool kAlwaysGCDC = false;
 #endif
 
-using terminal::ColourIndex;
 using terminal::ColourSpec;
 
 inline wxRect MakeRect(const wxPoint &p1, const wxPoint &p2) {
@@ -136,6 +135,12 @@ void TerminalView::SendInput(const std::string &text) {
 }
 
 // Helper methods for sending special characters
+void TerminalView::SendCtrlC() {
+  if (m_backend) {
+    m_backend->SendBreak();
+  }
+}
+
 void TerminalView::SendEnter() { SendInput("\r"); }
 
 void TerminalView::SendTab() { SendInput("\t"); }
@@ -169,8 +174,10 @@ std::string TerminalView::Contents() const { return m_core.Flatten(); }
 void TerminalView::SetTheme(const wxTerminalTheme &theme) {
   m_core.SetTheme(theme);
   UpdateFontCache();
+  m_charH = m_charW = 0; // This needs to be recalculated based on the new font.
   m_dirty = true;
   PostSizeEvent();
+  Refresh();
 }
 
 const wxTerminalTheme &TerminalView::GetTheme() const {
@@ -261,13 +268,23 @@ void TerminalView::DebugDumpViewArea() {
   }
 }
 
-std::unique_ptr<PaintDC> TerminalView::MakePaintDC() {
-  return std::make_unique<PaintDC>(this, kAlwaysGCDC);
-}
+namespace {
+void wxGCDCSeRenderer(wxGCDC &dc, wxPaintDC &paint_dc) {
+  wxGraphicsRenderer *renderer = nullptr;
+#if defined(__WXGTK__)
+  renderer = wxGraphicsRenderer::GetCairoRenderer();
+#elif defined(__WXMSW__) && wxUSE_GRAPHICS_DIRECT2D
+  renderer = wxGraphicsRenderer::GetDirect2DRenderer();
+#else
+  renderer = wxGraphicsRenderer::GetDefaultRenderer();
+#endif
 
-std::unique_ptr<ClientDC> TerminalView::MakeClientDC() {
-  return std::make_unique<ClientDC>(this, kAlwaysGCDC);
+  wxGraphicsContext *context;
+  context = renderer->CreateContext(paint_dc);
+  context->SetAntialiasMode(wxANTIALIAS_DEFAULT);
+  dc.SetGraphicsContext(context);
 }
+} // namespace
 
 wxRect TerminalView::ViewCellToPixelsRect(const wxRect &viewrect) const {
   if (m_charH == 0 || m_charW == 0) {
@@ -322,7 +339,7 @@ struct CellAttributes {
   }
 };
 
-void TerminalView::RenderRaw(wxDC *dc, int y, int rowIdx,
+void TerminalView::RenderRaw(wxDC &dc, int y, int rowIdx,
                              const std::vector<terminal::Cell> &row,
                              size_t &draw_text_calls) {
   const auto &theme = m_core.GetTheme();
@@ -402,14 +419,14 @@ void TerminalView::RenderRaw(wxDC *dc, int y, int rowIdx,
     // Draw background for the entire group
     int x = firstCell.colIdx * m_charW;
     int width = (cells[j - 1].colIdx - firstCell.colIdx + 1) * m_charW;
-    dc->SetBrush(wxBrush(firstCell.attrs.bgColor));
-    dc->SetPen(*wxTRANSPARENT_PEN);
-    dc->DrawRectangle(x, y, width, m_charH);
+    dc.SetBrush(wxBrush(firstCell.attrs.bgColor));
+    dc.SetPen(*wxTRANSPARENT_PEN);
+    dc.DrawRectangle(x, y, width, m_charH);
 
     // Draw text for the entire group
-    dc->SetTextForeground(firstCell.attrs.fgColor);
-    dc->SetFont(GetCachedFont(firstCell.attrs.bold, firstCell.attrs.underline));
-    dc->DrawText(text, x, y);
+    dc.SetTextForeground(firstCell.attrs.fgColor);
+    dc.SetFont(GetCachedFont(firstCell.attrs.bold, firstCell.attrs.underline));
+    dc.DrawText(text, x, y);
     draw_text_calls++;
 
     i = j;
@@ -421,27 +438,26 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   LogFunction func_timer{"TerminalView::OnPaint"};
   auto &draw_text_calls = func_timer.AddCounter("DrawText calls");
 
-  auto paint_dc = MakePaintDC();
-  wxDC *dc = &paint_dc->GetDC();
+  wxAutoBufferedPaintDC dc{this};
 
   const auto &theme = m_core.GetTheme();
   wxRect client_rect = GetClientRect();
-  dc->SetBackground(wxBrush(theme.bg));
-  dc->Clear();
-  dc->SetFont(m_defaultFont);
+  dc.SetBackground(wxBrush(theme.bg));
+  dc.Clear();
+  dc.SetFont(m_defaultFont);
 
   if (m_charH == 0 && m_charW == 0) {
     // first time
     CallAfter(&TerminalView::SetTerminalSizeFromClient);
   }
 
-  m_charW = dc->GetCharWidth();
-  m_charH = dc->GetCharHeight();
+  m_charW = dc.GetTextExtent("X").GetWidth();
+  m_charH = dc.GetTextExtent("X").GetHeight();
 
   if (m_selection.active && !m_selection.empty()) {
-    dc->SetBrush(wxBrush(theme.selectionBg));
-    dc->SetPen(*wxTRANSPARENT_PEN);
-    dc->DrawRectangle(ViewCellToPixelsRect(m_selection.rect));
+    dc.SetBrush(wxBrush(theme.selectionBg));
+    dc.SetPen(*wxTRANSPARENT_PEN);
+    dc.DrawRectangle(ViewCellToPixelsRect(m_selection.rect));
   }
 
   int y = 0;
@@ -459,10 +475,11 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   if (viewStart <= shellStart &&
       shellStart + cursor.y < viewStart + m_core.Rows()) {
     int screenRow = static_cast<int>(shellStart - viewStart + cursor.y);
-    dc->SetPen(wxPen(theme.cursorColour, 2));
+    dc.SetPen(*wxTRANSPARENT_PEN);
+    dc.SetBrush(theme.cursorColour);
     int cx = cursor.x * m_charW;
     int cy = screenRow * m_charH;
-    dc->DrawLine(cx, cy, cx, cy + m_charH);
+    dc.DrawRectangle(cx, cy, m_charW, m_charH);
   }
 }
 
@@ -702,31 +719,18 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
   if (ctrl && !evt.AltDown()) {
     // Handle Ctrl+C - Copy if text is selected, otherwise send SIGINT
     if (key == 'C' || key == 'c') {
-      if (m_selection.active) {
-        wxCommandEvent copyEvt(wxEVT_MENU, wxID_COPY);
-        OnCopy(copyEvt);
-        return;
-      }
-      // No selection - send Ctrl+C to terminal (SIGINT)
-#ifdef _WIN32
-#endif
-    }
-
-    // Handle Ctrl+V - Paste
-    if (key == 'V' || key == 'v') {
-      wxCommandEvent pasteEvt(wxEVT_MENU, wxID_PASTE);
-      OnPaste(pasteEvt);
+      LOG_DEBUG() << "Sending Ctrl-C" << std::endl;
+      SendCtrlC();
       return;
     }
 
+#ifndef _WIN32
     // Handle Ctrl+U - Clear current line (Unix-style line kill)
     if (key == 'U' || key == 'u') {
-#ifdef _WIN32
-#else
       SendInput(std::string(1, '\x15'));
-#endif
       return;
     }
+#endif
 
     if (key >= 'A' && key <= 'Z') {
       // Ctrl+A through Ctrl+Z
@@ -769,8 +773,6 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
     if (!evt.ShiftDown()) {
       ch = ch - 'A' + 'a';
     }
-#ifdef _WIN32
-#endif
     SendInput(std::string(1, ch));
     return;
   }
@@ -779,8 +781,6 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
   if (it != shiftMap.end()) {
     char ch = evt.ShiftDown() ? static_cast<char>(it->second)
                               : static_cast<char>(key);
-#ifdef _WIN32
-#endif
     SendInput(std::string(1, ch));
     return;
   }

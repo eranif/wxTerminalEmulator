@@ -35,7 +35,7 @@ bool PosixPtyBackend::Start(const std::string &command,
   Stop();
   m_onOutput = std::move(on_output);
 
-  struct winsize ws {};
+  struct winsize ws{};
   ws.ws_col = 120;
   ws.ws_row = 30;
 
@@ -86,10 +86,16 @@ void PosixPtyBackend::Write(const std::string &data) {
 void PosixPtyBackend::Resize(int cols, int rows) {
   if (m_masterFd < 0)
     return;
-  struct winsize ws {};
+  struct winsize ws{};
   ws.ws_col = static_cast<unsigned short>(cols);
   ws.ws_row = static_cast<unsigned short>(rows);
   ioctl(m_masterFd, TIOCSWINSZ, &ws);
+}
+
+void PosixPtyBackend::SendBreak() {
+  // On POSIX systems, sending '\x03' (Ctrl-C) works correctly
+  // because the PTY layer translates it to SIGINT for the child process
+  Write("\x03");
 }
 
 void PosixPtyBackend::Stop() {
@@ -121,7 +127,7 @@ void PosixPtyBackend::ReaderThread() {
     if (m_masterFd < 0)
       break;
 
-    struct pollfd pfd {};
+    struct pollfd pfd{};
     pfd.fd = m_masterFd;
     pfd.events = POLLIN;
 

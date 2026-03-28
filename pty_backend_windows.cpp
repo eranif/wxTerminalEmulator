@@ -15,6 +15,11 @@
 
 namespace terminal {
 
+// ConPTY creation flags (from Windows SDK)
+#ifndef PSEUDOCONSOLE_INHERIT_CURSOR
+#define PSEUDOCONSOLE_INHERIT_CURSOR 0x1
+#endif
+
 namespace {
 
 using CreatePseudoConsoleFn = HRESULT(WINAPI *)(COORD, HANDLE, HANDLE, DWORD,
@@ -100,11 +105,19 @@ std::wstring Utf8ToWide(const std::string &utf8) {
 }
 
 std::string GetDefaultShell() {
+  // Favour PowerShell
+  static const wxString POWER_SHELL =
+      R"(C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe)";
+  if (wxFileName::FileExists(POWER_SHELL)) {
+    return POWER_SHELL.ToStdString(wxConvUTF8);
+  }
+
   char buf[MAX_PATH] = {};
-  DWORD n = GetEnvironmentVariableA("COMSPEC", buf, MAX_PATH);
+  WORD n = GetEnvironmentVariableA("COMSPEC", buf, MAX_PATH);
   if (n > 0 && n < MAX_PATH)
     return buf;
-  return "C:\\Windows\\System32\\cmd.exe";
+
+  return "powershell.exe";
 }
 
 struct HandleCloser {
@@ -176,6 +189,7 @@ void WindowsPtyBackend::Write(const std::string &data) {
   }
   m_cv.notify_one();
 }
+
 void WindowsPtyBackend::Resize(int cols, int rows) {
   if (!m_hPC)
     return;
@@ -190,6 +204,8 @@ void WindowsPtyBackend::Resize(int cols, int rows) {
   size.Y = static_cast<SHORT>(rows);
   resizePc(m_hPC, size);
 }
+
+void WindowsPtyBackend::SendBreak() { Write("\x03"); }
 
 void WindowsPtyBackend::Stop() {
   m_running = false;
@@ -210,6 +226,25 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
   sa.nLength = sizeof(sa);
   sa.bInheritHandle = TRUE;
   sa.lpSecurityDescriptor = nullptr;
+
+  // Enable VT processing for the child console session so ANSI/VT escape
+  // sequences are interpreted correctly by cmd.exe and other console apps.
+  DWORD inputMode = 0;
+  DWORD outputMode = 0;
+  HANDLE hStdIn = GetStdHandle(STD_INPUT_HANDLE);
+  HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+
+  if (hStdIn != INVALID_HANDLE_VALUE && hStdIn != nullptr &&
+      GetConsoleMode(hStdIn, &inputMode)) {
+    inputMode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
+    SetConsoleMode(hStdIn, inputMode);
+  }
+
+  if (hStdOut != INVALID_HANDLE_VALUE && hStdOut != nullptr &&
+      GetConsoleMode(hStdOut, &outputMode)) {
+    outputMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    SetConsoleMode(hStdOut, outputMode);
+  }
 
   // Create pipes with FILE_FLAG_OVERLAPPED for non-blocking I/O
   // Note: We only make the parent-side handles overlapped
@@ -243,7 +278,10 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
                                             : Api().CreatePseudoConsoleDirect;
   HRESULT hr = E_FAIL;
   if (createPc) {
-    hr = createPc(size, inRead, outWrite, 0, &m_hPC);
+    // Use PSEUDOCONSOLE_INHERIT_CURSOR to improve compatibility
+    // Note: This alone doesn't fully fix Ctrl-C with CMD, but it helps
+    DWORD dwFlags = PSEUDOCONSOLE_INHERIT_CURSOR;
+    hr = createPc(size, inRead, outWrite, dwFlags, &m_hPC);
   }
 
   CloseHandle(inRead);
