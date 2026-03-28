@@ -724,10 +724,16 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
       return;
     }
 
-#ifndef _WIN32
     // Handle Ctrl+U - Clear current line (Unix-style line kill)
     if (key == 'U' || key == 'u') {
       SendInput(std::string(1, '\x15'));
+      return;
+    }
+
+#ifdef __WXMSW__
+    // Windows style "Ctrl-L"
+    if (key == 'L' || key == 'l') {
+      SendInput("cls\r");
       return;
     }
 #endif
