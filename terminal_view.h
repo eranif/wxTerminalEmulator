@@ -100,6 +100,9 @@ private:
   wxColour GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
                               bool foreground) const;
   void OnPaint(wxPaintEvent &evt);
+  void RenderRaw(wxDC *dc, int y, int rowIdx,
+                 const std::vector<terminal::Cell> &row,
+                 size_t &draw_text_calls);
   void OnSize(wxSizeEvent &evt);
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);

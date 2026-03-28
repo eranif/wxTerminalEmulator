@@ -289,6 +289,68 @@ TerminalView::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
   return foreground ? theme.fg : theme.bg;
 }
 
+void TerminalView::RenderRaw(wxDC *dc, int y, int rowIdx,
+                             const std::vector<terminal::Cell> &row,
+                             size_t &draw_text_calls) {
+  int x = 0;
+  int colIdx = 0;
+  const auto &theme = m_core.GetTheme();
+  for (const auto &cell : row) {
+    // Check selections before skipping empty cells
+    bool isMouseSelected = false;
+    wxPoint current_pos(colIdx, rowIdx);
+    bool isApiSelected = false;
+    if (m_userSelection.active) {
+      std::size_t absRow = m_core.ViewStart() + rowIdx;
+      isApiSelected =
+          (absRow == m_userSelection.row &&
+           static_cast<std::size_t>(colIdx) >= m_userSelection.col &&
+           static_cast<std::size_t>(colIdx) < m_userSelection.endCol);
+    }
+
+    // Skip empty cells unless they are selected
+    if (cell.IsEmpty() && !isApiSelected) {
+      x += m_charW;
+      colIdx++;
+      continue;
+    }
+
+    wxColour bgColor = GetColourFromTheme(
+        cell.colours ? cell.colours->bg : std::nullopt, false);
+    wxColour fgColor = GetColourFromTheme(
+        cell.colours ? cell.colours->fg : std::nullopt, true);
+    if (cell.reverse) {
+      std::swap(bgColor, fgColor);
+    }
+
+    if (!cell.IsEmpty() && !m_selection.rect.Contains(current_pos) &&
+        !isApiSelected) {
+      dc->SetBrush(wxBrush(bgColor));
+      dc->SetPen(*wxTRANSPARENT_PEN);
+      dc->DrawRectangle(x, y, m_charW, m_charH);
+    } else if (isApiSelected) {
+      dc->SetBrush(wxBrush(theme.highlightBg));
+      dc->SetPen(*wxTRANSPARENT_PEN);
+      dc->DrawRectangle(x, y, m_charW, m_charH);
+    }
+
+    dc->SetTextForeground(fgColor);
+    dc->SetFont(GetCachedFont(cell.bold, cell.underline));
+
+    wxString ch{wxUniChar(cell.ch), 1};
+    dc->DrawText(ch, x, y);
+    draw_text_calls++;
+
+    if (cell.bold || cell.underline) {
+      // Restore font
+      dc->SetFont(m_defaultFont);
+    }
+
+    x += m_charW;
+    colIdx++;
+  }
+}
+
 void TerminalView::OnPaint(wxPaintEvent &) {
   // For logging purposes
   LogFunction func_timer{"TerminalView::OnPaint"};
@@ -317,71 +379,12 @@ void TerminalView::OnPaint(wxPaintEvent &) {
     dc->DrawRectangle(ViewCellToPixelsRect(m_selection.rect));
   }
 
-  int rowIdx = 0;
   int y = 0;
   auto viewArea = m_core.GetViewArea();
-  for (std::size_t r = 0; r < viewArea.size(); ++r) {
-    const auto &row = *viewArea[r];
-    int x = 0;
-    int colIdx = 0;
-    for (const auto &cell : row) {
-      // Check selections before skipping empty cells
-      bool isMouseSelected = false;
-      wxPoint current_pos(colIdx, rowIdx);
-      bool isApiSelected = false;
-      if (m_userSelection.active) {
-        std::size_t absRow = m_core.ViewStart() + r;
-        isApiSelected =
-            (absRow == m_userSelection.row &&
-             static_cast<std::size_t>(colIdx) >= m_userSelection.col &&
-             static_cast<std::size_t>(colIdx) < m_userSelection.endCol);
-      }
-
-      // Skip empty cells unless they are selected
-      if (cell.IsEmpty() && !isApiSelected) {
-        x += m_charW;
-        colIdx++;
-        continue;
-      }
-
-      wxColour bgColor = GetColourFromTheme(
-          cell.colours ? cell.colours->bg : std::nullopt, false);
-      wxColour fgColor = GetColourFromTheme(
-          cell.colours ? cell.colours->fg : std::nullopt, true);
-      if (cell.reverse) {
-        std::swap(bgColor, fgColor);
-      }
-
-      if (!cell.IsEmpty() && !m_selection.rect.Contains(current_pos) &&
-          !isApiSelected) {
-        dc->SetBrush(wxBrush(bgColor));
-        dc->SetPen(*wxTRANSPARENT_PEN);
-        dc->DrawRectangle(x, y, m_charW, m_charH);
-      }
-
-      if (isApiSelected) {
-        dc->SetBrush(wxBrush(theme.highlightBg));
-        dc->SetPen(*wxTRANSPARENT_PEN);
-        dc->DrawRectangle(x, y, m_charW, m_charH);
-      }
-
-      dc->SetTextForeground(fgColor);
-      dc->SetFont(GetCachedFont(cell.bold, cell.underline));
-
-      wxString ch{wxUniChar(cell.ch), 1};
-      dc->DrawText(ch, x, y);
-      draw_text_calls++;
-
-      if (cell.bold || cell.underline) {
-        // Restore font
-        dc->SetFont(m_defaultFont);
-      }
-
-      x += m_charW;
-      colIdx++;
-    }
+  for (int rowIdx = 0; rowIdx < static_cast<int>(viewArea.size()); ++rowIdx) {
+    const auto &row = *viewArea[rowIdx];
+    RenderRaw(dc, y, rowIdx, row, draw_text_calls);
     y += m_charH;
-    rowIdx++;
   }
 
   // Draw cursor (thin line caret) — only if shell viewport is visible
