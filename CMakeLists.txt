@@ -57,6 +57,7 @@ set(HEADER_SOURCES)
 
 # Create library
 add_library(wxterminal_lib STATIC ${LIB_SOURCES} ${HEADER_SOURCES})
+target_link_libraries(wxterminal_lib PUBLIC ${wxWidgets_LIBRARIES})
 
 # Build library with PIC when required (useful when linking into other
 # binaries/shared libs)

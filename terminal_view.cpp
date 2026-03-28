@@ -371,12 +371,14 @@ struct CellAttributes {
   wxColour bgColor;
   bool bold;
   bool underline;
-  bool isSelected;
+  bool isMouseSelected;
+  bool isApiSelected;
 
   bool operator==(const CellAttributes &other) const {
     return fgColor == other.fgColor && bgColor == other.bgColor &&
            bold == other.bold && underline == other.underline &&
-           isSelected == other.isSelected;
+           isMouseSelected == other.isMouseSelected &&
+           isApiSelected == other.isApiSelected;
   }
 
   bool operator!=(const CellAttributes &other) const {
@@ -430,17 +432,21 @@ void TerminalView::RenderRaw(wxDC &dc, int y, int rowIdx,
       std::swap(bgColor, fgColor);
     }
 
-    bool isSelected = isApiSelected || isMouseSelected;
-
     CellInfo info;
     info.colIdx = colIdx;
     info.ch = static_cast<wxChar>(cell.ch);
     info.attrs.fgColor = fgColor;
-    info.attrs.bgColor = isSelected ? theme.highlightBg : bgColor;
+    if (isMouseSelected) {
+      info.attrs.bgColor = theme.selectionBg;
+    } else if (isApiSelected) {
+      info.attrs.bgColor = theme.highlightBg;
+    } else {
+      info.attrs.bgColor = theme.bg;
+    }
     info.attrs.bold = cell.bold;
     info.attrs.underline = cell.underline;
-    info.attrs.isSelected = isSelected;
-
+    info.attrs.isMouseSelected = isMouseSelected;
+    info.attrs.isApiSelected = isApiSelected;
     cells.push_back(info);
   }
 
