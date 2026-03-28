@@ -468,18 +468,39 @@ void TerminalView::OnPaint(wxPaintEvent &) {
     y += m_charH;
   }
 
-  // Draw cursor (thin line caret) — only if shell viewport is visible
+  // Draw cursor (block caret) — only if shell viewport is visible
   auto cursor = m_core.Cursor();
   std::size_t viewStart = m_core.ViewStart();
   std::size_t shellStart = m_core.ShellStart();
   if (viewStart <= shellStart &&
       shellStart + cursor.y < viewStart + m_core.Rows()) {
     int screenRow = static_cast<int>(shellStart - viewStart + cursor.y);
-    dc.SetPen(*wxTRANSPARENT_PEN);
-    dc.SetBrush(theme.cursorColour);
     int cx = cursor.x * m_charW;
     int cy = screenRow * m_charH;
+
+    // Draw cursor block
+    dc.SetPen(*wxTRANSPARENT_PEN);
+    dc.SetBrush(wxBrush(theme.cursorColour));
     dc.DrawRectangle(cx, cy, m_charW, m_charH);
+
+    // Draw the character at cursor position with inverted color
+    if (screenRow >= 0 && screenRow < static_cast<int>(viewArea.size())) {
+      const auto &cursorRow = *viewArea[screenRow];
+      if (cursor.x >= 0 && cursor.x < static_cast<int>(cursorRow.size())) {
+        const auto &cell = cursorRow[cursor.x];
+
+        // Draw character with inverted cursor color (typically black on white
+        // cursor)
+        if (cell.ch != U' ') {
+          dc.SetTextForeground(
+              theme.bg); // Use background color (typically black)
+          const wxFont &font = GetCachedFont(cell.bold, cell.underline);
+          dc.SetFont(font);
+          dc.DrawText(wxString(wxUniChar(cell.ch)), cx, cy);
+          dc.SetFont(m_defaultFont);
+        }
+      }
+    }
   }
 }
 
