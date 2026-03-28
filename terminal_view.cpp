@@ -33,6 +33,12 @@ inline wxRect MakeRect(const wxPoint &p1, const wxPoint &p2) {
   return wxRect{x, y, w, h};
 }
 
+inline bool IsSelectionRectHasMinSize(const wxRect &rect) {
+  static constexpr int kMinRectSize = 2;
+  return !rect.IsEmpty() && (rect.GetSize().GetWidth() >= kMinRectSize ||
+                             rect.GetSize().GetHeight() >= kMinRectSize);
+}
+
 // Map of character key codes to their shifted values
 static const std::unordered_map<int, int> shiftMap = {
     // Numbers
@@ -71,10 +77,18 @@ TerminalView::TerminalView(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   Bind(wxEVT_LEFT_DOWN, &TerminalView::OnMouseLeftDown, this);
   Bind(wxEVT_LEFT_UP, &TerminalView::OnMouseUp, this);
   Bind(wxEVT_MOTION, &TerminalView::OnMouseMove, this);
-  Bind(wxEVT_RIGHT_DOWN, &TerminalView::OnRightClick, this);
+  Bind(wxEVT_CONTEXT_MENU, &TerminalView::OnContextMenu, this);
   Bind(wxEVT_MOUSEWHEEL, &TerminalView::OnMouseWheel, this);
   Bind(wxEVT_SET_FOCUS, &TerminalView::OnFocus, this);
   Bind(wxEVT_TIMER, &TerminalView::OnTimer, this);
+  Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent &e) {
+    e.Skip();
+    if (!m_contextMenuShowing) {
+      LOG_DEBUG() << "Leaving window!" << std::endl;
+      ClearMouseSelection();
+    }
+  });
+  Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent &) {});
 
   m_backend = terminal::PtyBackend::Create(GetEventHandler());
 
@@ -231,7 +245,7 @@ void TerminalView::ClearUserSelection() {
 }
 
 void TerminalView::ClearMouseSelection() {
-  m_selection.clear();
+  m_mouseSelectionRect = {};
   m_isDragging = false;
   Refresh();
 }
@@ -302,6 +316,33 @@ wxRect TerminalView::ViewCellToPixelsRect(const wxRect &viewrect) const {
   return wxRect(rect_x, rect_y, rect_width, rect_height);
 }
 
+wxRect TerminalView::PixelsRectToViewCellRect(const wxRect &pixelrect) const {
+  if (m_charH == 0 || m_charW == 0) {
+    return {};
+  }
+  if (pixelrect.IsEmpty()) {
+    return {};
+  }
+
+  // Convert top-left corner (round down to get the cell that contains this
+  // pixel)
+  int cell_x = pixelrect.GetX() / m_charW;
+  int cell_y = pixelrect.GetY() / m_charH;
+
+  // Convert bottom-right corner (round up to include cells touched by the pixel
+  // rect)
+  int pixel_right = pixelrect.GetRight();
+  int pixel_bottom = pixelrect.GetBottom();
+  int cell_right = (pixel_right + m_charW - 1) / m_charW - 1;
+  int cell_bottom = (pixel_bottom + m_charH - 1) / m_charH - 1;
+
+  // Calculate width and height
+  int cell_width = cell_right - cell_x + 1;
+  int cell_height = cell_bottom - cell_y + 1;
+
+  return wxRect(cell_x, cell_y, cell_width, cell_height);
+}
+
 wxColour
 TerminalView::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
                                  bool foreground) const {
@@ -341,6 +382,7 @@ struct CellAttributes {
 
 void TerminalView::RenderRaw(wxDC &dc, int y, int rowIdx,
                              const std::vector<terminal::Cell> &row,
+                             const wxRect &selected_cells,
                              size_t &draw_text_calls) {
   const auto &theme = m_core.GetTheme();
 
@@ -367,7 +409,7 @@ void TerminalView::RenderRaw(wxDC &dc, int y, int rowIdx,
     }
 
     wxPoint current_pos(colIdx, rowIdx);
-    bool isMouseSelected = m_selection.rect.Contains(current_pos);
+    bool isMouseSelected = selected_cells.Contains(current_pos);
 
     // Skip empty cells unless they are selected
     if (cell.IsEmpty() && !isApiSelected && !isMouseSelected) {
@@ -454,17 +496,19 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   m_charW = dc.GetTextExtent("X").GetWidth();
   m_charH = dc.GetTextExtent("X").GetHeight();
 
-  if (m_selection.active && !m_selection.empty()) {
+  wxRect selected_cells = {};
+  if (IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
     dc.SetBrush(wxBrush(theme.selectionBg));
     dc.SetPen(*wxTRANSPARENT_PEN);
-    dc.DrawRectangle(ViewCellToPixelsRect(m_selection.rect));
+    dc.DrawRectangle(m_mouseSelectionRect);
+    selected_cells = PixelsRectToViewCellRect(m_mouseSelectionRect);
   }
 
   int y = 0;
   auto viewArea = m_core.GetViewArea();
   for (int rowIdx = 0; rowIdx < static_cast<int>(viewArea.size()); ++rowIdx) {
     const auto &row = *viewArea[rowIdx];
-    RenderRaw(dc, y, rowIdx, row, draw_text_calls);
+    RenderRaw(dc, y, rowIdx, row, selected_cells, draw_text_calls);
     y += m_charH;
   }
 
@@ -515,72 +559,40 @@ void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
     return;
   }
 
-  // If a selection already exists, a click should clear it and stop here
-  // rather than starting a new 1-cell selection.
-  if (m_selection.active) {
-    m_selection.clear();
-    m_isDragging = false;
-    return;
+  if (!m_mouseSelectionRect.IsEmpty()) {
+    // Clear and start a new selection.
+    m_mouseSelectionRect = {};
   }
 
-  int x = evt.GetX() / m_charW;
-  int y = evt.GetY() / m_charH;
-
-  // Clamp to valid range
-  x = std::max(0, std::min(x, static_cast<int>(m_core.Cols()) - 1));
-  y = std::max(0, std::min(y, static_cast<int>(m_core.Rows()) - 1));
-
-  // Start with a 1x1 rectangle so a simple click selects the line/cell
-  // under the mouse. A zero-sized wxRect is considered empty and will not
-  // paint or copy anything.
-  m_selection.rect = wxRect(wxPoint(x, y), wxSize(1, 1));
-  m_selection.active = true;
+  m_mouseSelectionRect = wxRect(evt.GetX(), evt.GetY(), 1, 1);
   m_isDragging = true;
+  m_dirty = true;
 }
 
 void TerminalView::OnMouseMove(wxMouseEvent &evt) {
   evt.Skip();
-  if (!m_isDragging || !m_selection.active) {
+  if (!m_isDragging) {
     return;
   }
 
-  if (m_charW == 0 || m_charH == 0) {
-    return;
-  }
-
-  int x = evt.GetX() / m_charW;
-  int y = evt.GetY() / m_charH;
-
-  // Clamp to valid range
-  x = std::max(0, std::min(x, static_cast<int>(m_core.Cols()) - 1));
-  y = std::max(0, std::min(y, static_cast<int>(m_core.Rows()) - 1));
-
-  wxPoint pt1 = m_selection.rect.GetPosition();
-  wxPoint pt2{x, y};
-  m_selection.rect = MakeRect(pt1, pt2);
-  if (m_selection.rect.width == 0) {
-    m_selection.rect.width = 1;
-  }
-  if (m_selection.rect.height == 0) {
-    m_selection.rect.height = 1;
-  }
-  m_selection.active = true;
-  m_dirty = true; // Will get refreshed by the timer
+  wxPoint pt2{evt.GetX(), evt.GetY()};
+  m_mouseSelectionRect = MakeRect(m_mouseSelectionRect.GetTopLeft(), pt2);
+  m_dirty = true;
 }
 
 void TerminalView::OnMouseUp(wxMouseEvent &evt) {
+  evt.Skip();
   m_isDragging = false;
 
-  // If we have a selection, it's now complete
-  if (!m_selection.empty()) {
-    m_selection.active = true;
-  } else {
-    // Just a click, no drag - clear selection
-    m_selection.active = false;
+  if (!IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
+    m_mouseSelectionRect = {};
+    return;
   }
 
-  Refresh();
-  evt.Skip();
+  // Adjust the selection rect into cell rect.
+  wxRect cell_based_rect = PixelsRectToViewCellRect(m_mouseSelectionRect);
+  m_mouseSelectionRect = ViewCellToPixelsRect(cell_based_rect);
+  m_dirty = true;
 }
 
 void TerminalView::OnMouseWheel(wxMouseEvent &evt) {
@@ -599,16 +611,14 @@ void TerminalView::OnMouseWheel(wxMouseEvent &evt) {
     m_core.SetViewStart(0);
   else
     m_core.SetViewStart(vs + static_cast<std::size_t>(-lines));
-
-  m_selection.active = false; // Cancel any selection when scrolling or the
-                              // selected area will scroll with us
+  m_mouseSelectionRect = {};
   m_dirty = true;
 }
 
-void TerminalView::OnRightClick(wxMouseEvent &evt) {
+void TerminalView::OnContextMenu(wxContextMenuEvent &evt) {
   wxMenu menu;
 
-  if (m_selection.active) {
+  if (IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
     menu.Append(wxID_COPY, "Copy");
   }
   menu.Append(wxID_PASTE, "Paste");
@@ -616,20 +626,22 @@ void TerminalView::OnRightClick(wxMouseEvent &evt) {
   menu.Bind(wxEVT_MENU, &TerminalView::OnCopy, this, wxID_COPY);
   menu.Bind(wxEVT_MENU, &TerminalView::OnPaste, this, wxID_PASTE);
 
+  m_contextMenuShowing = true;
   PopupMenu(&menu);
+  m_contextMenuShowing = false;
   evt.Skip();
 }
 
 void TerminalView::OnCopy(wxCommandEvent &evt) {
   LOG_DEBUG() << "Copy is called!" << std::endl;
-  if (!m_selection.active) {
+  if (!IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
     LOG_DEBUG() << "No selection is active - will do nothing" << std::endl;
     return;
   }
 
   // Get the selected text
   wxString selection;
-  wxRect rect = m_selection.rect;
+  wxRect rect = PixelsRectToViewCellRect(m_mouseSelectionRect);
   LOG_DEBUG() << "Copying content: " << rect << std::endl;
   auto viewArea = m_core.GetViewArea();
   for (int y = rect.GetTopLeft().y;
@@ -693,7 +705,7 @@ void TerminalView::OnCharHook(wxKeyEvent &evt) {
     SendTab();
     return;
   } else if (key == WXK_ESCAPE) {
-    if (m_selection.active) {
+    if (IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
       ClearMouseSelection();
       return;
     }

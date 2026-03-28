@@ -81,7 +81,7 @@ private:
   void OnPaint(wxPaintEvent &evt);
   void RenderRaw(wxDC &dc, int y, int rowIdx,
                  const std::vector<terminal::Cell> &row,
-                 size_t &draw_text_calls);
+                 const wxRect &selected_cells, size_t &draw_text_calls);
   void OnSize(wxSizeEvent &evt);
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);
@@ -89,7 +89,7 @@ private:
   void OnMouseLeftDown(wxMouseEvent &evt);
   void OnMouseMove(wxMouseEvent &evt);
   void OnMouseUp(wxMouseEvent &evt);
-  void OnRightClick(wxMouseEvent &evt);
+  void OnContextMenu(wxContextMenuEvent &evt);
   void OnMouseWheel(wxMouseEvent &evt);
   void OnFocus(wxFocusEvent &evt);
   void OnCopy(wxCommandEvent &evt);
@@ -99,6 +99,7 @@ private:
   const wxFont &GetCachedFont(bool bold, bool underlined) const;
 
   wxRect ViewCellToPixelsRect(const wxRect &viewrect) const;
+  wxRect PixelsRectToViewCellRect(const wxRect &pixelrect) const;
   /**
    * Handles terminal-specific special key events by translating supported
    * wxWidgets key codes into ANSI escape sequences and sending them to the
@@ -116,15 +117,6 @@ private:
    * was sent; returns false if the key is not handled by this method.
    */
   bool HandleSpecialKeys(wxKeyEvent &key_event);
-  struct Selection {
-    wxRect rect; // Logical selection (rows / cols)
-    bool active{false};
-    inline bool empty() const { return rect.width == 0 && rect.height == 0; }
-    inline void clear() {
-      rect = {};
-      active = false;
-    }
-  };
 
   struct ApiSelection {
     std::size_t row{0}, col{0}, endCol{0};
@@ -133,7 +125,7 @@ private:
 
   terminal::TerminalCore m_core;
   std::unique_ptr<terminal::PtyBackend> m_backend;
-  Selection m_selection;
+  wxRect m_mouseSelectionRect{};
   ApiSelection m_userSelection;
   bool m_isDragging{false};
   bool m_dirty{true};
@@ -147,4 +139,5 @@ private:
   wxTimer m_timer;
   int m_charW{0};
   int m_charH{0};
+  bool m_contextMenuShowing{false};
 };
