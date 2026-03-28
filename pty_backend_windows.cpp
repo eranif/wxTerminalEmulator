@@ -108,16 +108,14 @@ std::string GetDefaultShell() {
   // Favour PowerShell
   static const wxString POWER_SHELL =
       R"(C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe)";
-  if (wxFileName::FileExists(POWER_SHELL)) {
-    return POWER_SHELL.ToStdString(wxConvUTF8);
-  }
+  static const wxString CMD_SHELL = R"(C:\Windows\System32\cmd.exe)";
 
   char buf[MAX_PATH] = {};
   WORD n = GetEnvironmentVariableA("COMSPEC", buf, MAX_PATH);
   if (n > 0 && n < MAX_PATH)
     return buf;
 
-  return "powershell.exe";
+  return CMD_SHELL.ToStdString(wxConvUTF8);
 }
 
 struct HandleCloser {
@@ -352,7 +350,6 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
 
   PROCESS_INFORMATION pi{};
   DWORD flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
-
   BOOL ok = CreateProcessW(nullptr, mutableCmd.data(), nullptr, nullptr, TRUE,
                            flags, nullptr, nullptr, &siex.StartupInfo, &pi);
 
