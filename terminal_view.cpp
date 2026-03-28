@@ -60,12 +60,6 @@ static const std::unordered_map<int, int> shiftMap = {
     {'=', '+'},
     {'`', '~'}};
 
-#ifdef __WXMAC__
-constexpr int kDefaultFontSize = 20;
-#else
-constexpr int kDefaultFontSize = 14;
-#endif
-
 TerminalView::TerminalView(wxWindow *parent) : wxPanel(parent, wxID_ANY) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   UpdateFontCache();
@@ -235,16 +229,7 @@ void TerminalView::ClearMouseSelection() {
 }
 
 void TerminalView::UpdateFontCache() {
-  m_defaultFont =
-#ifdef __WXMAC__
-      wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
-             wxFONTWEIGHT_NORMAL, false, "Menlo");
-#elif defined(__WXMSW__)
-      wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
-             wxFONTWEIGHT_NORMAL, false, "Consolas");
-#else
-      wxFont(wxFontInfo(kDefaultFontSize).Family(wxFONTFAMILY_TELETYPE));
-#endif
+  m_defaultFont = m_core.GetTheme().font;
   m_defaultFontBold = m_defaultFont;
   m_defaultFontBold.MakeBold();
 

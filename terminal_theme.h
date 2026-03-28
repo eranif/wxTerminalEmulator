@@ -2,11 +2,21 @@
 
 #include <cstdint>
 #include <wx/colour.h>
+#include <wx/font.h>
+
+#ifdef __WXMAC__
+constexpr int kDefaultFontSize = 20;
+#else
+constexpr int kDefaultFontSize = 14;
+#endif
 
 struct wxTerminalTheme {
   // Default foreground/background
   wxColour fg{0xC0, 0xC0, 0xC0};
   wxColour bg{0x00, 0x00, 0x00};
+
+  // Base font used by the terminal view
+  wxFont font{MakeDefaultFont()};
 
   // Normal colours
   wxColour black{0x00, 0x00, 0x00};
@@ -38,6 +48,18 @@ struct wxTerminalTheme {
   // Convert wxColour to packed uint32_t (RGB)
   static std::uint32_t ToU32(const wxColour &c) {
     return (c.Red() << 16) | (c.Green() << 8) | c.Blue();
+  }
+
+  static inline wxFont MakeDefaultFont() {
+#ifdef __WXMAC__
+    return wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
+                  wxFONTWEIGHT_NORMAL, false, "Menlo");
+#elif defined(__WXMSW__)
+    return wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
+                  wxFONTWEIGHT_NORMAL, false, "Consolas");
+#else
+    return wxFont(wxFontInfo(kDefaultFontSize).Family(wxFONTFAMILY_TELETYPE));
+#endif
   }
 
   // Helper: get ANSI colour by index (0-7) + bright flag
@@ -75,6 +97,7 @@ struct wxTerminalTheme {
     wxTerminalTheme t;
     t.fg = wxColour(0x00, 0x00, 0x00);
     t.bg = wxColour(0xFF, 0xFF, 0xFF);
+    t.font = MakeDefaultFont();
     t.black = wxColour(0x00, 0x00, 0x00);
     t.red = wxColour(0xC0, 0x00, 0x00);
     t.green = wxColour(0x00, 0x80, 0x00);

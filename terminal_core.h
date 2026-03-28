@@ -1,5 +1,7 @@
 #pragma once
 
+#include "terminal_theme.h"
+#include "wx/colour.h"
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -8,8 +10,6 @@
 #include <string>
 #include <vector>
 #include <wx/gdicmn.h>
-
-#include "terminal_theme.h"
 
 namespace terminal {
 
