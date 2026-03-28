@@ -289,16 +289,42 @@ TerminalView::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
   return foreground ? theme.fg : theme.bg;
 }
 
+struct CellAttributes {
+  wxColour fgColor;
+  wxColour bgColor;
+  bool bold;
+  bool underline;
+  bool isSelected;
+
+  bool operator==(const CellAttributes &other) const {
+    return fgColor == other.fgColor && bgColor == other.bgColor &&
+           bold == other.bold && underline == other.underline &&
+           isSelected == other.isSelected;
+  }
+
+  bool operator!=(const CellAttributes &other) const {
+    return !(*this == other);
+  }
+};
+
 void TerminalView::RenderRaw(wxDC *dc, int y, int rowIdx,
                              const std::vector<terminal::Cell> &row,
                              size_t &draw_text_calls) {
-  int x = 0;
-  int colIdx = 0;
   const auto &theme = m_core.GetTheme();
-  for (const auto &cell : row) {
-    // Check selections before skipping empty cells
-    bool isMouseSelected = false;
-    wxPoint current_pos(colIdx, rowIdx);
+
+  // Build a list of cells with their attributes, skipping truly empty ones
+  struct CellInfo {
+    int colIdx;
+    wxChar ch;
+    CellAttributes attrs;
+  };
+  std::vector<CellInfo> cells;
+  cells.reserve(row.size());
+
+  for (int colIdx = 0; colIdx < static_cast<int>(row.size()); ++colIdx) {
+    const auto &cell = row[colIdx];
+
+    // Check if cell is selected
     bool isApiSelected = false;
     if (m_userSelection.active) {
       std::size_t absRow = m_core.ViewStart() + rowIdx;
@@ -308,46 +334,70 @@ void TerminalView::RenderRaw(wxDC *dc, int y, int rowIdx,
            static_cast<std::size_t>(colIdx) < m_userSelection.endCol);
     }
 
+    wxPoint current_pos(colIdx, rowIdx);
+    bool isMouseSelected = m_selection.rect.Contains(current_pos);
+
     // Skip empty cells unless they are selected
-    if (cell.IsEmpty() && !isApiSelected) {
-      x += m_charW;
-      colIdx++;
+    if (cell.IsEmpty() && !isApiSelected && !isMouseSelected) {
       continue;
     }
 
+    // Determine colors
     wxColour bgColor = GetColourFromTheme(
         cell.colours ? cell.colours->bg : std::nullopt, false);
     wxColour fgColor = GetColourFromTheme(
         cell.colours ? cell.colours->fg : std::nullopt, true);
+
     if (cell.reverse) {
       std::swap(bgColor, fgColor);
     }
 
-    if (!cell.IsEmpty() && !m_selection.rect.Contains(current_pos) &&
-        !isApiSelected) {
-      dc->SetBrush(wxBrush(bgColor));
-      dc->SetPen(*wxTRANSPARENT_PEN);
-      dc->DrawRectangle(x, y, m_charW, m_charH);
-    } else if (isApiSelected) {
-      dc->SetBrush(wxBrush(theme.highlightBg));
-      dc->SetPen(*wxTRANSPARENT_PEN);
-      dc->DrawRectangle(x, y, m_charW, m_charH);
+    bool isSelected = isApiSelected || isMouseSelected;
+
+    CellInfo info;
+    info.colIdx = colIdx;
+    info.ch = static_cast<wxChar>(cell.ch);
+    info.attrs.fgColor = fgColor;
+    info.attrs.bgColor = isSelected ? theme.highlightBg : bgColor;
+    info.attrs.bold = cell.bold;
+    info.attrs.underline = cell.underline;
+    info.attrs.isSelected = isSelected;
+
+    cells.push_back(info);
+  }
+
+  // Now group and render consecutive cells with the same attributes
+  if (cells.empty()) {
+    return;
+  }
+
+  for (size_t i = 0; i < cells.size();) {
+    const auto &firstCell = cells[i];
+    wxString text;
+    text.Append(firstCell.ch);
+
+    size_t j = i + 1;
+    // Group consecutive cells with same attributes
+    while (j < cells.size() && cells[j].attrs == firstCell.attrs &&
+           cells[j].colIdx == cells[j - 1].colIdx + 1) {
+      text.Append(cells[j].ch);
+      ++j;
     }
 
-    dc->SetTextForeground(fgColor);
-    dc->SetFont(GetCachedFont(cell.bold, cell.underline));
+    // Draw background for the entire group
+    int x = firstCell.colIdx * m_charW;
+    int width = (cells[j - 1].colIdx - firstCell.colIdx + 1) * m_charW;
+    dc->SetBrush(wxBrush(firstCell.attrs.bgColor));
+    dc->SetPen(*wxTRANSPARENT_PEN);
+    dc->DrawRectangle(x, y, width, m_charH);
 
-    wxString ch{wxUniChar(cell.ch), 1};
-    dc->DrawText(ch, x, y);
+    // Draw text for the entire group
+    dc->SetTextForeground(firstCell.attrs.fgColor);
+    dc->SetFont(GetCachedFont(firstCell.attrs.bold, firstCell.attrs.underline));
+    dc->DrawText(text, x, y);
     draw_text_calls++;
 
-    if (cell.bold || cell.underline) {
-      // Restore font
-      dc->SetFont(m_defaultFont);
-    }
-
-    x += m_charW;
-    colIdx++;
+    i = j;
   }
 }
 
