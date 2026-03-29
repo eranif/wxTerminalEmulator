@@ -99,6 +99,7 @@ private:
   void OnFocus(wxFocusEvent &evt);
   void OnCopy(wxCommandEvent &evt);
   void OnPaste(wxCommandEvent &evt);
+  void OnClearBuffer(wxCommandEvent &evt);
   void DebugDumpViewArea();
   void UpdateFontCache();
   const wxFont &GetCachedFont(bool bold, bool underlined) const;

@@ -439,20 +439,22 @@ void TerminalView::RenderRowNoGrouping(wxDC &dc, int y, int rowIdx,
     return;
   }
 
+  std::optional<CellAttributes> prev_cell{std::nullopt};
   for (size_t i = 0; i < cells.size(); ++i) {
     const auto &cell = cells[i];
 
     // Draw background for the entire group
     int x = cell.colIdx * m_charW;
-    int width = m_charW;
-    dc.SetBrush(wxBrush(cell.attrs.bgColor));
-    dc.SetPen(*wxTRANSPARENT_PEN);
-    dc.DrawRectangle(x, y, width, m_charH);
+    if (!prev_cell.has_value() || prev_cell.value() != cell.attrs) {
+      dc.SetBrush(wxBrush(cell.attrs.bgColor));
+      dc.SetFont(GetCachedFont(cell.attrs.bold, cell.attrs.underline));
+      dc.SetPen(*wxTRANSPARENT_PEN);
+      dc.SetTextForeground(cell.attrs.fgColor);
+      prev_cell = cell.attrs;
+    }
 
-    // Draw text for the entire group
-    dc.SetTextForeground(cell.attrs.fgColor);
-    dc.SetFont(GetCachedFont(cell.attrs.bold, cell.attrs.underline));
     wxString cell_content(wxUniChar(cell.ch));
+    dc.DrawRectangle(x, y, m_charW, m_charH);
     dc.DrawText(cell_content, x, y);
     draw_text_calls++;
   }
@@ -646,12 +648,15 @@ void TerminalView::OnContextMenu(wxContextMenuEvent &evt) {
   wxMenu menu;
 
   if (IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
-    menu.Append(wxID_COPY, "Copy");
+    menu.Append(wxID_COPY, _("Copy"));
   }
-  menu.Append(wxID_PASTE, "Paste");
+  menu.Append(wxID_PASTE, _("Paste"));
+  menu.AppendSeparator();
+  menu.Append(wxID_CLEAR, _("Clear buffer"));
 
   menu.Bind(wxEVT_MENU, &TerminalView::OnCopy, this, wxID_COPY);
   menu.Bind(wxEVT_MENU, &TerminalView::OnPaste, this, wxID_PASTE);
+  menu.Bind(wxEVT_MENU, &TerminalView::OnClearBuffer, this, wxID_CLEAR);
 
   m_contextMenuShowing = true;
   PopupMenu(&menu);
@@ -695,6 +700,12 @@ void TerminalView::OnCopy(wxCommandEvent &evt) {
     wxTheClipboard->Close();
   }
   ClearMouseSelection();
+  Refresh();
+}
+
+void TerminalView::OnClearBuffer(wxCommandEvent &evt) {
+  wxUnusedVar(evt);
+  Feed("\033[2J\033[3J");
   Refresh();
 }
 

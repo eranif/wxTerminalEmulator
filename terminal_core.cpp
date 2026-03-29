@@ -643,8 +643,15 @@ void TerminalCore::ParseEscape(const std::string &seq) {
       if (abs < m_buffer.size())
         for (std::size_t c = 0; c <= m_cursor.x && c < m_cols; ++c)
           m_buffer[abs][c] = Cell{};
-    } else if (mode == 2 || mode == 3) {
+    } else if (mode == 2) {
       ClearScreen();
+    } else if (mode == 3) {
+      ClearScreen();
+      while (m_buffer.size() > m_rows)
+        m_buffer.pop_front();
+      m_viewStart = 0;
+      m_shellStart = 0;
+      m_cursor = {0, 0};
     }
     break;
   }
@@ -911,9 +918,8 @@ void TerminalCore::ApplySgr(const std::string &params) {
           m_attr.SetFgColour(MakePaletteSpec(codes[i + 2]));
           i += 2;
         } else if (codes[i + 1] == 2 && i + 4 < codes.size()) {
-          m_attr.SetFgColour(MakeTrueColorSpec((codes[i + 2] << 16) |
-                                               (codes[i + 3] << 8) |
-                                               codes[i + 4]));
+          m_attr.SetFgColour(MakeTrueColorSpec(
+              (codes[i + 2] << 16) | (codes[i + 3] << 8) | codes[i + 4]));
           i += 4;
         }
       }
@@ -924,9 +930,8 @@ void TerminalCore::ApplySgr(const std::string &params) {
           m_attr.SetBgColour(MakePaletteSpec(codes[i + 2]));
           i += 2;
         } else if (codes[i + 1] == 2 && i + 4 < codes.size()) {
-          m_attr.SetBgColour(MakeTrueColorSpec((codes[i + 2] << 16) |
-                                               (codes[i + 3] << 8) |
-                                               codes[i + 4]));
+          m_attr.SetBgColour(MakeTrueColorSpec(
+              (codes[i + 2] << 16) | (codes[i + 3] << 8) | codes[i + 4]));
           i += 4;
         }
       }
