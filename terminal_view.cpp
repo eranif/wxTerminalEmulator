@@ -117,7 +117,7 @@ TerminalView::~TerminalView() {
 void TerminalView::Feed(const std::string &data) {
   m_core.PutData(data);
   m_core.SetViewStart(m_core.ShellStart());
-  m_dirty = true;
+  m_needsRepaint = true;
 }
 
 void TerminalView::SetTerminalSizeFromClient() {
@@ -193,9 +193,8 @@ void TerminalView::SetTheme(const wxTerminalTheme &theme) {
   m_core.SetTheme(theme);
   UpdateFontCache();
   m_charH = m_charW = 0; // This needs to be recalculated based on the new font.
-  m_dirty = true;
+  m_needsRepaint = true;
   PostSizeEvent();
-  Refresh();
 }
 
 const wxTerminalTheme &TerminalView::GetTheme() const {
@@ -204,7 +203,7 @@ const wxTerminalTheme &TerminalView::GetTheme() const {
 
 void TerminalView::ScrollToLastLine() {
   m_core.SetViewStart(m_core.ShellStart());
-  Refresh();
+  m_needsRepaint = true;
 }
 
 std::size_t TerminalView::GetLineCount() const { return m_core.TotalLines(); }
@@ -219,7 +218,7 @@ void TerminalView::CenterLine(std::size_t line) {
   std::size_t half = m_core.Rows() / 2;
   std::size_t vs = (line > half) ? line - half : 0;
   m_core.SetViewStart(vs);
-  Refresh();
+  m_needsRepaint = true;
 }
 
 wxString TerminalView::GetLine(std::size_t line) const {
@@ -240,18 +239,18 @@ void TerminalView::SetUserSelection(std::size_t col, std::size_t row,
   }
   std::size_t endCol = std::min(col + count, m_core.Cols());
   m_userSelection = {row, col, endCol, true};
-  Refresh();
+  m_needsRepaint = true;
 }
 
 void TerminalView::ClearUserSelection() {
   m_userSelection.active = false;
-  Refresh();
+  m_needsRepaint = true;
 }
 
 void TerminalView::ClearMouseSelection() {
   m_mouseSelectionRect = {};
   m_isDragging = false;
-  Refresh();
+  m_needsRepaint = true;
 }
 
 void TerminalView::UpdateFontCache() {
@@ -598,7 +597,7 @@ void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
 
   m_mouseSelectionRect = wxRect(evt.GetX(), evt.GetY(), 1, 1);
   m_isDragging = true;
-  m_dirty = true;
+  m_needsRepaint = true;
 }
 
 void TerminalView::OnMouseMove(wxMouseEvent &evt) {
@@ -609,7 +608,7 @@ void TerminalView::OnMouseMove(wxMouseEvent &evt) {
 
   wxPoint pt2{evt.GetX(), evt.GetY()};
   m_mouseSelectionRect = MakeRect(m_mouseSelectionRect.GetTopLeft(), pt2);
-  m_dirty = true;
+  m_needsRepaint = true;
 }
 
 void TerminalView::OnMouseUp(wxMouseEvent &evt) {
@@ -624,7 +623,7 @@ void TerminalView::OnMouseUp(wxMouseEvent &evt) {
   // Adjust the selection rect into cell rect.
   wxRect cell_based_rect = PixelsRectToViewCellRect(m_mouseSelectionRect);
   m_mouseSelectionRect = ViewCellToPixelsRect(cell_based_rect);
-  m_dirty = true;
+  m_needsRepaint = true;
 }
 
 void TerminalView::OnMouseWheel(wxMouseEvent &evt) {
@@ -644,7 +643,7 @@ void TerminalView::OnMouseWheel(wxMouseEvent &evt) {
   else
     m_core.SetViewStart(vs + static_cast<std::size_t>(-lines));
   m_mouseSelectionRect = {};
-  m_dirty = true;
+  m_needsRepaint = true;
 }
 
 void TerminalView::OnContextMenu(wxContextMenuEvent &evt) {
@@ -703,13 +702,13 @@ void TerminalView::OnCopy(wxCommandEvent &evt) {
     wxTheClipboard->Close();
   }
   ClearMouseSelection();
-  Refresh();
+  m_needsRepaint = true;
 }
 
 void TerminalView::OnClearBuffer(wxCommandEvent &evt) {
   wxUnusedVar(evt);
   Feed("\033[2J\033[3J");
-  Refresh();
+  m_needsRepaint = true;
 }
 
 void TerminalView::OnPaste(wxCommandEvent &evt) {
@@ -927,8 +926,8 @@ bool TerminalView::HandleSpecialKeys(wxKeyEvent &key_event) {
 }
 
 void TerminalView::OnTimer(wxTimerEvent &evt) {
-  if (m_dirty) {
-    m_dirty = false;
+  if (m_needsRepaint) {
+    m_needsRepaint = false;
     Refresh(false);
   }
 }

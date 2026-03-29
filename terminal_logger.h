@@ -77,15 +77,18 @@ private:
 #define LOG_ERROR() LOG(TerminalLogLevel::kError)
 #define LOG_TRACE() LOG(TerminalLogLevel::kTrace)
 
-#define LOG_IF_TRACE if (TerminalLogger::Get().GetLevel() <= TerminalLogLevel::kTrace)
-#define LOG_IF_DEBUG if (TerminalLogger::Get().GetLevel() <= TerminalLogLevel::kDebug)
+#define LOG_IF_TRACE                                                           \
+  if (TerminalLogger::Get().GetLevel() <= TerminalLogLevel::kTrace)
+#define LOG_IF_DEBUG                                                           \
+  if (TerminalLogger::Get().GetLevel() <= TerminalLogLevel::kDebug)
 
 struct LogFunction {
   wxString function_name;
-  wxStopWatch sw;
+  std::unique_ptr<wxStopWatch> stop_watch_{nullptr};
   std::array<size_t, 10> counters{};
   std::array<wxString, 10> counter_names{};
   size_t next_counter{0};
+  TerminalLogLevel log_level_{TerminalLogLevel::kTrace};
 
   /**
    * @brief Starts timing a function scope for later debug logging.
@@ -95,8 +98,13 @@ struct LogFunction {
    *
    * @param funcname Name of the function/scope being measured.
    */
-  LogFunction(const wxString &funcname) : function_name{funcname} {
-    sw.Start();
+  LogFunction(const wxString &funcname,
+              TerminalLogLevel log_level = TerminalLogLevel::kTrace)
+      : function_name{funcname}, log_level_{log_level} {
+    if (TerminalLogger::Get().GetLevel() <= log_level_) {
+      stop_watch_ = std::make_unique<wxStopWatch>();
+      stop_watch_->Start();
+    }
   }
 
   /**
@@ -106,11 +114,14 @@ struct LogFunction {
    * then logs each counter added through AddCounter().
    */
   ~LogFunction() {
-    LOG_TRACE() << "Function: " << function_name
-                << " completed in:" << sw.TimeInMicro().ToLong() << std::endl;
-    // Print counters
-    for (size_t i = 0; i < next_counter; ++i) {
-      LOG_TRACE() << counter_names[i] << ": " << counters[i] << std::endl;
+    if (stop_watch_) {
+      LOG(log_level_) << "Function: " << function_name
+                      << " completed in:" << stop_watch_->TimeInMicro().ToLong()
+                      << std::endl;
+      // Print counters
+      for (size_t i = 0; i < next_counter; ++i) {
+        LOG(log_level_) << counter_names[i] << ": " << counters[i] << std::endl;
+      }
     }
   }
 
@@ -125,7 +136,7 @@ struct LogFunction {
    * @return Reference to the stored counter value.
    */
   size_t &AddCounter(const wxString &name) {
-    if (next_counter >= 10) {
+    if (!stop_watch_ || next_counter >= 10) {
       static size_t null_counter{0};
       return null_counter;
     }

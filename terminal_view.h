@@ -163,7 +163,7 @@ private:
   wxRect m_mouseSelectionRect{};
   ApiSelection m_userSelection;
   bool m_isDragging{false};
-  bool m_dirty{true};
+  bool m_needsRepaint{true};
   int m_scrollOffset{0}; // 0 = at bottom, >0 = scrolled back
   int m_wheelAccum{0};
 
