@@ -16,13 +16,6 @@
 #include <wx/msgdlg.h>
 #include <wx/window.h>
 
-#ifdef __WXMSW__
-// We need GCDC on Windows to properly display Unicode characters.
-constexpr bool kAlwaysGCDC = true;
-#else
-constexpr bool kAlwaysGCDC = false;
-#endif
-
 #ifdef __WXOSX__
 #include <CoreGraphics/CoreGraphics.h>
 #include <CoreText/CoreText.h>
@@ -90,7 +83,7 @@ TerminalView::TerminalView(wxWindow *parent, const wxString &shellCommand)
   Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent &e) {
     e.Skip();
     if (!m_contextMenuShowing) {
-      LOG_DEBUG() << "Leaving window!" << std::endl;
+      TLOG_DEBUG() << "Leaving window!" << std::endl;
       ClearMouseSelection();
     }
   });
@@ -135,8 +128,8 @@ void TerminalView::SetTerminalSizeFromClient() {
   if (cols == m_core.Cols() && rows == m_core.Rows())
     return;
 
-  LOG_DEBUG() << "Resize: " << cols << "x" << rows << " (charW=" << m_charW
-              << " charH=" << m_charH << ")" << std::endl;
+  TLOG_DEBUG() << "Resize: " << cols << "x" << rows << " (charW=" << m_charW
+               << " charH=" << m_charH << ")" << std::endl;
   m_core.SetViewportSize(rows, cols);
   if (m_backend) {
     m_backend->Resize(static_cast<int>(cols), static_cast<int>(rows));
@@ -148,7 +141,7 @@ void TerminalView::StartProcess(const wxString &command) {
     return;
   m_backend = terminal::PtyBackend::Create(GetEventHandler());
   m_shell_command = command;
-  LOG_DEBUG() << "Starting shell with command: " << command << std::endl;
+  TLOG_DEBUG() << "Starting shell with command: " << command << std::endl;
   bool ok =
       m_backend && m_backend->Start(m_shell_command.ToStdString(wxConvUTF8),
                                     [this](const std::string &out) {
@@ -281,7 +274,7 @@ void TerminalView::UpdateFontCache() {
 }
 
 void TerminalView::DebugDumpViewArea() {
-  LOG_IF_DEBUG {
+  TLOG_IF_DEBUG {
     auto viewArea = m_core.GetViewArea();
     size_t row_num{0};
     for (const auto &row : viewArea) {
@@ -295,8 +288,8 @@ void TerminalView::DebugDumpViewArea() {
         }
       }
       wxString line_utf8 = wxString::FromUTF8(line);
-      LOG_DEBUG() << wxString::Format("%03d", row_num) << line_utf8
-                  << std::endl;
+      TLOG_DEBUG() << wxString::Format("%03d", row_num) << line_utf8
+                   << std::endl;
       row_num++;
     }
   }
@@ -740,8 +733,8 @@ void TerminalView::OnPaint(wxPaintEvent &) {
 }
 
 void TerminalView::OnSize(wxSizeEvent &evt) {
-  LOG_DEBUG() << "OnSize: " << GetClientSize().GetWidth() << "x"
-              << GetClientSize().GetHeight() << std::endl;
+  TLOG_DEBUG() << "OnSize: " << GetClientSize().GetWidth() << "x"
+               << GetClientSize().GetHeight() << std::endl;
   SetTerminalSizeFromClient();
   m_needsRepaint = false;
   Refresh();
@@ -833,18 +826,18 @@ void TerminalView::OnContextMenu(wxContextMenuEvent &evt) {
 }
 
 void TerminalView::OnCopy(wxCommandEvent &evt) {
-  LOG_DEBUG() << "Copy is called!" << std::endl;
+  TLOG_DEBUG() << "Copy is called!" << std::endl;
   if (!IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
-    LOG_DEBUG() << "No selection is active - will "
-                   "do nothing"
-                << std::endl;
+    TLOG_DEBUG() << "No selection is active - will "
+                    "do nothing"
+                 << std::endl;
     return;
   }
 
   // Get the selected text
   wxString selection;
   wxRect rect = PixelsRectToViewCellRect(m_mouseSelectionRect);
-  LOG_DEBUG() << "Copying content: " << rect << std::endl;
+  TLOG_DEBUG() << "Copying content: " << rect << std::endl;
   auto viewArea = m_core.GetViewArea();
   for (int y = rect.GetTopLeft().y;
        y <= rect.GetBottomLeft().y && y < static_cast<int>(viewArea.size());
@@ -861,8 +854,8 @@ void TerminalView::OnCopy(wxCommandEvent &evt) {
     selection.RemoveLast();
   }
 
-  LOG_DEBUG() << "Copying:" << selection.size() << " chars. Content:\n"
-              << selection << std::endl;
+  TLOG_DEBUG() << "Copying:" << selection.size() << " chars. Content:\n"
+               << selection << std::endl;
   // Copy to clipboard
   if (wxTheClipboard->Open()) {
     wxTheClipboard->SetData(new wxTextDataObject(selection));
@@ -880,7 +873,7 @@ void TerminalView::OnClearBuffer(wxCommandEvent &evt) {
 }
 
 void TerminalView::OnPaste(wxCommandEvent &evt) {
-  LOG_DEBUG() << "Paste is called!" << std::endl;
+  TLOG_DEBUG() << "Paste is called!" << std::endl;
   if (!wxTheClipboard->Open())
     return;
 
@@ -963,7 +956,7 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
     // Handle Ctrl+C - Copy if text is selected,
     // otherwise send SIGINT
     if (key == 'C' || key == 'c') {
-      LOG_DEBUG() << "Sending Ctrl-C" << std::endl;
+      TLOG_DEBUG() << "Sending Ctrl-C" << std::endl;
       SendCtrlC();
       return;
     }

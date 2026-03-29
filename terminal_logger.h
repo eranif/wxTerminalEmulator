@@ -71,15 +71,15 @@ private:
   wxFFile m_file;
 };
 
-#define LOG(level) TerminalLogger::Get().Log(level)
-#define LOG_DEBUG() LOG(TerminalLogLevel::kDebug)
-#define LOG_WARN() LOG(TerminalLogLevel::kWarn)
-#define LOG_ERROR() LOG(TerminalLogLevel::kError)
-#define LOG_TRACE() LOG(TerminalLogLevel::kTrace)
+#define TLOG(level) TerminalLogger::Get().Log(level)
+#define TLOG_DEBUG() TLOG(TerminalLogLevel::kDebug)
+#define TLOG_WARN() TLOG(TerminalLogLevel::kWarn)
+#define TLOG_ERROR() TLOG(TerminalLogLevel::kError)
+#define TLOG_TRACE() TLOG(TerminalLogLevel::kTrace)
 
-#define LOG_IF_TRACE                                                           \
+#define TLOG_IF_TRACE                                                          \
   if (TerminalLogger::Get().GetLevel() <= TerminalLogLevel::kTrace)
-#define LOG_IF_DEBUG                                                           \
+#define TLOG_IF_DEBUG                                                          \
   if (TerminalLogger::Get().GetLevel() <= TerminalLogLevel::kDebug)
 
 struct LogFunction {
@@ -115,13 +115,12 @@ struct LogFunction {
    */
   ~LogFunction() {
     if (stop_watch_) {
-      LOG(log_level_) << "Function: " << function_name
-                      << " completed in:" << stop_watch_->TimeInMicro().ToLong()
-                      << std::endl;
+      TLOG(log_level_) << "Function: " << function_name << " completed in:"
+                       << stop_watch_->TimeInMicro().ToLong() << std::endl;
       // Print counters
       for (size_t i = 0; i < next_counter; ++i) {
-        LOG(log_level_) << "    > " << counter_names[i] << ": " << counters[i]
-                        << std::endl;
+        TLOG(log_level_) << "    > " << counter_names[i] << ": " << counters[i]
+                         << std::endl;
       }
     }
   }

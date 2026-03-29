@@ -106,8 +106,6 @@ std::wstring Utf8ToWide(const std::string &utf8) {
 
 std::string GetDefaultShell() {
   // Favour PowerShell
-  static const wxString POWER_SHELL =
-      R"(C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe)";
   static const wxString CMD_SHELL = R"(C:\Windows\System32\cmd.exe)";
 
   char buf[MAX_PATH] = {};
@@ -146,8 +144,11 @@ bool WindowsPtyBackend::Start(const std::string &command,
   m_onOutput = std::move(on_output);
 
   if (!Api().Load()) {
-    if (m_onOutput)
+    TLOG_WARN() << "[Pseudo console APIs unavailable on this system]"
+                << std::endl;
+    if (m_onOutput) {
       m_onOutput("[Pseudo console APIs unavailable on this system]\r\n");
+    }
     return false;
   }
 
@@ -160,8 +161,11 @@ bool WindowsPtyBackend::Start(const std::string &command,
                                           : Api().ClosePseudoConsoleDirect;
 
   if (!createPc || !resizePc || !closePc) {
-    if (m_onOutput)
+    if (m_onOutput) {
+      TLOG_WARN() << "[ConPTY functions not found. Windows 10 1809+ required]"
+                  << std::endl;
       m_onOutput("[ConPTY functions not found. Windows 10 1809+ required]\r\n");
+    }
     return false;
   }
 
@@ -169,8 +173,10 @@ bool WindowsPtyBackend::Start(const std::string &command,
       command.empty() ? GetDefaultShell() : command;
 
   if (!CreateConPty(shellCommand)) {
-    if (m_onOutput)
+    if (m_onOutput) {
+      TLOG_WARN() << "[Failed to create ConPTY backend]" << std::endl;
       m_onOutput("[Failed to create ConPTY backend]\r\n");
+    }
     return false;
   }
 
@@ -341,7 +347,7 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
 
   std::wstring cmdline = Utf8ToWide(command);
   if (cmdline.empty()) {
-    cmdline = L"cmd.exe";
+    cmdline = LR"(C:\Windows\System32\cmd.exe)";
   }
 
   // CreateProcessW may modify the buffer.
@@ -350,7 +356,7 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
 
   PROCESS_INFORMATION pi{};
   DWORD flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
-  BOOL ok = CreateProcessW(nullptr, mutableCmd.data(), nullptr, nullptr, TRUE,
+  BOOL ok = CreateProcessW(cmdline.data(), nullptr, nullptr, nullptr, FALSE,
                            flags, nullptr, nullptr, &siex.StartupInfo, &pi);
 
   DeleteProcThreadAttributeList(siex.lpAttributeList);
@@ -433,7 +439,7 @@ void WindowsPtyBackend::WriterThread() {
       }
     }
   }
-  LOG_DEBUG() << "WriterThread is going down" << std::endl;
+  TLOG_DEBUG() << "WriterThread is going down" << std::endl;
 }
 
 void WindowsPtyBackend::ReaderThread() {
@@ -445,7 +451,8 @@ void WindowsPtyBackend::ReaderThread() {
       DWORD exitCode = 0;
       if (GetExitCodeProcess(m_hProcess, &exitCode) &&
           exitCode != STILL_ACTIVE) {
-        LOG_WARN() << "Process has exited with code: " << exitCode << std::endl;
+        TLOG_WARN() << "Process has exited with code: " << exitCode
+                    << std::endl;
         m_running = false;
         wxTerminalEvent terminate_event{wxEVT_TERMINAL_TERMINATED};
         m_eventHandler->AddPendingEvent(terminate_event);
@@ -479,7 +486,7 @@ void WindowsPtyBackend::ReaderThread() {
         DWORD err = GetLastError();
         if (err == ERROR_BROKEN_PIPE || err == ERROR_INVALID_HANDLE) {
           m_running = false;
-          LOG_WARN() << "Pipe broken!" << std::endl;
+          TLOG_WARN() << "Pipe broken!" << std::endl;
           break;
         }
       }
@@ -491,7 +498,7 @@ void WindowsPtyBackend::ReaderThread() {
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
-  LOG_DEBUG() << "ReaderThread is going down" << std::endl;
+  TLOG_DEBUG() << "ReaderThread is going down" << std::endl;
 }
 
 void WindowsPtyBackend::InterruptIo() {
