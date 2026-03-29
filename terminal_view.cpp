@@ -302,24 +302,6 @@ void TerminalView::DebugDumpViewArea() {
   }
 }
 
-namespace {
-void wxGCDCSeRenderer(wxGCDC &dc, wxPaintDC &paint_dc) {
-  wxGraphicsRenderer *renderer = nullptr;
-#if defined(__WXGTK__)
-  renderer = wxGraphicsRenderer::GetCairoRenderer();
-#elif defined(__WXMSW__) && wxUSE_GRAPHICS_DIRECT2D
-  renderer = wxGraphicsRenderer::GetDirect2DRenderer();
-#else
-  renderer = wxGraphicsRenderer::GetDefaultRenderer();
-#endif
-
-  wxGraphicsContext *context;
-  context = renderer->CreateContext(paint_dc);
-  context->SetAntialiasMode(wxANTIALIAS_DEFAULT);
-  dc.SetGraphicsContext(context);
-}
-} // namespace
-
 wxRect TerminalView::ViewCellToPixelsRect(const wxRect &viewrect) const {
   if (m_charH == 0 || m_charW == 0) {
     return {};
@@ -571,7 +553,7 @@ void TerminalView::RenderRowPosix(wxDC &dc, int y, int rowIdx,
   }
 }
 
-#ifdef __WXOSX__
+#if defined(__WXMAC__)
 void TerminalView::MACRenderRow(wxDC &dc, int y, int rowIdx,
                                 const std::vector<terminal::Cell> &row,
                                 const wxRect &selected_cells,
@@ -607,19 +589,7 @@ void TerminalView::MACRenderRow(wxDC &dc, int y, int rowIdx,
       gc ? static_cast<CGContextRef>(gc->GetNativeContext()) : nullptr;
 
   if (!ctx) {
-    // Fallback to per-character wxDC drawing
-    std::optional<CellAttributes> prev{std::nullopt};
-    for (const auto &cell : cells) {
-      if (!prev.has_value() || prev->fgColor != cell.attrs.fgColor ||
-          prev->bold != cell.attrs.bold ||
-          prev->underline != cell.attrs.underline) {
-        dc.SetTextForeground(cell.attrs.fgColor);
-        dc.SetFont(GetCachedFont(cell.attrs.bold, cell.attrs.underline));
-        prev = cell.attrs;
-      }
-      dc.DrawText(wxString(wxUniChar(cell.ch)), cell.colIdx * m_charW, y);
-      counters.draw_text_++;
-    }
+    RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, counters);
     return;
   }
 
