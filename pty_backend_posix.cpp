@@ -35,7 +35,7 @@ bool PosixPtyBackend::Start(const std::string &command,
   Stop();
   m_onOutput = std::move(on_output);
 
-  struct winsize ws{};
+  struct winsize ws {};
   ws.ws_col = 120;
   ws.ws_row = 30;
 
@@ -74,19 +74,19 @@ bool PosixPtyBackend::Start(const std::string &command,
 }
 
 void PosixPtyBackend::Write(const std::string &data) {
-  LOG_TRACE() << "Sending: " << data << std::endl;
+  LOG_IF_TRACE { LOG_TRACE() << "Sending: " << data << std::endl; }
   {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_writeBuffer.insert(m_writeBuffer.end(), data.begin(), data.end());
   }
   m_cv.notify_one();
-  LOG_TRACE() << "NotifyOne is called" << data << std::endl;
+  LOG_IF_TRACE { LOG_TRACE() << "NotifyOne is called" << data << std::endl; }
 }
 
 void PosixPtyBackend::Resize(int cols, int rows) {
   if (m_masterFd < 0)
     return;
-  struct winsize ws{};
+  struct winsize ws {};
   ws.ws_col = static_cast<unsigned short>(cols);
   ws.ws_row = static_cast<unsigned short>(rows);
   ioctl(m_masterFd, TIOCSWINSZ, &ws);
@@ -127,7 +127,7 @@ void PosixPtyBackend::ReaderThread() {
     if (m_masterFd < 0)
       break;
 
-    struct pollfd pfd{};
+    struct pollfd pfd {};
     pfd.fd = m_masterFd;
     pfd.events = POLLIN;
 
@@ -146,7 +146,9 @@ void PosixPtyBackend::ReaderThread() {
         }
       }
       if (!accumulated.empty() && m_onOutput) {
-        LOG_TRACE() << "Terminal output read: " << accumulated << std::endl;
+        LOG_IF_TRACE {
+          LOG_TRACE() << "Terminal output read: " << accumulated << std::endl;
+        }
         m_onOutput(accumulated);
       }
       if (!m_running)
@@ -178,8 +180,10 @@ void PosixPtyBackend::WriterThread() {
     if (!pending.empty() && m_masterFd >= 0) {
       const char *p = pending.data();
       size_t remaining = pending.size();
-      LOG_TRACE() << "Writing data to child process: " << remaining << " bytes"
-                  << std::endl;
+      LOG_IF_TRACE {
+        LOG_TRACE() << "Writing data to child process: " << remaining
+                    << " bytes" << std::endl;
+      }
       while (remaining > 0) {
         ssize_t n = write(m_masterFd, p, remaining);
         if (n > 0) {

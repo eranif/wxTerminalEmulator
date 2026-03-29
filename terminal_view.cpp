@@ -268,21 +268,24 @@ void TerminalView::UpdateFontCache() {
 }
 
 void TerminalView::DebugDumpViewArea() {
-  auto viewArea = m_core.GetViewArea();
-  size_t row_num{0};
-  for (const auto &row : viewArea) {
-    std::string line;
-    line.reserve(row->size());
-    for (const auto &cell : *row) {
-      if (cell.IsEmpty()) {
-        line.append(1, '_');
-      } else {
-        line.append(1, cell.ch);
+  LOG_IF_DEBUG {
+    auto viewArea = m_core.GetViewArea();
+    size_t row_num{0};
+    for (const auto &row : viewArea) {
+      std::string line;
+      line.reserve(row->size());
+      for (const auto &cell : *row) {
+        if (cell.IsEmpty()) {
+          line.append(1, '_');
+        } else {
+          line.append(1, cell.ch);
+        }
       }
+      wxString line_utf8 = wxString::FromUTF8(line);
+      LOG_DEBUG() << wxString::Format("%03d", row_num) << line_utf8
+                  << std::endl;
+      row_num++;
     }
-    wxString line_utf8 = wxString::FromUTF8(line);
-    LOG_DEBUG() << wxString::Format("%03d", row_num) << line_utf8 << std::endl;
-    row_num++;
   }
 }
 

@@ -77,6 +77,9 @@ private:
 #define LOG_ERROR() LOG(TerminalLogLevel::kError)
 #define LOG_TRACE() LOG(TerminalLogLevel::kTrace)
 
+#define LOG_IF_TRACE if (TerminalLogger::Get().GetLevel() <= TerminalLogLevel::kTrace)
+#define LOG_IF_DEBUG if (TerminalLogger::Get().GetLevel() <= TerminalLogLevel::kDebug)
+
 struct LogFunction {
   wxString function_name;
   wxStopWatch sw;

@@ -180,7 +180,7 @@ void TerminalCore::Reset() {
 }
 
 void TerminalCore::PutData(const std::string &data) {
-  LOG_TRACE() << "PutData len=" << data.size() << std::endl;
+  LOG_IF_TRACE { LOG_TRACE() << "PutData len=" << data.size() << std::endl; }
   for (char c : data) {
     if (m_inEscape) {
       m_escape.push_back(c);
@@ -386,7 +386,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
   if (seq.empty())
     return;
 
-  {
+  LOG_IF_TRACE {
     std::ostringstream oss;
     oss << "ESC [";
     for (unsigned char ch : seq)
