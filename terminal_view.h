@@ -75,7 +75,7 @@ public:
 
 private:
   void Feed(const std::string &data);
-  bool StartProcess(const wxString &command);
+  void StartProcess(const wxString &command);
 
   wxColour GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
                               bool foreground) const;

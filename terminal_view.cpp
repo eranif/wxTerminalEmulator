@@ -95,7 +95,6 @@ TerminalView::TerminalView(wxWindow *parent, const wxString &shellCommand)
     }
   });
   Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent &) {});
-  StartProcess(shellCommand);
 
   m_timer.SetOwner(this);
   m_timer.Start(16); // Roughly 60fps
@@ -133,22 +132,32 @@ void TerminalView::SetTerminalSizeFromClient() {
   const std::size_t cols = std::max(1, sz.GetWidth() / m_charW);
   const std::size_t rows = std::max(1, sz.GetHeight() / m_charH);
 
+  if (cols == m_core.Cols() && rows == m_core.Rows())
+    return;
+
+  LOG_DEBUG() << "Resize: " << cols << "x" << rows << " (charW=" << m_charW
+              << " charH=" << m_charH << ")" << std::endl;
   m_core.SetViewportSize(rows, cols);
   if (m_backend) {
     m_backend->Resize(static_cast<int>(cols), static_cast<int>(rows));
   }
 }
 
-bool TerminalView::StartProcess(const wxString &command) {
-  if (!m_backend) {
-    m_backend = terminal::PtyBackend::Create(GetEventHandler());
-  }
+void TerminalView::StartProcess(const wxString &command) {
+  if (m_backend)
+    return;
+  m_backend = terminal::PtyBackend::Create(GetEventHandler());
   m_shell_command = command;
   LOG_DEBUG() << "Starting shell with command: " << command << std::endl;
-  return m_backend && m_backend->Start(m_shell_command.ToStdString(wxConvUTF8),
-                                       [this](const std::string &out) {
-                                         CallAfter(&TerminalView::Feed, out);
-                                       });
+  bool ok =
+      m_backend && m_backend->Start(m_shell_command.ToStdString(wxConvUTF8),
+                                    [this](const std::string &out) {
+                                      CallAfter(&TerminalView::Feed, out);
+                                    });
+  if (ok && m_core.Cols() > 0 && m_core.Rows() > 0) {
+    m_backend->Resize(static_cast<int>(m_core.Cols()),
+                      static_cast<int>(m_core.Rows()));
+  }
 }
 
 void TerminalView::SendInput(const std::string &text) {
@@ -676,7 +685,7 @@ void TerminalView::RenderRow(wxDC &dc, int y, int rowIdx,
 #if defined(__WXMSW__)
   RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
 #elif defined(__WXMAC__)
-  RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, counters);
+  MACRenderRow(dc, y, rowIdx, row, selected_cells, counters);
 #else
   RenderRowPosix(dc, y, rowIdx, row, selected_cells, counters);
 #endif
@@ -685,7 +694,7 @@ void TerminalView::RenderRow(wxDC &dc, int y, int rowIdx,
 void TerminalView::OnPaint(wxPaintEvent &) {
   // For logging purposes
   LogFunction function_logger{"TerminalView::OnPaint",
-                              TerminalLogLevel::kDebug};
+                              TerminalLogLevel::kTrace};
   PaintCounters paint_counters{
       function_logger.AddCounter("DrawText calls"),
       function_logger.AddCounter("DrawRectangle calls")};
@@ -699,8 +708,11 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   dc.SetFont(m_defaultFont);
 
   if (m_charH == 0 && m_charW == 0) {
-    // first time
-    CallAfter(&TerminalView::SetTerminalSizeFromClient);
+    // first time — measure font, set size, then start the shell
+    m_charW = dc.GetTextExtent("X").GetWidth();
+    m_charH = dc.GetTextExtent("X").GetHeight();
+    SetTerminalSizeFromClient();
+    CallAfter(&TerminalView::StartProcess, m_shell_command);
   }
 
   m_charW = dc.GetTextExtent("X").GetWidth();
@@ -758,6 +770,8 @@ void TerminalView::OnPaint(wxPaintEvent &) {
 }
 
 void TerminalView::OnSize(wxSizeEvent &evt) {
+  LOG_DEBUG() << "OnSize: " << GetClientSize().GetWidth() << "x"
+              << GetClientSize().GetHeight() << std::endl;
   SetTerminalSizeFromClient();
   m_needsRepaint = false;
   Refresh();

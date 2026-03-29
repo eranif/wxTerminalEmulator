@@ -51,8 +51,9 @@ bool PosixPtyBackend::Start(const std::string &command,
     const char *shell = command.empty() ? nullptr : command.c_str();
     if (!shell) {
       shell = getenv("SHELL");
-      if (!shell)
+      if (!shell) {
         shell = "/bin/sh";
+      }
     }
     setenv("TERM", "xterm-256color", 1);
     execlp(shell, shell, nullptr);
