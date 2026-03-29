@@ -23,6 +23,11 @@ constexpr bool kAlwaysGCDC = true;
 constexpr bool kAlwaysGCDC = false;
 #endif
 
+#ifdef __WXOSX__
+#include <CoreGraphics/CoreGraphics.h>
+#include <CoreText/CoreText.h>
+#endif
+
 using terminal::ColourSpec;
 
 inline wxRect MakeRect(const wxPoint &p1, const wxPoint &p2) {
@@ -428,10 +433,49 @@ TerminalView::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
   return cells;
 }
 
+void TerminalView::RenderRowWithGrouping(wxDC &dc, int y, int rowIdx,
+                                         const std::vector<terminal::Cell> &row,
+                                         const wxRect &selected_cells,
+                                         PaintCounters &counters) {
+  std::vector<CellInfo> cells =
+      PrepareRowForDrawing(row, rowIdx, selected_cells);
+
+  if (cells.empty()) {
+    return;
+  }
+
+  for (size_t i = 0; i < cells.size();) {
+    const auto &firstCell = cells[i];
+    wxString text;
+    text.Append(firstCell.ch);
+
+    size_t j = i + 1;
+    while (j < cells.size() && cells[j].attrs == firstCell.attrs &&
+           cells[j].colIdx == cells[j - 1].colIdx + 1) {
+      text.Append(cells[j].ch);
+      ++j;
+    }
+
+    int x = firstCell.colIdx * m_charW;
+    int width = (cells[j - 1].colIdx - firstCell.colIdx + 1) * m_charW;
+    dc.SetBrush(wxBrush(firstCell.attrs.bgColor));
+    dc.SetPen(*wxTRANSPARENT_PEN);
+    dc.DrawRectangle(x, y, width, m_charH);
+    counters.draw_rectangle_++;
+
+    dc.SetTextForeground(firstCell.attrs.fgColor);
+    dc.SetFont(GetCachedFont(firstCell.attrs.bold, firstCell.attrs.underline));
+    dc.DrawText(text, x, y);
+    counters.draw_text_++;
+
+    i = j;
+  }
+}
+
 void TerminalView::RenderRowNoGrouping(wxDC &dc, int y, int rowIdx,
                                        const std::vector<terminal::Cell> &row,
                                        const wxRect &selected_cells,
-                                       size_t &draw_text_calls) {
+                                       PaintCounters &counters) {
   // Build a list of cells with their attributes, skipping truly empty ones
   std::vector<CellInfo> cells =
       PrepareRowForDrawing(row, rowIdx, selected_cells);
@@ -457,62 +501,194 @@ void TerminalView::RenderRowNoGrouping(wxDC &dc, int y, int rowIdx,
 
     wxString cell_content(wxUniChar(cell.ch));
     dc.DrawRectangle(x, y, m_charW, m_charH);
+    counters.draw_rectangle_++;
     dc.DrawText(cell_content, x, y);
-    draw_text_calls++;
+    counters.draw_text_++;
   }
 }
 
-void TerminalView::RenderRow(wxDC &dc, int y, int rowIdx,
-                             const std::vector<terminal::Cell> &row,
-                             const wxRect &selected_cells,
-                             size_t &draw_text_calls) {
-#ifdef __WXMSW__
-  // Build a list of cells with their attributes, skipping truly empty ones
+void TerminalView::RenderRowPosix(wxDC &dc, int y, int rowIdx,
+                                  const std::vector<terminal::Cell> &row,
+                                  const wxRect &selected_cells,
+                                  PaintCounters &counters) {
   std::vector<CellInfo> cells =
       PrepareRowForDrawing(row, rowIdx, selected_cells);
 
-  // Now group and render consecutive cells with the same attributes
   if (cells.empty()) {
     return;
   }
 
+  // Pass 1: draw background rectangles, grouped by bg color
+  dc.SetPen(*wxTRANSPARENT_PEN);
+  for (size_t i = 0; i < cells.size();) {
+    const auto &firstCell = cells[i];
+    size_t j = i + 1;
+    while (j < cells.size() &&
+           cells[j].attrs.bgColor == firstCell.attrs.bgColor &&
+           cells[j].colIdx == cells[j - 1].colIdx + 1) {
+      ++j;
+    }
+    int x = firstCell.colIdx * m_charW;
+    int width = (cells[j - 1].colIdx - firstCell.colIdx + 1) * m_charW;
+    dc.SetBrush(wxBrush(firstCell.attrs.bgColor));
+    dc.DrawRectangle(x, y, width, m_charH);
+    counters.draw_rectangle_++;
+    i = j;
+  }
+
+  // Pass 2: draw text, grouped by font + fg color (ignoring bg differences)
   for (size_t i = 0; i < cells.size();) {
     const auto &firstCell = cells[i];
     wxString text;
     text.Append(firstCell.ch);
 
     size_t j = i + 1;
-    // Group consecutive cells with same attributes
-    while (j < cells.size() && cells[j].attrs == firstCell.attrs &&
+    while (j < cells.size() &&
+           cells[j].attrs.fgColor == firstCell.attrs.fgColor &&
+           cells[j].attrs.bold == firstCell.attrs.bold &&
+           cells[j].attrs.underline == firstCell.attrs.underline &&
            cells[j].colIdx == cells[j - 1].colIdx + 1) {
       text.Append(cells[j].ch);
       ++j;
     }
 
-    // Draw background for the entire group
     int x = firstCell.colIdx * m_charW;
-    int width = (cells[j - 1].colIdx - firstCell.colIdx + 1) * m_charW;
-    dc.SetBrush(wxBrush(firstCell.attrs.bgColor));
-    dc.SetPen(*wxTRANSPARENT_PEN);
-    dc.DrawRectangle(x, y, width, m_charH);
-
-    // Draw text for the entire group
     dc.SetTextForeground(firstCell.attrs.fgColor);
     dc.SetFont(GetCachedFont(firstCell.attrs.bold, firstCell.attrs.underline));
     dc.DrawText(text, x, y);
-    draw_text_calls++;
+    counters.draw_text_++;
 
     i = j;
   }
+}
+
+#ifdef __WXOSX__
+void TerminalView::MACRenderRow(wxDC &dc, int y, int rowIdx,
+                                const std::vector<terminal::Cell> &row,
+                                const wxRect &selected_cells,
+                                PaintCounters &counters) {
+  std::vector<CellInfo> cells =
+      PrepareRowForDrawing(row, rowIdx, selected_cells);
+
+  if (cells.empty()) {
+    return;
+  }
+
+  // Pass 1: draw background rectangles, grouped by bg color
+  dc.SetPen(*wxTRANSPARENT_PEN);
+  for (size_t i = 0; i < cells.size();) {
+    const auto &firstCell = cells[i];
+    size_t j = i + 1;
+    while (j < cells.size() &&
+           cells[j].attrs.bgColor == firstCell.attrs.bgColor &&
+           cells[j].colIdx == cells[j - 1].colIdx + 1) {
+      ++j;
+    }
+    int x = firstCell.colIdx * m_charW;
+    int width = (cells[j - 1].colIdx - firstCell.colIdx + 1) * m_charW;
+    dc.SetBrush(wxBrush(firstCell.attrs.bgColor));
+    dc.DrawRectangle(x, y, width, m_charH);
+    counters.draw_rectangle_++;
+    i = j;
+  }
+
+  // Pass 2: draw glyphs at exact grid positions via CTFontDrawGlyphs
+  wxGraphicsContext *gc = dc.GetGraphicsContext();
+  CGContextRef ctx =
+      gc ? static_cast<CGContextRef>(gc->GetNativeContext()) : nullptr;
+
+  if (!ctx) {
+    // Fallback to per-character wxDC drawing
+    std::optional<CellAttributes> prev{std::nullopt};
+    for (const auto &cell : cells) {
+      if (!prev.has_value() || prev->fgColor != cell.attrs.fgColor ||
+          prev->bold != cell.attrs.bold ||
+          prev->underline != cell.attrs.underline) {
+        dc.SetTextForeground(cell.attrs.fgColor);
+        dc.SetFont(GetCachedFont(cell.attrs.bold, cell.attrs.underline));
+        prev = cell.attrs;
+      }
+      dc.DrawText(wxString(wxUniChar(cell.ch)), cell.colIdx * m_charW, y);
+      counters.draw_text_++;
+    }
+    return;
+  }
+
+  int dcHeight = dc.GetSize().GetHeight();
+
+  // The DC's CGContext is flipped (Y-down). CTFontDrawGlyphs needs
+  // unflipped coordinates. Save state, undo the flip, draw, restore.
+  CGContextSaveGState(ctx);
+  CGContextScaleCTM(ctx, 1.0, -1.0);
+  CGContextTranslateCTM(ctx, 0, -dcHeight);
+
+  for (size_t i = 0; i < cells.size();) {
+    const auto &firstCell = cells[i];
+    const wxFont &font =
+        GetCachedFont(firstCell.attrs.bold, firstCell.attrs.underline);
+    CTFontRef ctFont = font.OSXGetCTFont();
+    if (!ctFont) {
+      ++i;
+      continue;
+    }
+
+    CGFloat descent = CTFontGetDescent(ctFont);
+
+    std::vector<CGGlyph> glyphs;
+    std::vector<CGPoint> positions;
+
+    size_t j = i;
+    while (j < cells.size() &&
+           cells[j].attrs.fgColor == firstCell.attrs.fgColor &&
+           cells[j].attrs.bold == firstCell.attrs.bold &&
+           cells[j].attrs.underline == firstCell.attrs.underline) {
+      UniChar ch = static_cast<UniChar>(cells[j].ch);
+      CGGlyph glyph = 0;
+      if (CTFontGetGlyphsForCharacters(ctFont, &ch, &glyph, 1) && glyph) {
+        glyphs.push_back(glyph);
+        // Now in unflipped CG coords: origin bottom-left, Y goes up
+        CGFloat cgX = static_cast<CGFloat>(cells[j].colIdx * m_charW);
+        CGFloat cgY = static_cast<CGFloat>(dcHeight - y) - m_charH + descent;
+        positions.push_back(CGPointMake(cgX, cgY));
+      }
+      ++j;
+    }
+
+    if (!glyphs.empty()) {
+      const wxColour &fg = firstCell.attrs.fgColor;
+      CGContextSetRGBFillColor(ctx, fg.Red() / 255.0, fg.Green() / 255.0,
+                               fg.Blue() / 255.0, fg.Alpha() / 255.0);
+      CTFontDrawGlyphs(ctFont, glyphs.data(), positions.data(), glyphs.size(),
+                       ctx);
+      counters.draw_text_++;
+    }
+    i = j;
+  }
+
+  CGContextRestoreGState(ctx);
+}
+#endif
+
+void TerminalView::RenderRow(wxDC &dc, int y, int rowIdx,
+                             const std::vector<terminal::Cell> &row,
+                             const wxRect &selected_cells,
+                             PaintCounters &counters) {
+#if defined(__WXMSW__)
+  RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
+#elif defined(__WXMAC__)
+  RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, counters);
 #else
-  RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, draw_text_calls);
+  RenderRowPosix(dc, y, rowIdx, row, selected_cells, counters);
 #endif
 }
 
 void TerminalView::OnPaint(wxPaintEvent &) {
   // For logging purposes
-  LogFunction func_timer{"TerminalView::OnPaint"};
-  auto &draw_text_calls = func_timer.AddCounter("DrawText calls");
+  LogFunction function_logger{"TerminalView::OnPaint",
+                              TerminalLogLevel::kDebug};
+  PaintCounters paint_counters{
+      function_logger.AddCounter("DrawText calls"),
+      function_logger.AddCounter("DrawRectangle calls")};
 
   wxAutoBufferedPaintDC dc{this};
 
@@ -539,11 +715,12 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   auto viewArea = m_core.GetViewArea();
   for (int rowIdx = 0; rowIdx < static_cast<int>(viewArea.size()); ++rowIdx) {
     const auto &row = *viewArea[rowIdx];
-    RenderRow(dc, y, rowIdx, row, selected_cells, draw_text_calls);
+    RenderRow(dc, y, rowIdx, row, selected_cells, paint_counters);
     y += m_charH;
   }
 
-  // Draw cursor (block caret) — only if shell viewport is visible
+  // Draw cursor (block caret) — only if shell
+  // viewport is visible
   auto cursor = m_core.Cursor();
   std::size_t viewStart = m_core.ViewStart();
   std::size_t shellStart = m_core.ShellStart();
@@ -558,17 +735,18 @@ void TerminalView::OnPaint(wxPaintEvent &) {
     dc.SetBrush(wxBrush(theme.cursorColour));
     dc.DrawRectangle(cx, cy, m_charW, m_charH);
 
-    // Draw the character at cursor position with inverted color
+    // Draw the character at cursor position with
+    // inverted color
     if (screenRow >= 0 && screenRow < static_cast<int>(viewArea.size())) {
       const auto &cursorRow = *viewArea[screenRow];
       if (cursor.x >= 0 && cursor.x < static_cast<int>(cursorRow.size())) {
         const auto &cell = cursorRow[cursor.x];
 
-        // Draw character with inverted cursor color (typically black on white
-        // cursor)
+        // Draw character with inverted cursor
+        // color (typically black on white cursor)
         if (cell.ch != U' ') {
-          dc.SetTextForeground(
-              theme.bg); // Use background color (typically black)
+          dc.SetTextForeground(theme.bg); // Use background color
+                                          // (typically black)
           const wxFont &font = GetCachedFont(cell.bold, cell.underline);
           dc.SetFont(font);
           dc.DrawText(wxString(wxUniChar(cell.ch)), cx, cy);
@@ -581,6 +759,8 @@ void TerminalView::OnPaint(wxPaintEvent &) {
 
 void TerminalView::OnSize(wxSizeEvent &evt) {
   SetTerminalSizeFromClient();
+  m_needsRepaint = false;
+  Refresh();
   evt.Skip();
 }
 
@@ -597,7 +777,8 @@ void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
 
   m_mouseSelectionRect = wxRect(evt.GetX(), evt.GetY(), 1, 1);
   m_isDragging = true;
-  m_needsRepaint = true;
+  m_needsRepaint = false;
+  Refresh();
 }
 
 void TerminalView::OnMouseMove(wxMouseEvent &evt) {
@@ -623,7 +804,8 @@ void TerminalView::OnMouseUp(wxMouseEvent &evt) {
   // Adjust the selection rect into cell rect.
   wxRect cell_based_rect = PixelsRectToViewCellRect(m_mouseSelectionRect);
   m_mouseSelectionRect = ViewCellToPixelsRect(cell_based_rect);
-  m_needsRepaint = true;
+  m_needsRepaint = false;
+  Refresh();
 }
 
 void TerminalView::OnMouseWheel(wxMouseEvent &evt) {
@@ -669,7 +851,9 @@ void TerminalView::OnContextMenu(wxContextMenuEvent &evt) {
 void TerminalView::OnCopy(wxCommandEvent &evt) {
   LOG_DEBUG() << "Copy is called!" << std::endl;
   if (!IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
-    LOG_DEBUG() << "No selection is active - will do nothing" << std::endl;
+    LOG_DEBUG() << "No selection is active - will "
+                   "do nothing"
+                << std::endl;
     return;
   }
 
@@ -734,8 +918,9 @@ void TerminalView::OnFocus(wxFocusEvent &evt) {
 }
 
 void TerminalView::OnCharHook(wxKeyEvent &evt) {
-  // This event is sent before the key is processed by the default handlers
-  // We intercept navigation keys (Enter, Tab, Escape) here
+  // This event is sent before the key is processed
+  // by the default handlers We intercept
+  // navigation keys (Enter, Tab, Escape) here
   int key = evt.GetKeyCode();
 
   if (key == WXK_RETURN || key == WXK_NUMPAD_ENTER) {
@@ -754,13 +939,15 @@ void TerminalView::OnCharHook(wxKeyEvent &evt) {
   }
 
 #ifdef __WXMSW__
-  // Special keys should be handled here on Windows.
+  // Special keys should be handled here on
+  // Windows.
   if (HandleSpecialKeys(evt)) {
     return;
   }
 #endif
 
-  // For all other keys, let the normal event handling continue
+  // For all other keys, let the normal event
+  // handling continue
   evt.Skip();
 }
 
@@ -771,7 +958,8 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
   const bool ctrl = evt.RawControlDown();
 
 #ifdef __WXMAC__
-  // On macOS, Cmd+C/V for copy/paste (ControlDown() = Cmd key)
+  // On macOS, Cmd+C/V for copy/paste
+  // (ControlDown() = Cmd key)
   if (evt.ControlDown() && !evt.AltDown()) {
     if (IsSelectionRectHasMinSize(m_mouseSelectionRect) &&
         (key == 'C' || key == 'c')) {
@@ -788,14 +976,16 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
 #endif
 
   if (ctrl && !evt.AltDown()) {
-    // Handle Ctrl+C - Copy if text is selected, otherwise send SIGINT
+    // Handle Ctrl+C - Copy if text is selected,
+    // otherwise send SIGINT
     if (key == 'C' || key == 'c') {
       LOG_DEBUG() << "Sending Ctrl-C" << std::endl;
       SendCtrlC();
       return;
     }
 
-    // Handle Ctrl+U - Clear current line (Unix-style line kill)
+    // Handle Ctrl+U - Clear current line
+    // (Unix-style line kill)
     if (key == 'U' || key == 'u') {
 #ifdef __WXMSW__
       if (m_shell_command.empty()) {
@@ -803,8 +993,9 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
         return;
       }
 #endif
-      // User is using a custom shell on Windows or non Windows code, anyways,
-      // use the standard
+      // User is using a custom shell on Windows or
+      // non Windows code, anyways, use the
+      // standard
       SendInput(std::string(1, '\x15'));
       return;
     }
@@ -838,7 +1029,8 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
   }
 
   // Handle special keys
-  // Note: ENTER, TAB, and ESCAPE are handled in OnCharHook
+  // Note: ENTER, TAB, and ESCAPE are handled in
+  // OnCharHook
   if (key == WXK_BACK) {
     SendBackspace();
     return;
@@ -851,8 +1043,9 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
 #endif
 
   // Handle regular printable characters
-  // Note: GetUnicodeKey() doesn't work properly in KEY_DOWN on Windows
-  // We need to handle case conversion ourselves
+  // Note: GetUnicodeKey() doesn't work properly in
+  // KEY_DOWN on Windows We need to handle case
+  // conversion ourselves
   if (key >= 'A' && key <= 'Z') {
     char ch = key;
     if (!evt.ShiftDown()) {

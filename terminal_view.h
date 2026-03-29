@@ -80,13 +80,33 @@ private:
   wxColour GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
                               bool foreground) const;
   void OnPaint(wxPaintEvent &evt);
+  struct PaintCounters {
+    PaintCounters(size_t &draw_text, size_t &draw_rectangle)
+        : draw_text_{draw_text}, draw_rectangle_{draw_rectangle} {}
+    size_t &draw_text_;
+    size_t &draw_rectangle_;
+  };
+
   void RenderRow(wxDC &dc, int y, int rowIdx,
                  const std::vector<terminal::Cell> &row,
-                 const wxRect &selected_cells, size_t &draw_text_calls);
+                 const wxRect &selected_cells, PaintCounters &counters);
   void RenderRowNoGrouping(wxDC &dc, int y, int rowIdx,
                            const std::vector<terminal::Cell> &row,
                            const wxRect &selected_cells,
-                           size_t &draw_text_calls);
+                           PaintCounters &counters);
+  void RenderRowWithGrouping(wxDC &dc, int y, int rowIdx,
+                             const std::vector<terminal::Cell> &row,
+                             const wxRect &selected_cells,
+                             PaintCounters &counters);
+  void RenderRowPosix(wxDC &dc, int y, int rowIdx,
+                      const std::vector<terminal::Cell> &row,
+                      const wxRect &selected_cells, PaintCounters &counters);
+#ifdef __WXOSX__
+  void MACRenderRow(wxDC &dc, int y, int rowIdx,
+                    const std::vector<terminal::Cell> &row,
+                    const wxRect &selected_cells, PaintCounters &counters);
+#endif
+
   void OnSize(wxSizeEvent &evt);
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);
@@ -153,6 +173,7 @@ private:
     int colIdx;
     wxChar ch;
     CellAttributes attrs;
+    inline bool IsUnicode() const { return ch >= 0x80; }
   };
 
   std::vector<TerminalView::CellInfo>
