@@ -80,9 +80,13 @@ private:
   wxColour GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
                               bool foreground) const;
   void OnPaint(wxPaintEvent &evt);
-  void RenderRaw(wxDC &dc, int y, int rowIdx,
+  void RenderRow(wxDC &dc, int y, int rowIdx,
                  const std::vector<terminal::Cell> &row,
                  const wxRect &selected_cells, size_t &draw_text_calls);
+  void RenderRowNoGrouping(wxDC &dc, int y, int rowIdx,
+                           const std::vector<terminal::Cell> &row,
+                           const wxRect &selected_cells,
+                           size_t &draw_text_calls);
   void OnSize(wxSizeEvent &evt);
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);
@@ -124,6 +128,35 @@ private:
     bool active{false};
   };
 
+  struct CellAttributes {
+    wxColour fgColor;
+    wxColour bgColor;
+    bool bold;
+    bool underline;
+    bool isMouseSelected;
+    bool isApiSelected;
+
+    bool operator==(const CellAttributes &other) const {
+      return fgColor == other.fgColor && bgColor == other.bgColor &&
+             bold == other.bold && underline == other.underline &&
+             isMouseSelected == other.isMouseSelected &&
+             isApiSelected == other.isApiSelected;
+    }
+
+    bool operator!=(const CellAttributes &other) const {
+      return !(*this == other);
+    }
+  };
+
+  struct CellInfo {
+    int colIdx;
+    wxChar ch;
+    CellAttributes attrs;
+  };
+
+  std::vector<TerminalView::CellInfo>
+  PrepareRowForDrawing(const std::vector<terminal::Cell> &row, int rowIdx,
+                       const wxRect &selected_cells);
   terminal::TerminalCore m_core;
   std::unique_ptr<terminal::PtyBackend> m_backend;
   wxRect m_mouseSelectionRect{};

@@ -366,41 +366,15 @@ TerminalView::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
   return foreground ? theme.fg : theme.bg;
 }
 
-struct CellAttributes {
-  wxColour fgColor;
-  wxColour bgColor;
-  bool bold;
-  bool underline;
-  bool isMouseSelected;
-  bool isApiSelected;
-
-  bool operator==(const CellAttributes &other) const {
-    return fgColor == other.fgColor && bgColor == other.bgColor &&
-           bold == other.bold && underline == other.underline &&
-           isMouseSelected == other.isMouseSelected &&
-           isApiSelected == other.isApiSelected;
-  }
-
-  bool operator!=(const CellAttributes &other) const {
-    return !(*this == other);
-  }
-};
-
-void TerminalView::RenderRaw(wxDC &dc, int y, int rowIdx,
-                             const std::vector<terminal::Cell> &row,
-                             const wxRect &selected_cells,
-                             size_t &draw_text_calls) {
+std::vector<TerminalView::CellInfo>
+TerminalView::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
+                                   int rowIdx, const wxRect &selected_cells) {
   const auto &theme = m_core.GetTheme();
-
   // Build a list of cells with their attributes, skipping truly empty ones
-  struct CellInfo {
-    int colIdx;
-    wxChar ch;
-    CellAttributes attrs;
-  };
   std::vector<CellInfo> cells;
   cells.reserve(row.size());
 
+  // Collect drawable cells
   for (int colIdx = 0; colIdx < static_cast<int>(row.size()); ++colIdx) {
     const auto &cell = row[colIdx];
 
@@ -449,6 +423,49 @@ void TerminalView::RenderRaw(wxDC &dc, int y, int rowIdx,
     info.attrs.isApiSelected = isApiSelected;
     cells.push_back(info);
   }
+  return cells;
+}
+
+void TerminalView::RenderRowNoGrouping(wxDC &dc, int y, int rowIdx,
+                                       const std::vector<terminal::Cell> &row,
+                                       const wxRect &selected_cells,
+                                       size_t &draw_text_calls) {
+  // Build a list of cells with their attributes, skipping truly empty ones
+  std::vector<CellInfo> cells =
+      PrepareRowForDrawing(row, rowIdx, selected_cells);
+
+  // Now group and render consecutive cells with the same attributes
+  if (cells.empty()) {
+    return;
+  }
+
+  for (size_t i = 0; i < cells.size(); ++i) {
+    const auto &cell = cells[i];
+
+    // Draw background for the entire group
+    int x = cell.colIdx * m_charW;
+    int width = m_charW;
+    dc.SetBrush(wxBrush(cell.attrs.bgColor));
+    dc.SetPen(*wxTRANSPARENT_PEN);
+    dc.DrawRectangle(x, y, width, m_charH);
+
+    // Draw text for the entire group
+    dc.SetTextForeground(cell.attrs.fgColor);
+    dc.SetFont(GetCachedFont(cell.attrs.bold, cell.attrs.underline));
+    wxString cell_content(wxUniChar(cell.ch));
+    dc.DrawText(cell_content, x, y);
+    draw_text_calls++;
+  }
+}
+
+void TerminalView::RenderRow(wxDC &dc, int y, int rowIdx,
+                             const std::vector<terminal::Cell> &row,
+                             const wxRect &selected_cells,
+                             size_t &draw_text_calls) {
+#ifdef __WXMSW__
+  // Build a list of cells with their attributes, skipping truly empty ones
+  std::vector<CellInfo> cells =
+      PrepareRowForDrawing(row, rowIdx, selected_cells);
 
   // Now group and render consecutive cells with the same attributes
   if (cells.empty()) {
@@ -483,6 +500,9 @@ void TerminalView::RenderRaw(wxDC &dc, int y, int rowIdx,
 
     i = j;
   }
+#else
+  RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, draw_text_calls);
+#endif
 }
 
 void TerminalView::OnPaint(wxPaintEvent &) {
@@ -508,9 +528,6 @@ void TerminalView::OnPaint(wxPaintEvent &) {
 
   wxRect selected_cells = {};
   if (IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
-    dc.SetBrush(wxBrush(theme.selectionBg));
-    dc.SetPen(*wxTRANSPARENT_PEN);
-    dc.DrawRectangle(m_mouseSelectionRect);
     selected_cells = PixelsRectToViewCellRect(m_mouseSelectionRect);
   }
 
@@ -518,7 +535,7 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   auto viewArea = m_core.GetViewArea();
   for (int rowIdx = 0; rowIdx < static_cast<int>(viewArea.size()); ++rowIdx) {
     const auto &row = *viewArea[rowIdx];
-    RenderRaw(dc, y, rowIdx, row, selected_cells, draw_text_calls);
+    RenderRow(dc, y, rowIdx, row, selected_cells, draw_text_calls);
     y += m_charH;
   }
 
