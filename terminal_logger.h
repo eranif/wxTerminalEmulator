@@ -120,7 +120,8 @@ struct LogFunction {
                       << std::endl;
       // Print counters
       for (size_t i = 0; i < next_counter; ++i) {
-        LOG(log_level_) << counter_names[i] << ": " << counters[i] << std::endl;
+        LOG(log_level_) << "    > " << counter_names[i] << ": " << counters[i]
+                        << std::endl;
       }
     }
   }

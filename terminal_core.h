@@ -99,7 +99,7 @@ struct Cell {
 class TerminalCore {
 public:
   TerminalCore(std::size_t rows = 24, std::size_t cols = 80,
-               std::size_t maxLines = 10000);
+               std::size_t maxLines = 1000);
 
   void SetTheme(const wxTerminalTheme &theme);
   const wxTerminalTheme &GetTheme() const { return m_theme; }
@@ -169,7 +169,7 @@ private:
 
   std::size_t m_rows{24};
   std::size_t m_cols{80};
-  std::size_t m_maxLines{10000};
+  std::size_t m_maxLines{1000};
 
   std::deque<std::vector<Cell>> m_buffer;
   std::size_t m_viewStart{0};
