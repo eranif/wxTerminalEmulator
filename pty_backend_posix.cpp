@@ -36,7 +36,7 @@ bool PosixPtyBackend::Start(const std::string &command,
   Stop();
   m_onOutput = std::move(on_output);
 
-  struct winsize ws{};
+  struct winsize ws {};
   ws.ws_col = 120;
   ws.ws_row = 30;
 
@@ -49,7 +49,8 @@ bool PosixPtyBackend::Start(const std::string &command,
 
   if (pid == 0) {
     // Child process
-    if (environment.has_value() && !environment->empty()) {
+    if (environment.has_value()) {
+      TLOG_ERROR() << "Starting with env: " << *environment << std::endl;
       clearenv();
       for (const auto &entry : *environment) {
         const auto pos = entry.find('=');
@@ -101,7 +102,7 @@ void PosixPtyBackend::Write(const std::string &data) {
 void PosixPtyBackend::Resize(int cols, int rows) {
   if (m_masterFd < 0)
     return;
-  struct winsize ws{};
+  struct winsize ws {};
   ws.ws_col = static_cast<unsigned short>(cols);
   ws.ws_row = static_cast<unsigned short>(rows);
   ioctl(m_masterFd, TIOCSWINSZ, &ws);
@@ -142,7 +143,7 @@ void PosixPtyBackend::ReaderThread() {
     if (m_masterFd < 0)
       break;
 
-    struct pollfd pfd{};
+    struct pollfd pfd {};
     pfd.fd = m_masterFd;
     pfd.events = POLLIN;
 

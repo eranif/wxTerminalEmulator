@@ -63,13 +63,8 @@ public:
       return EnvironmentList{};
     }
 
-#ifdef __WXMSW__
-    const wxChar separator = ';';
-#else
-    const wxChar separator = ':';
-#endif
     EnvironmentList env;
-    wxStringTokenizer tokens(s, wxString(1, separator), wxTOKEN_RET_EMPTY_ALL);
+    wxStringTokenizer tokens(s, wxString(1, ','), wxTOKEN_RET_EMPTY_ALL);
     while (tokens.HasMoreTokens()) {
       wxString token = tokens.GetNextToken().Strip(wxString::both);
       if (token.empty() || !token.Contains('='))
@@ -282,7 +277,7 @@ public:
          "shell command to launch instead of the default shell",
          wxCMD_LINE_VAL_STRING, 0},
         {wxCMD_LINE_OPTION, nullptr, "env",
-         "environment list (Windows: A=B;C=D, POSIX: A=B:C=D)",
+         "environment list (e.g. PATH=/usr/local/bin:/usr/bin,A=B,C=D)",
          wxCMD_LINE_VAL_STRING, 0},
         {wxCMD_LINE_NONE}};
 

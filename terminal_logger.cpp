@@ -129,3 +129,17 @@ TerminalLogger::LogEntry::operator<<(const std::vector<wxString> &arr) {
   }
   return *this;
 }
+
+TerminalLogger::LogEntry &
+TerminalLogger::LogEntry::operator<<(const std::vector<std::string> &arr) {
+  if (m_enabled) {
+    m_ss << "[";
+    for (size_t i = 0; i < arr.size(); ++i) {
+      if (i > 0)
+        m_ss << ", ";
+      m_ss << arr[i];
+    }
+    m_ss << "]";
+  }
+  return *this;
+}

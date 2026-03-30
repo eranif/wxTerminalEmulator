@@ -52,6 +52,7 @@ public:
     LogEntry &operator<<(const wxPoint &s);
     LogEntry &operator<<(const wxArrayString &arr);
     LogEntry &operator<<(const std::vector<wxString> &arr);
+    LogEntry &operator<<(const std::vector<std::string> &arr);
 
   private:
     std::ostringstream m_ss;
