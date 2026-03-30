@@ -187,11 +187,7 @@ void TerminalCore::PutData(const std::string &data) {
 
       // Safety: if escape buffer grows too large, it's stuck — dump and reset
       if (m_escape.size() > 256) {
-        TLOG_WARN() << "Escape buffer overflow, dumping: [";
-        for (unsigned char ch : m_escape)
-          TLOG_WARN() << std::hex << std::setfill('0') << std::setw(2)
-                      << (int)ch << " ";
-        TLOG_WARN() << "]" << std::endl;
+        TLOG_WARN() << "Escape buffer overflow, reseting" << std::endl;
         m_escape.clear();
         m_inEscape = false;
         continue;
