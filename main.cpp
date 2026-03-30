@@ -283,6 +283,10 @@ public:
     SetTopWindow(frame);
     return true;
   }
+
+  int FilterEvent(wxEvent &evt) override {
+    return wxEventFilter::Event_Processed;
+  }
 };
 
 wxIMPLEMENT_APP(MyApp);

@@ -897,6 +897,11 @@ void TerminalView::OnFocus(wxFocusEvent &evt) {
 }
 
 void TerminalView::OnCharHook(wxKeyEvent &evt) {
+  if (!HasFocus()) {
+    evt.Skip();
+    return;
+  }
+
   // This event is sent before the key is processed
   // by the default handlers We intercept
   // navigation keys (Enter, Tab, Escape) here
@@ -924,13 +929,16 @@ void TerminalView::OnCharHook(wxKeyEvent &evt) {
     return;
   }
 #endif
-
-  // For all other keys, let the normal event
-  // handling continue
+  // Let OnKeyDown process this as well.
   evt.Skip();
 }
 
 void TerminalView::OnKeyDown(wxKeyEvent &evt) {
+  if (!HasFocus()) {
+    evt.Skip();
+    return;
+  }
+
   const int key = evt.GetKeyCode();
 
   // Handle Ctrl combinations
@@ -1048,9 +1056,6 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
 #endif
     return;
   }
-
-  // Unknown key - skip it
-  evt.Skip();
 }
 
 bool TerminalView::HandleSpecialKeys(wxKeyEvent &key_event) {
