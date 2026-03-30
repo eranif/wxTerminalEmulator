@@ -116,7 +116,11 @@ public:
   void OnDarkTheme(wxCommandEvent &event) {
     wxUnusedVar(event);
     if (m_view) {
-      m_view->SetTheme(wxTerminalTheme::MakeDarkTheme());
+      auto theme = wxTerminalTheme::MakeDarkTheme();
+      if (m_persistedFont.IsOk()) {
+        theme.font = m_persistedFont;
+      }
+      m_view->SetTheme(theme);
       m_themeIsDark = true;
       PersistSettings();
     }
@@ -125,7 +129,11 @@ public:
   void OnLightTheme(wxCommandEvent &event) {
     wxUnusedVar(event);
     if (m_view) {
-      m_view->SetTheme(wxTerminalTheme::MakeLightTheme());
+      auto theme = wxTerminalTheme::MakeLightTheme();
+      if (m_persistedFont.IsOk()) {
+        theme.font = m_persistedFont;
+      }
+      m_view->SetTheme(theme);
       m_themeIsDark = false;
       PersistSettings();
     }
