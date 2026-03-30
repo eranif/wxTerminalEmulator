@@ -88,6 +88,7 @@ TerminalView::TerminalView(wxWindow *parent, const wxString &shellCommand)
     }
   });
   Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent &) {});
+  m_shell_command = shellCommand;
 
   m_timer.SetOwner(this);
   m_timer.Start(16); // Roughly 60fps
@@ -676,6 +677,7 @@ void TerminalView::OnPaint(wxPaintEvent &) {
     m_charH = dc.GetTextExtent("X").GetHeight();
     SetTerminalSizeFromClient();
     CallAfter(&TerminalView::StartProcess, m_shell_command);
+    return;
   }
 
   m_charW = dc.GetTextExtent("X").GetWidth();

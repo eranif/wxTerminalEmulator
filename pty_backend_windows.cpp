@@ -43,11 +43,14 @@ struct ConPtyApi {
   ClosePseudoConsoleDirectFn ClosePseudoConsoleDirect{nullptr};
 
   bool Load() {
-    if (hKernel || hKernelBase)
+    static std::mutex loadMutex;
+    std::lock_guard<std::mutex> lock(loadMutex);
+
+    // Check again after acquiring lock
+    if (hKernel && hKernelBase)
       return true;
 
-    hKernel = LoadLibraryW(L"kernel32.dll");
-    if (!hKernel)
+    if (!hKernel && !(hKernel = LoadLibraryW(L"kernel32.dll")))
       return false;
 
     CreatePseudoConsole = reinterpret_cast<CreatePseudoConsoleFn>(
@@ -57,7 +60,9 @@ struct ConPtyApi {
     ClosePseudoConsole = reinterpret_cast<ClosePseudoConsoleFn>(
         GetProcAddress(hKernel, "ClosePseudoConsole"));
 
-    hKernelBase = LoadLibraryW(L"kernelbase.dll");
+    // Try to load kernelbase.dll (optional)
+    if (!hKernelBase)
+      hKernelBase = LoadLibraryW(L"kernelbase.dll");
     if (hKernelBase) {
       CreatePseudoConsoleDirect = reinterpret_cast<CreatePseudoConsoleDirectFn>(
           GetProcAddress(hKernelBase, "CreatePseudoConsole"));
@@ -206,6 +211,7 @@ void WindowsPtyBackend::Resize(int cols, int rows) {
   COORD size{};
   size.X = static_cast<SHORT>(cols);
   size.Y = static_cast<SHORT>(rows);
+
   resizePc(m_hPC, size);
 }
 
@@ -226,51 +232,99 @@ void WindowsPtyBackend::Stop() {
 }
 
 bool WindowsPtyBackend::CreateConPty(const std::string &command) {
+  if (!Api().Load()) {
+    TLOG_WARN() << "[ConPTY APIs unavailable on this system]" << std::endl;
+    if (m_onOutput) {
+      m_onOutput("[ConPTY APIs unavailable on this system]\r\n");
+    }
+    return false;
+  }
+
+  // Verify the API functions are actually available
+  auto createPc = Api().CreatePseudoConsole ? Api().CreatePseudoConsole
+                                            : Api().CreatePseudoConsoleDirect;
+  auto resizePc = Api().ResizePseudoConsole ? Api().ResizePseudoConsole
+                                            : Api().ResizePseudoConsoleDirect;
+  auto closePc = Api().ClosePseudoConsole ? Api().ClosePseudoConsole
+                                          : Api().ClosePseudoConsoleDirect;
+
+  if (!createPc || !resizePc || !closePc) {
+    TLOG_WARN() << "[ConPTY functions not found. Windows 10 1809+ required]"
+                << std::endl;
+    if (m_onOutput) {
+      m_onOutput("[ConPTY functions not found. Windows 10 1809+ required]\r\n");
+    }
+    return false;
+  }
+
   SECURITY_ATTRIBUTES sa{};
   sa.nLength = sizeof(sa);
   sa.bInheritHandle = TRUE;
   sa.lpSecurityDescriptor = nullptr;
 
-  // Enable VT processing for the child console session so ANSI/VT escape
-  // sequences are interpreted correctly by cmd.exe and other console apps.
-  DWORD inputMode = 0;
-  DWORD outputMode = 0;
-  HANDLE hStdIn = GetStdHandle(STD_INPUT_HANDLE);
-  HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-
-  if (hStdIn != INVALID_HANDLE_VALUE && hStdIn != nullptr &&
-      GetConsoleMode(hStdIn, &inputMode)) {
-    inputMode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
-    SetConsoleMode(hStdIn, inputMode);
-  }
-
-  if (hStdOut != INVALID_HANDLE_VALUE && hStdOut != nullptr &&
-      GetConsoleMode(hStdOut, &outputMode)) {
-    outputMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-    SetConsoleMode(hStdOut, outputMode);
-  }
-
-  // Create pipes with FILE_FLAG_OVERLAPPED for non-blocking I/O
-  // Note: We only make the parent-side handles overlapped
-  // The child-side handles (inRead, outWrite) remain synchronous
+  // Create pipes for ConPTY communication
+  // Child-side handles (inRead, outWrite) are inherited by the child process
+  // Parent-side handles (inWrite, outRead) are used by our reader/writer
+  // threads
 
   HANDLE inRead = nullptr, inWrite = nullptr;
   HANDLE outRead = nullptr, outWrite = nullptr;
 
+  // Use RAII wrappers for automatic cleanup on failure
+  auto cleanup = [&]() {
+    if (inRead && inRead != INVALID_HANDLE_VALUE)
+      CloseHandle(inRead);
+    if (inWrite && inWrite != INVALID_HANDLE_VALUE)
+      CloseHandle(inWrite);
+    if (outRead && outRead != INVALID_HANDLE_VALUE)
+      CloseHandle(outRead);
+    if (outWrite && outWrite != INVALID_HANDLE_VALUE)
+      CloseHandle(outWrite);
+  };
+
   if (!CreatePipe(&inRead, &inWrite, &sa, 0)) {
-    if (m_onOutput)
-      m_onOutput("[CreatePipe (input) failed]\r\n");
-    return false;
-  }
-  if (!CreatePipe(&outRead, &outWrite, &sa, 0)) {
-    if (m_onOutput)
-      m_onOutput("[CreatePipe (output) failed]\r\n");
-    CloseHandle(inRead);
-    CloseHandle(inWrite);
+    DWORD err = GetLastError();
+    TLOG_ERROR() << "[CreatePipe (input) failed: " << err << "]" << std::endl;
+    if (m_onOutput) {
+      char buf[128];
+      snprintf(buf, sizeof(buf), "[CreatePipe (input) failed: %lu]\r\n", err);
+      m_onOutput(buf);
+    }
     return false;
   }
 
-  // Prevent handle inheritance where not needed.
+  // Validate handles
+  if (inRead == INVALID_HANDLE_VALUE || inWrite == INVALID_HANDLE_VALUE) {
+    TLOG_ERROR() << "[CreatePipe returned INVALID_HANDLE_VALUE]" << std::endl;
+    if (m_onOutput)
+      m_onOutput("[CreatePipe returned INVALID_HANDLE_VALUE]\r\n");
+    cleanup();
+    return false;
+  }
+
+  if (!CreatePipe(&outRead, &outWrite, &sa, 0)) {
+    DWORD err = GetLastError();
+    TLOG_ERROR() << "[CreatePipe (output) failed: " << err << "]" << std::endl;
+    if (m_onOutput) {
+      char buf[128];
+      snprintf(buf, sizeof(buf), "[CreatePipe (output) failed: %lu]\r\n", err);
+      m_onOutput(buf);
+    }
+    cleanup();
+    return false;
+  }
+
+  // Validate handles
+  if (outRead == INVALID_HANDLE_VALUE || outWrite == INVALID_HANDLE_VALUE) {
+    TLOG_ERROR() << "[CreatePipe returned INVALID_HANDLE_VALUE]" << std::endl;
+    if (m_onOutput)
+      m_onOutput("[CreatePipe returned INVALID_HANDLE_VALUE]\r\n");
+    cleanup();
+    return false;
+  }
+
+  // Prevent handle inheritance for parent-side handles
+  // Only child-side handles (inRead, outWrite) should be inherited
   SetHandleInformation(inWrite, HANDLE_FLAG_INHERIT, 0);
   SetHandleInformation(outRead, HANDLE_FLAG_INHERIT, 0);
 
@@ -278,20 +332,23 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
   size.X = 120;
   size.Y = 30;
 
-  auto createPc = Api().CreatePseudoConsole ? Api().CreatePseudoConsole
-                                            : Api().CreatePseudoConsoleDirect;
   HRESULT hr = E_FAIL;
-  if (createPc) {
-    // Use PSEUDOCONSOLE_INHERIT_CURSOR to improve compatibility
-    // Note: This alone doesn't fully fix Ctrl-C with CMD, but it helps
-    DWORD dwFlags = PSEUDOCONSOLE_INHERIT_CURSOR;
-    hr = createPc(size, inRead, outWrite, dwFlags, &m_hPC);
-  }
+  HPCON hPC = nullptr;
 
+  // Use PSEUDOCONSOLE_INHERIT_CURSOR to improve compatibility
+  DWORD dwFlags = PSEUDOCONSOLE_INHERIT_CURSOR;
+  hr = createPc(size, inRead, outWrite, dwFlags, &hPC);
+
+  // Close child-side handles in parent process immediately after ConPTY
+  // creation ConPTY has duplicated these handles internally
   CloseHandle(inRead);
   CloseHandle(outWrite);
+  inRead = nullptr;
+  outWrite = nullptr;
 
   if (FAILED(hr)) {
+    TLOG_ERROR() << "[CreatePseudoConsole failed with HRESULT 0x" << std::hex
+                 << hr << std::dec << "]" << std::endl;
     if (m_onOutput) {
       char buf[128];
       snprintf(buf, sizeof(buf),
@@ -299,16 +356,32 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
                static_cast<unsigned long>(hr));
       m_onOutput(buf);
     }
-    CloseHandle(inWrite);
-    CloseHandle(outRead);
+    cleanup();
     return false;
   }
 
+  // Initialize extended startup info for process creation
   STARTUPINFOEXW siex{};
   siex.StartupInfo.cb = sizeof(siex);
 
   SIZE_T attrListSize = 0;
   InitializeProcThreadAttributeList(nullptr, 1, 0, &attrListSize);
+
+  if (attrListSize == 0) {
+    DWORD err = GetLastError();
+    TLOG_ERROR() << "[InitializeProcThreadAttributeList size query failed: "
+                 << err << "]" << std::endl;
+    if (m_onOutput) {
+      char buf[128];
+      snprintf(buf, sizeof(buf),
+               "[InitializeProcThreadAttributeList size query failed: %lu]\r\n",
+               err);
+      m_onOutput(buf);
+    }
+    closePc(hPC);
+    cleanup();
+    return false;
+  }
 
   std::vector<char> attrBuf(attrListSize);
   siex.lpAttributeList =
@@ -316,74 +389,112 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
 
   if (!InitializeProcThreadAttributeList(siex.lpAttributeList, 1, 0,
                                          &attrListSize)) {
+    DWORD err = GetLastError();
+    TLOG_ERROR() << "[InitializeProcThreadAttributeList failed: " << err << "]"
+                 << std::endl;
     if (m_onOutput) {
       char buf[128];
       snprintf(buf, sizeof(buf),
-               "[InitializeProcThreadAttributeList failed: %lu]\r\n",
-               GetLastError());
+               "[InitializeProcThreadAttributeList failed: %lu]\r\n", err);
       m_onOutput(buf);
     }
-    DestroyConPty();
-    CloseHandle(inWrite);
-    CloseHandle(outRead);
+    closePc(hPC);
+    cleanup();
     return false;
   }
 
+  // Associate the ConPTY with the process
   if (!UpdateProcThreadAttribute(siex.lpAttributeList, 0,
-                                 PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, m_hPC,
-                                 sizeof(m_hPC), nullptr, nullptr)) {
+                                 PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, hPC,
+                                 sizeof(hPC), nullptr, nullptr)) {
+    DWORD err = GetLastError();
+    TLOG_ERROR() << "[UpdateProcThreadAttribute failed: " << err << "]"
+                 << std::endl;
     if (m_onOutput) {
       char buf[128];
       snprintf(buf, sizeof(buf), "[UpdateProcThreadAttribute failed: %lu]\r\n",
-               GetLastError());
+               err);
       m_onOutput(buf);
     }
     DeleteProcThreadAttributeList(siex.lpAttributeList);
-    DestroyConPty();
-    CloseHandle(inWrite);
-    CloseHandle(outRead);
+    closePc(hPC);
+    cleanup();
     return false;
   }
 
+  // Prepare command line
   std::wstring cmdline = Utf8ToWide(command);
   if (cmdline.empty()) {
     cmdline = LR"(C:\Windows\System32\cmd.exe)";
   }
 
-  // CreateProcessW may modify the buffer.
+  // CreateProcessW requires a mutable buffer for the command line
   std::vector<wchar_t> mutableCmd(cmdline.begin(), cmdline.end());
   mutableCmd.push_back(L'\0');
 
   PROCESS_INFORMATION pi{};
+  ZeroMemory(&pi, sizeof(pi));
+
+  // Pass nullptr for environment to inherit parent's environment
+  // This ensures PATH and other environment variables are available
+
+  // Use CREATE_UNICODE_ENVIRONMENT flag when passing Unicode environment
   DWORD flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
-  BOOL ok = CreateProcessW(cmdline.data(), nullptr, nullptr, nullptr, FALSE,
-                           flags, nullptr, nullptr, &siex.StartupInfo, &pi);
+
+  // IMPORTANT: Pass nullptr as lpApplicationName and mutableCmd.data() as
+  // lpCommandLine This allows proper command line parsing and shell
+  // interpretation
+  BOOL ok = CreateProcessW(
+      nullptr,           // lpApplicationName - nullptr to use command line
+      mutableCmd.data(), // lpCommandLine - mutable buffer with full command
+      nullptr,           // lpProcessAttributes
+      nullptr,           // lpThreadAttributes
+      FALSE,             // bInheritHandles - FALSE because we use
+                         // PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE
+      flags,             // dwCreationFlags
+      nullptr, // lpEnvironment - nullptr to inherit parent environment
+      nullptr, // lpCurrentDirectory - nullptr to inherit parent directory
+      &siex.StartupInfo, // lpStartupInfo
+      &pi);              // lpProcessInformation
 
   DeleteProcThreadAttributeList(siex.lpAttributeList);
 
   if (!ok) {
+    DWORD err = GetLastError();
+    TLOG_ERROR() << "[CreateProcessW failed: " << err
+                 << "] Command: " << command << std::endl;
     if (m_onOutput) {
       char buf[128];
-      snprintf(buf, sizeof(buf), "[CreateProcessW failed: %lu]\r\n",
-               GetLastError());
+      snprintf(buf, sizeof(buf), "[CreateProcessW failed: %lu]\r\n", err);
       m_onOutput(buf);
     }
-    DestroyConPty();
-    CloseHandle(inWrite);
-    CloseHandle(outRead);
+    closePc(hPC);
+    cleanup();
     return false;
   }
 
+  // Success! Store handles in member variables
+  // These are now owned by this instance
   m_hInputWrite = inWrite;
   m_hOutputRead = outRead;
   m_hProcess = pi.hProcess;
   m_hThread = pi.hThread;
+  m_hPC = hPC;
+
+  TLOG_DEBUG() << "[ConPTY created successfully] PID: " << pi.dwProcessId
+               << " Command: " << command << std::endl;
+
   return true;
 }
 
 void WindowsPtyBackend::DestroyConPty() {
+  // Gracefully terminate the process first
   if (m_hProcess) {
-    TerminateProcess(m_hProcess, 0);
+    // Process didn't exit gracefully, force termination
+    TLOG_WARN() << "[Forcefully terminating process]" << std::endl;
+    TerminateProcess(m_hProcess, 1);
+    WaitForSingleObject(m_hProcess, 1000);
+
     CloseHandle(m_hProcess);
     m_hProcess = nullptr;
   }
@@ -393,23 +504,40 @@ void WindowsPtyBackend::DestroyConPty() {
     m_hThread = nullptr;
   }
 
+  // Close pipe handles
+  // These should be closed BEFORE closing the ConPTY to avoid potential
+  // deadlocks
   if (m_hInputWrite) {
+    // Cancel any pending I/O first
+    CancelIoEx(m_hInputWrite, nullptr);
     CloseHandle(m_hInputWrite);
     m_hInputWrite = nullptr;
   }
 
   if (m_hOutputRead) {
+    // Cancel any pending I/O first
+    CancelIoEx(m_hOutputRead, nullptr);
     CloseHandle(m_hOutputRead);
     m_hOutputRead = nullptr;
   }
 
+  // Close the ConPTY last
+  // This ensures all handles associated with it are closed first
   if (m_hPC) {
-    if (Api().ClosePseudoConsole)
-      Api().ClosePseudoConsole(m_hPC);
-    else if (Api().ClosePseudoConsoleDirect)
-      Api().ClosePseudoConsoleDirect(m_hPC);
+    auto closePc = Api().ClosePseudoConsole ? Api().ClosePseudoConsole
+                                            : Api().ClosePseudoConsoleDirect;
+    if (closePc) {
+      TLOG_DEBUG() << "[Closing ConPTY handle]" << std::endl;
+      closePc(m_hPC);
+    } else {
+      TLOG_WARN() << "[ClosePseudoConsole function not available, potential "
+                     "resource leak]"
+                  << std::endl;
+    }
     m_hPC = nullptr;
   }
+
+  TLOG_DEBUG() << "[ConPTY destroyed successfully]" << std::endl;
 }
 
 void WindowsPtyBackend::WriterThread() {
@@ -451,8 +579,8 @@ void WindowsPtyBackend::ReaderThread() {
       DWORD exitCode = 0;
       if (GetExitCodeProcess(m_hProcess, &exitCode) &&
           exitCode != STILL_ACTIVE) {
-        TLOG_WARN() << "Process has exited with code: " << exitCode
-                    << std::endl;
+        TLOG_WARN() << "Process has exited with code: " << exitCode << ". "
+                    << std::hex << exitCode << std::endl;
         m_running = false;
         wxTerminalEvent terminate_event{wxEVT_TERMINAL_TERMINATED};
         m_eventHandler->AddPendingEvent(terminate_event);
@@ -504,6 +632,7 @@ void WindowsPtyBackend::ReaderThread() {
 void WindowsPtyBackend::InterruptIo() {
   if (m_hInputWrite)
     CancelIoEx(m_hInputWrite, nullptr);
+
   if (m_hOutputRead)
     CancelIoEx(m_hOutputRead, nullptr);
 }
