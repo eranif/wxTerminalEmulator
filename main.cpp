@@ -1,9 +1,7 @@
-#include "pty_backend.h"
-#include "terminal_view.h"
-
-#include "pty_backend.h"
+#include "app_persistence.h"
 #include "terminal_event.h"
 #include "terminal_logger.h"
+#include "terminal_view.h"
 #include <wx/app.h>
 #include <wx/cmdline.h>
 #include <wx/display.h>
@@ -47,11 +45,23 @@ public:
     SetSize(width, height);
     CentreOnScreen(); // Center the window on screen
 
+    wxString persistedTheme = "dark";
+    wxFont persistedFont;
+    if (AppPersistence::Load(persistedTheme, persistedFont)) {
+      m_themeIsDark = (persistedTheme.Lower() != "light");
+      m_persistedFont = persistedFont;
+    } else {
+      m_themeIsDark = true;
+    }
+
     BuildMenuBar();
 
     m_view = new TerminalView(this, shellCommand, environment);
-    m_view->SetTheme(wxTerminalTheme::MakeDarkTheme());
-    m_themeIsDark = true;
+    auto theme = m_themeIsDark ? wxTerminalTheme::MakeDarkTheme()
+                               : wxTerminalTheme::MakeLightTheme();
+    if (m_persistedFont.IsOk())
+      theme.font = m_persistedFont;
+    m_view->SetTheme(theme);
 
     m_view->Bind(wxEVT_TERMINAL_TITLE_CHANGED, &MyFrame::OnTitleChanged, this);
     m_view->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
@@ -63,8 +73,13 @@ public:
       return EnvironmentList{};
     }
 
+#ifdef __WXMSW__
+    const wxChar separator = ';';
+#else
+    const wxChar separator = ':';
+#endif
     EnvironmentList env;
-    wxStringTokenizer tokens(s, wxString(1, ','), wxTOKEN_RET_EMPTY_ALL);
+    wxStringTokenizer tokens(s, wxString(1, separator), wxTOKEN_RET_EMPTY_ALL);
     while (tokens.HasMoreTokens()) {
       wxString token = tokens.GetNextToken().Strip(wxString::both);
       if (token.empty() || !token.Contains('='))
@@ -85,7 +100,7 @@ public:
     optionsMenu->Append(ID_SetSelection, "Set Selection...");
     optionsMenu->Append(ID_PrintLine, "Print Line...");
     optionsMenu->Append(ID_SendInput, "Send Input...");
-    optionsMenu->Check(ID_ThemeDark, true);
+    optionsMenu->Check(m_themeIsDark ? ID_ThemeDark : ID_ThemeLight, true);
     menuBar->Append(optionsMenu, "Options");
     SetMenuBar(menuBar);
 
@@ -103,6 +118,7 @@ public:
     if (m_view) {
       m_view->SetTheme(wxTerminalTheme::MakeDarkTheme());
       m_themeIsDark = true;
+      PersistSettings();
     }
   }
 
@@ -111,6 +127,7 @@ public:
     if (m_view) {
       m_view->SetTheme(wxTerminalTheme::MakeLightTheme());
       m_themeIsDark = false;
+      PersistSettings();
     }
   }
 
@@ -133,6 +150,8 @@ public:
     theme.font = dlg.GetFontData().GetChosenFont();
     m_view->SetTheme(theme);
     m_view->Refresh();
+    m_persistedFont = theme.font;
+    PersistSettings();
   }
 
   void OnCenterLine(wxCommandEvent &event) {
@@ -260,9 +279,18 @@ public:
   void OnTitleChanged(wxTerminalEvent &event) { SetTitle(event.GetTitle()); }
   void Terminate() { Close(true); }
 
+  void PersistSettings() {
+    if (!m_view)
+      return;
+    const wxString themeName = m_themeIsDark ? "dark" : "light";
+    const wxFont font = m_view->GetTheme().font;
+    AppPersistence::Save(themeName, font);
+  }
+
 private:
   TerminalView *m_view{nullptr};
   bool m_themeIsDark{true};
+  wxFont m_persistedFont;
 };
 
 class MyApp : public wxApp {
@@ -277,7 +305,7 @@ public:
          "shell command to launch instead of the default shell",
          wxCMD_LINE_VAL_STRING, 0},
         {wxCMD_LINE_OPTION, nullptr, "env",
-         "environment list (e.g. PATH=/usr/local/bin:/usr/bin,A=B,C=D)",
+         "environment list (Windows: A=B;C=D, POSIX: A=B:C=D)",
          wxCMD_LINE_VAL_STRING, 0},
         {wxCMD_LINE_NONE}};
 

@@ -39,7 +39,7 @@ add_compile_definitions(-DwxDEBUG_LEVEL=0)
 set(LIB_SOURCES terminal_core.cpp terminal_logger.cpp terminal_view.cpp
                 terminal_event.cpp)
 
-set(EXAMPLE_SOURCES main.cpp)
+set(EXAMPLE_SOURCES main.cpp app_persistence.cpp)
 if(MINGW)
   list(APPEND EXAMPLE_SOURCES wx.rc)
 endif()
@@ -59,7 +59,8 @@ set(HEADER_SOURCES)
 add_library(wxterminal_lib STATIC ${LIB_SOURCES} ${HEADER_SOURCES})
 target_link_libraries(wxterminal_lib PUBLIC ${wxWidgets_LIBRARIES})
 if(APPLE)
-  target_link_libraries(wxterminal_lib PUBLIC "-framework CoreText" "-framework CoreGraphics")
+  target_link_libraries(wxterminal_lib PUBLIC "-framework CoreText"
+                                              "-framework CoreGraphics")
 endif()
 
 # Build library with PIC when required (useful when linking into other

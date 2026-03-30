@@ -207,7 +207,7 @@ void TerminalView::SetTheme(const wxTerminalTheme &theme) {
   m_core.SetTheme(theme);
   UpdateFontCache();
   m_charH = m_charW = 0; // This needs to be recalculated based on the new font.
-  m_needsRepaint = true;
+  Refresh();
   PostSizeEvent();
 }
 
@@ -682,7 +682,11 @@ void TerminalView::OnPaint(wxPaintEvent &) {
     m_charW = dc.GetTextExtent("X").GetWidth();
     m_charH = dc.GetTextExtent("X").GetHeight();
     SetTerminalSizeFromClient();
-    CallAfter(&TerminalView::StartProcess, m_shell_command, m_environment);
+    if (m_backend == nullptr) {
+      CallAfter(&TerminalView::StartProcess, m_shell_command, m_environment);
+    }
+    // Now that the char width is known, do another paint.
+    CallAfter(&TerminalView::Refresh, true, nullptr);
     return;
   }
 
