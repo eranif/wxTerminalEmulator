@@ -121,6 +121,28 @@ std::string GetDefaultShell() {
   return CMD_SHELL.ToStdString(wxConvUTF8);
 }
 
+std::vector<wchar_t>
+BuildEnvironmentBlock(const std::optional<PtyBackend::EnvironmentList> &env) {
+  if (!env.has_value())
+    return {};
+
+  if (env->empty())
+    return {L'\0', L'\0'};
+
+  std::vector<std::wstring> envWide;
+  envWide.reserve(env->size());
+
+  std::vector<wchar_t> block;
+  for (const auto &entry : *env) {
+    envWide.push_back(Utf8ToWide(entry));
+    const auto &wide = envWide.back();
+    block.insert(block.end(), wide.begin(), wide.end());
+    block.push_back(L'\0');
+  }
+  block.push_back(L'\0');
+  return block;
+}
+
 struct HandleCloser {
   void operator()(HANDLE h) const {
     if (h && h != INVALID_HANDLE_VALUE)
@@ -143,6 +165,7 @@ WindowsPtyBackend::WindowsPtyBackend(wxEvtHandler *eventHandler)
 WindowsPtyBackend::~WindowsPtyBackend() { Stop(); }
 
 bool WindowsPtyBackend::Start(const std::string &command,
+                              const std::optional<EnvironmentList> &environment,
                               OutputCallback on_output) {
   Stop();
 
@@ -177,7 +200,7 @@ bool WindowsPtyBackend::Start(const std::string &command,
   const std::string shellCommand =
       command.empty() ? GetDefaultShell() : command;
 
-  if (!CreateConPty(shellCommand)) {
+  if (!CreateConPty(shellCommand, environment)) {
     if (m_onOutput) {
       TLOG_WARN() << "[Failed to create ConPTY backend]" << std::endl;
       m_onOutput("[Failed to create ConPTY backend]\r\n");
@@ -231,7 +254,9 @@ void WindowsPtyBackend::Stop() {
   DestroyConPty();
 }
 
-bool WindowsPtyBackend::CreateConPty(const std::string &command) {
+bool WindowsPtyBackend::CreateConPty(
+    const std::string &command,
+    const std::optional<EnvironmentList> &environment) {
   if (!Api().Load()) {
     TLOG_WARN() << "[ConPTY APIs unavailable on this system]" << std::endl;
     if (m_onOutput) {
@@ -435,8 +460,7 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
   PROCESS_INFORMATION pi{};
   ZeroMemory(&pi, sizeof(pi));
 
-  // Pass nullptr for environment to inherit parent's environment
-  // This ensures PATH and other environment variables are available
+  std::vector<wchar_t> envBlock = BuildEnvironmentBlock(environment);
 
   // Use CREATE_UNICODE_ENVIRONMENT flag when passing Unicode environment
   DWORD flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
@@ -452,7 +476,7 @@ bool WindowsPtyBackend::CreateConPty(const std::string &command) {
       FALSE,             // bInheritHandles - FALSE because we use
                          // PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE
       flags,             // dwCreationFlags
-      nullptr, // lpEnvironment - nullptr to inherit parent environment
+      envBlock.empty() ? nullptr : envBlock.data(),
       nullptr, // lpCurrentDirectory - nullptr to inherit parent directory
       &siex.StartupInfo, // lpStartupInfo
       &pi);              // lpProcessInformation

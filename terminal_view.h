@@ -10,10 +10,14 @@
 #include <wx/timer.h>
 
 #include <memory>
+#include <optional>
 
 class TerminalView : public wxPanel {
 public:
-  TerminalView(wxWindow *parent, const wxString &shellCommand);
+  using EnvironmentList = terminal::PtyBackend::EnvironmentList;
+
+  TerminalView(wxWindow *parent, const wxString &shellCommand,
+               const std::optional<EnvironmentList> &environment);
   ~TerminalView() override;
 
   /**
@@ -75,7 +79,8 @@ public:
 
 private:
   void Feed(const std::string &data);
-  void StartProcess(const wxString &command);
+  void StartProcess(const wxString &command,
+                    const std::optional<EnvironmentList> &environment);
 
   wxColour GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
                               bool foreground) const;
@@ -197,4 +202,5 @@ private:
   int m_charH{0};
   bool m_contextMenuShowing{false};
   wxString m_shell_command;
+  std::optional<EnvironmentList> m_environment{std::nullopt};
 };

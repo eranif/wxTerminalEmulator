@@ -31,6 +31,7 @@ PosixPtyBackend::PosixPtyBackend(wxEvtHandler *handler) : PtyBackend(handler) {}
 PosixPtyBackend::~PosixPtyBackend() { Stop(); }
 
 bool PosixPtyBackend::Start(const std::string &command,
+                            const std::optional<EnvironmentList> &environment,
                             OutputCallback on_output) {
   Stop();
   m_onOutput = std::move(on_output);
@@ -48,6 +49,19 @@ bool PosixPtyBackend::Start(const std::string &command,
 
   if (pid == 0) {
     // Child process
+    if (environment.has_value() && !environment->empty()) {
+      clearenv();
+      for (const auto &entry : *environment) {
+        const auto pos = entry.find('=');
+        if (pos == std::string::npos)
+          continue;
+        std::string key = entry.substr(0, pos);
+        std::string value = entry.substr(pos + 1);
+        setenv(key.c_str(), value.c_str(), 1);
+      }
+    }
+
+    // Ensure TERM exists even with inherited or explicit env.
     const char *shell = command.empty() ? nullptr : command.c_str();
     if (!shell) {
       shell = getenv("SHELL");

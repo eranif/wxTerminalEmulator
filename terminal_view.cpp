@@ -63,7 +63,8 @@ static const std::unordered_map<int, int> shiftMap = {
     {'=', '+'},
     {'`', '~'}};
 
-TerminalView::TerminalView(wxWindow *parent, const wxString &shellCommand)
+TerminalView::TerminalView(wxWindow *parent, const wxString &shellCommand,
+                           const std::optional<EnvironmentList> &environment)
     : wxPanel(parent, wxID_ANY) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   UpdateFontCache();
@@ -89,6 +90,7 @@ TerminalView::TerminalView(wxWindow *parent, const wxString &shellCommand)
   });
   Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent &) {});
   m_shell_command = shellCommand;
+  m_environment = std::move(environment);
 
   m_timer.SetOwner(this);
   m_timer.Start(16); // Roughly 60fps
@@ -137,17 +139,21 @@ void TerminalView::SetTerminalSizeFromClient() {
   }
 }
 
-void TerminalView::StartProcess(const wxString &command) {
+void TerminalView::StartProcess(
+    const wxString &command,
+    const std::optional<EnvironmentList> &environment) {
   if (m_backend)
     return;
   m_backend = terminal::PtyBackend::Create(GetEventHandler());
   m_shell_command = command;
+  m_environment = environment;
+
   TLOG_DEBUG() << "Starting shell with command: " << command << std::endl;
-  bool ok =
-      m_backend && m_backend->Start(m_shell_command.ToStdString(wxConvUTF8),
-                                    [this](const std::string &out) {
-                                      CallAfter(&TerminalView::Feed, out);
-                                    });
+  bool ok = m_backend &&
+            m_backend->Start(m_shell_command.ToStdString(wxConvUTF8),
+                             m_environment, [this](const std::string &out) {
+                               CallAfter(&TerminalView::Feed, out);
+                             });
   if (ok && m_core.Cols() > 0 && m_core.Rows() > 0) {
     m_backend->Resize(static_cast<int>(m_core.Cols()),
                       static_cast<int>(m_core.Rows()));
@@ -676,7 +682,7 @@ void TerminalView::OnPaint(wxPaintEvent &) {
     m_charW = dc.GetTextExtent("X").GetWidth();
     m_charH = dc.GetTextExtent("X").GetHeight();
     SetTerminalSizeFromClient();
-    CallAfter(&TerminalView::StartProcess, m_shell_command);
+    CallAfter(&TerminalView::StartProcess, m_shell_command, m_environment);
     return;
   }
 

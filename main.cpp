@@ -1,5 +1,7 @@
+#include "pty_backend.h"
 #include "terminal_view.h"
 
+#include "pty_backend.h"
 #include "terminal_event.h"
 #include "terminal_logger.h"
 #include <wx/app.h>
@@ -9,7 +11,11 @@
 #include <wx/frame.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
+#include <wx/string.h>
 #include <wx/textdlg.h>
+#include <wx/tokenzr.h>
+
+#include <optional>
 
 class MyFrame : public wxFrame {
 public:
@@ -23,7 +29,10 @@ public:
     ID_SendInput
   };
 
-  MyFrame(const wxCmdLineParser &parser)
+  using EnvironmentList = terminal::PtyBackend::EnvironmentList;
+
+  MyFrame(const wxCmdLineParser &parser,
+          const std::optional<EnvironmentList> &environment)
       : wxFrame(nullptr, wxID_ANY, "wxTerminalEmulator") {
     wxString shellCommand;
     parser.Found("shell", &shellCommand);
@@ -40,12 +49,34 @@ public:
 
     BuildMenuBar();
 
-    m_view = new TerminalView(this, shellCommand.ToStdString(wxConvUTF8));
+    m_view = new TerminalView(this, shellCommand, environment);
     m_view->SetTheme(wxTerminalTheme::MakeDarkTheme());
     m_themeIsDark = true;
 
     m_view->Bind(wxEVT_TERMINAL_TITLE_CHANGED, &MyFrame::OnTitleChanged, this);
     m_view->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
+  }
+
+  static std::optional<EnvironmentList>
+  ParseEnvironmentList(const wxString &s) {
+    if (s.empty()) {
+      return EnvironmentList{};
+    }
+
+#ifdef __WXMSW__
+    const wxChar separator = ';';
+#else
+    const wxChar separator = ':';
+#endif
+    EnvironmentList env;
+    wxStringTokenizer tokens(s, wxString(1, separator), wxTOKEN_RET_EMPTY_ALL);
+    while (tokens.HasMoreTokens()) {
+      wxString token = tokens.GetNextToken().Strip(wxString::both);
+      if (token.empty() || !token.Contains('='))
+        continue;
+      env.push_back(token.ToStdString(wxConvUTF8));
+    }
+    return env;
   }
 
   void BuildMenuBar() {
@@ -250,6 +281,9 @@ public:
         {wxCMD_LINE_OPTION, "s", "shell",
          "shell command to launch instead of the default shell",
          wxCMD_LINE_VAL_STRING, 0},
+        {wxCMD_LINE_OPTION, nullptr, "env",
+         "environment list (Windows: A=B;C=D, POSIX: A=B:C=D)",
+         wxCMD_LINE_VAL_STRING, 0},
         {wxCMD_LINE_NONE}};
 
     wxCmdLineParser parser(cmdLineDesc, argc, argv);
@@ -278,14 +312,16 @@ public:
       TerminalLogger::Get().SetLevel(TerminalLogLevel::kError);
     }
 
-    auto frame = new MyFrame(parser);
+    wxString envStr;
+    std::optional<MyFrame::EnvironmentList> environment{std::nullopt};
+    if (parser.Found("env", &envStr)) {
+      environment = MyFrame::ParseEnvironmentList(envStr);
+    }
+
+    auto frame = new MyFrame(parser, environment);
     frame->Show();
     SetTopWindow(frame);
     return true;
-  }
-
-  int FilterEvent(wxEvent &evt) override {
-    return wxEventFilter::Event_Processed;
   }
 };
 

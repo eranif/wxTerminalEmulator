@@ -17,7 +17,9 @@ public:
   WindowsPtyBackend(wxEvtHandler *eventHandler);
   ~WindowsPtyBackend() override;
 
-  bool Start(const std::string &command, OutputCallback on_output) override;
+  bool Start(const std::string &command,
+             const std::optional<EnvironmentList> &environment,
+             OutputCallback on_output) override;
   void Write(const std::string &data) override;
   void Resize(int cols, int rows) override;
   void SendBreak() override;
@@ -27,7 +29,8 @@ private:
   void ReaderThread();
   void WriterThread();
   void InterruptIo();
-  bool CreateConPty(const std::string &command);
+  bool CreateConPty(const std::string &command,
+                    const std::optional<EnvironmentList> &environment);
   void DestroyConPty();
 
   std::atomic<bool> m_running{false};
