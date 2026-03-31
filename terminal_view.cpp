@@ -1083,7 +1083,12 @@ void TerminalView::DrawFocusBorder(wxDC &dc) const {
     return;
   }
 
-  wxPen pen(GetForegroundColour(), 1);
+  const wxColour bg = GetBackgroundColour();
+  const int bgLuminance = (bg.Red() * 299 + bg.Green() * 587 + bg.Blue() * 114) / 1000;
+  const wxColour focusRectColour = bgLuminance >= 128 ? bg.ChangeLightness(50)
+                                                      : bg.ChangeLightness(150);
+
+  wxPen pen(focusRectColour, 1);
   pen.SetCap(wxCAP_BUTT);
   pen.SetJoin(wxJOIN_MITER);
   dc.SetPen(pen);

@@ -92,7 +92,20 @@ struct wxTerminalTheme {
     return (gray << 16) | (gray << 8) | gray;
   }
 
-  static inline wxTerminalTheme MakeDarkTheme() { return wxTerminalTheme{}; }
+  static inline wxTerminalTheme MakeDarkTheme() {
+    auto t = wxTerminalTheme{};
+    t.red = wxColour("rgb(243, 81, 81)");
+    t.blue = wxColour("rgb(86, 175, 215)");
+    t.magenta = wxColour("rgb(198, 120, 221)");
+    t.yellow = wxColour("rgb(255, 194, 53)");
+    t.cyan = wxColour("rgb(139, 233, 253)");
+    t.brightBlue = t.blue.ChangeLightness(120);
+    t.brightMagenta = t.magenta.ChangeLightness(120);
+    t.brightRed = t.red.ChangeLightness(120);
+    t.brightCyan = t.cyan.ChangeLightness(120);
+    return t;
+  }
+
   static inline wxTerminalTheme MakeLightTheme() {
     wxTerminalTheme t;
     t.fg = wxColour(0x00, 0x00, 0x00);
@@ -102,16 +115,16 @@ struct wxTerminalTheme {
     t.red = wxColour(0xC0, 0x00, 0x00);
     t.green = wxColour(0x00, 0x80, 0x00);
     t.yellow = wxColour(0x80, 0x80, 0x00);
-    t.blue = wxColour(0x00, 0x00, 0xC0);
-    t.magenta = wxColour(0xC0, 0x00, 0xC0);
+    t.blue = wxColour("rgb(86, 175, 215)");
+    t.magenta = wxColour("rgb(198, 120, 221)");
     t.cyan = wxColour(0x00, 0x80, 0x80);
     t.white = wxColour(0xC0, 0xC0, 0xC0);
     t.brightBlack = wxColour(0x80, 0x80, 0x80);
     t.brightRed = wxColour(0xFF, 0x00, 0x00);
     t.brightGreen = wxColour(0x00, 0xB0, 0x00);
     t.brightYellow = wxColour(0xFF, 0xFF, 0x00);
-    t.brightBlue = wxColour(0x00, 0x00, 0xFF);
-    t.brightMagenta = wxColour(0xFF, 0x00, 0xFF);
+    t.brightBlue = t.blue.ChangeLightness(120);
+    t.brightMagenta = t.magenta.ChangeLightness(120);
     t.brightCyan = wxColour(0x00, 0xFF, 0xFF);
     t.brightWhite = wxColour(0xFF, 0xFF, 0xFF);
     t.selectionBg = wxColour(51, 153, 255, 80);

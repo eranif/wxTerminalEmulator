@@ -2,6 +2,7 @@
 #include "terminal_event.h"
 #include "terminal_logger.h"
 #include "terminal_view.h"
+#include <optional>
 #include <wx/app.h>
 #include <wx/cmdline.h>
 #include <wx/display.h>
@@ -10,11 +11,11 @@
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
 #include <wx/notebook.h>
+#include <wx/settings.h>
 #include <wx/string.h>
+#include <wx/sysopt.h>
 #include <wx/textdlg.h>
 #include <wx/tokenzr.h>
-
-#include <optional>
 
 class MyFrame : public wxFrame {
 public:
@@ -66,6 +67,8 @@ public:
 
     AppPersistence::Load(persistedSafeDrawing);
     m_safeDrawingEnabled = persistedSafeDrawing;
+
+    ApplyNativeAppTheme();
 
     BuildMenuBar();
     m_notebook = new wxNotebook(this, wxID_ANY);
@@ -220,6 +223,7 @@ public:
 
   void OnDarkTheme(wxCommandEvent &event) {
     wxUnusedVar(event);
+    ApplyNativeAppTheme(true);
     auto theme = wxTerminalTheme::MakeDarkTheme();
     if (m_persistedFont.IsOk()) {
       theme.font = m_persistedFont;
@@ -231,6 +235,7 @@ public:
 
   void OnLightTheme(wxCommandEvent &event) {
     wxUnusedVar(event);
+    ApplyNativeAppTheme(false);
     auto theme = wxTerminalTheme::MakeLightTheme();
     if (m_persistedFont.IsOk()) {
       theme.font = m_persistedFont;
@@ -446,6 +451,21 @@ public:
     AppPersistence::Save(themeName, font, m_safeDrawingEnabled);
   }
 
+  void ApplyNativeAppTheme(std::optional<bool> darkMode = std::nullopt) {
+#ifdef __WXMSW__
+    const bool enableDark = darkMode.value_or(m_themeIsDark);
+    if (enableDark) {
+      // force dark
+      wxTheApp->SetAppearance(wxAppBase::Appearance::Dark);
+
+    } else {
+      wxTheApp->SetAppearance(wxAppBase::Appearance::Light);
+    }
+#else
+    wxUnusedVar(darkMode);
+#endif
+  }
+
 private:
   wxNotebook *m_notebook{nullptr};
   TerminalView *m_view{nullptr};
@@ -503,6 +523,10 @@ public:
     if (parser.Found("env", &envStr)) {
       environment = MyFrame::ParseEnvironmentList(envStr);
     }
+
+#ifdef __WXMSW__
+    SetAppearance(wxAppBase::Appearance::System);
+#endif
 
     auto frame = new MyFrame(parser, environment);
     frame->Show();
