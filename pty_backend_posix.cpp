@@ -37,7 +37,7 @@ bool PosixPtyBackend::Start(const std::string &command,
   Stop();
   m_onOutput = std::move(on_output);
 
-  struct winsize ws{};
+  struct winsize ws {};
   ws.ws_col = 120;
   ws.ws_row = 30;
 
@@ -76,7 +76,11 @@ bool PosixPtyBackend::Start(const std::string &command,
       shell_argv.push_back(const_cast<char *>(shell));
       shell_argv.push_back(nullptr);
 
+#if defined(__APPLE__)
+      execve(shell, shell_argv.data(), envp.data());
+#else
       execvpe(shell, shell_argv.data(), envp.data());
+#endif
       _exit(127);
     }
 
@@ -120,7 +124,7 @@ void PosixPtyBackend::Write(const std::string &data) {
 void PosixPtyBackend::Resize(int cols, int rows) {
   if (m_masterFd < 0)
     return;
-  struct winsize ws{};
+  struct winsize ws {};
   ws.ws_col = static_cast<unsigned short>(cols);
   ws.ws_row = static_cast<unsigned short>(rows);
   ioctl(m_masterFd, TIOCSWINSZ, &ws);
@@ -161,7 +165,7 @@ void PosixPtyBackend::ReaderThread() {
     if (m_masterFd < 0)
       break;
 
-    struct pollfd pfd{};
+    struct pollfd pfd {};
     pfd.fd = m_masterFd;
     pfd.events = POLLIN;
 
