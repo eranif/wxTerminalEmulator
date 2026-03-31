@@ -120,6 +120,20 @@ public:
   wxBorder GetDefaultBorder() const override { return wxBORDER_NONE; }
 
 private:
+  struct SelectionRect {
+    wxRect m_rect; // in pixels
+    wxPoint m_selectionAnchor;
+
+    void Clear();
+    wxRect PixelsRectToViewCellRect(int char_width, int char_height) const;
+    wxRect ViewCellToPixelsRect(const wxRect &viewrect, int char_width,
+                                int char_height) const;
+    bool IsSelectionRectHasMinSize() const;
+    void SetAnchor(const wxPoint &anchor);
+    void UpdateCurrent(const wxPoint &current);
+    inline bool IsEmpty() const { return m_rect.IsEmpty(); }
+  };
+
   void Feed(const std::string &data);
   void StartProcess(const wxString &command,
                     const std::optional<EnvironmentList> &environment);
@@ -174,9 +188,6 @@ private:
   void UpdateFontCache();
   const wxFont &GetCachedFont(bool bold, bool underlined) const;
 
-  wxRect ViewCellToPixelsRect(const wxRect &viewrect) const;
-  wxRect PixelsRectToViewCellRect(const wxRect &pixelrect) const;
-  wxRect NormalizeSelectionRect(const wxPoint &p1, const wxPoint &p2) const;
   /**
    * Handles terminal-specific special key events by translating supported
    * wxWidgets key codes into ANSI escape sequences and sending them to the
@@ -252,8 +263,7 @@ private:
                        const wxRect &selected_cells);
   terminal::TerminalCore m_core;
   std::unique_ptr<terminal::PtyBackend> m_backend;
-  wxRect m_mouseSelectionRect{};
-  wxPoint m_selectionAnchor{};
+  SelectionRect m_mouseSelectionRect{};
   ApiSelection m_userSelection;
   bool m_isDragging{false};
   bool m_needsRepaint{true};

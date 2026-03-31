@@ -31,10 +31,53 @@ inline wxRect MakeRect(const wxPoint &p1, const wxPoint &p2) {
   return wxRect{x, y, w, h};
 }
 
-inline bool IsSelectionRectHasMinSize(const wxRect &rect) {
+void TerminalView::SelectionRect::Clear() {
+  m_rect = {};
+  m_selectionAnchor = {};
+}
+
+wxRect
+TerminalView::SelectionRect::PixelsRectToViewCellRect(int char_width,
+                                                      int char_height) const {
+  if (char_width == 0 || char_height == 0 || m_rect.IsEmpty()) {
+    return {};
+  }
+
+  int cell_x = m_rect.GetX() / char_width;
+  int cell_y = m_rect.GetY() / char_height;
+  int pixel_right = m_rect.GetRight();
+  int pixel_bottom = m_rect.GetBottom();
+  int cell_right = (pixel_right + char_width - 1) / char_width - 1;
+  int cell_bottom = (pixel_bottom + char_height - 1) / char_height - 1;
+  int cell_width = cell_right - cell_x + 1;
+  int cell_height = cell_bottom - cell_y + 1;
+  return wxRect(cell_x, cell_y, cell_width, cell_height);
+}
+
+wxRect TerminalView::SelectionRect::ViewCellToPixelsRect(
+    const wxRect &viewrect, int char_width, int char_height) const {
+  if (char_width == 0 || char_height == 0 || viewrect.IsEmpty()) {
+    return {};
+  }
+
+  return wxRect(viewrect.GetX() * char_width, viewrect.GetY() * char_height,
+                viewrect.GetWidth() * char_width,
+                viewrect.GetHeight() * char_height);
+}
+
+bool TerminalView::SelectionRect::IsSelectionRectHasMinSize() const {
   static constexpr int kMinRectSize = 2;
-  return !rect.IsEmpty() && (rect.GetSize().GetWidth() >= kMinRectSize ||
-                             rect.GetSize().GetHeight() >= kMinRectSize);
+  return !m_rect.IsEmpty() && (m_rect.GetSize().GetWidth() >= kMinRectSize ||
+                               m_rect.GetSize().GetHeight() >= kMinRectSize);
+}
+
+void TerminalView::SelectionRect::SetAnchor(const wxPoint &anchor) {
+  m_selectionAnchor = anchor;
+  m_rect = wxRect(anchor, wxSize{1, 1});
+}
+
+void TerminalView::SelectionRect::UpdateCurrent(const wxPoint &current) {
+  m_rect = MakeRect(m_selectionAnchor, current);
 }
 
 // Map of character key codes to their shifted values
@@ -350,7 +393,7 @@ void TerminalView::ClearUserSelection() {
 }
 
 void TerminalView::ClearMouseSelection() {
-  m_mouseSelectionRect = {};
+  m_mouseSelectionRect.Clear();
   m_isDragging = false;
   m_needsRepaint = true;
 }
@@ -388,54 +431,6 @@ void TerminalView::DebugDumpViewArea() {
       row_num++;
     }
   }
-}
-
-wxRect TerminalView::ViewCellToPixelsRect(const wxRect &viewrect) const {
-  if (m_charH == 0 || m_charW == 0) {
-    return {};
-  }
-  if (viewrect.IsEmpty()) {
-    return {};
-  }
-
-  int rect_width = viewrect.GetWidth() * m_charW;
-  int rect_height = viewrect.GetHeight() * m_charH;
-  int rect_x = viewrect.GetX() * m_charW;
-  int rect_y = viewrect.GetY() * m_charH;
-
-  return wxRect(rect_x, rect_y, rect_width, rect_height);
-}
-
-wxRect TerminalView::PixelsRectToViewCellRect(const wxRect &pixelrect) const {
-  if (m_charH == 0 || m_charW == 0) {
-    return {};
-  }
-  if (pixelrect.IsEmpty()) {
-    return {};
-  }
-
-  // Convert top-left corner (round down to get the cell that contains this
-  // pixel)
-  int cell_x = pixelrect.GetX() / m_charW;
-  int cell_y = pixelrect.GetY() / m_charH;
-
-  // Convert bottom-right corner (round up to include cells touched by the pixel
-  // rect)
-  int pixel_right = pixelrect.GetRight();
-  int pixel_bottom = pixelrect.GetBottom();
-  int cell_right = (pixel_right + m_charW - 1) / m_charW - 1;
-  int cell_bottom = (pixel_bottom + m_charH - 1) / m_charH - 1;
-
-  // Calculate width and height
-  int cell_width = cell_right - cell_x + 1;
-  int cell_height = cell_bottom - cell_y + 1;
-
-  return wxRect(cell_x, cell_y, cell_width, cell_height);
-}
-
-wxRect TerminalView::NormalizeSelectionRect(const wxPoint &p1,
-                                            const wxPoint &p2) const {
-  return MakeRect(p1, p2);
 }
 
 wxColour
@@ -877,8 +872,9 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   m_charH = dc.GetTextExtent("X").GetHeight();
 
   wxRect selected_cells = {};
-  if (IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
-    selected_cells = PixelsRectToViewCellRect(m_mouseSelectionRect);
+  if (m_mouseSelectionRect.IsSelectionRectHasMinSize()) {
+    selected_cells =
+        m_mouseSelectionRect.PixelsRectToViewCellRect(m_charW, m_charH);
   }
 
   int y = 0;
@@ -947,8 +943,7 @@ void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
     m_mouseSelectionRect = {};
   }
 
-  m_selectionAnchor = wxPoint{evt.GetX(), evt.GetY()};
-  m_mouseSelectionRect = wxRect(m_selectionAnchor, wxSize{1, 1});
+  m_mouseSelectionRect.SetAnchor(wxPoint{evt.GetX(), evt.GetY()});
   m_isDragging = true;
   m_needsRepaint = false;
   Refresh();
@@ -961,7 +956,7 @@ void TerminalView::OnMouseMove(wxMouseEvent &evt) {
   }
 
   wxPoint pt2{evt.GetX(), evt.GetY()};
-  m_mouseSelectionRect = NormalizeSelectionRect(m_selectionAnchor, pt2);
+  m_mouseSelectionRect.UpdateCurrent(pt2);
   m_needsRepaint = true;
 }
 
@@ -969,16 +964,16 @@ void TerminalView::OnMouseUp(wxMouseEvent &evt) {
   evt.Skip();
   m_isDragging = false;
 
-  if (!IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
-    m_mouseSelectionRect = {};
-    m_selectionAnchor = {};
+  if (!m_mouseSelectionRect.IsSelectionRectHasMinSize()) {
+    m_mouseSelectionRect.Clear();
     return;
   }
 
   // Adjust the selection rect into cell rect.
-  wxRect cell_based_rect = PixelsRectToViewCellRect(m_mouseSelectionRect);
-  m_mouseSelectionRect = ViewCellToPixelsRect(cell_based_rect);
-  m_selectionAnchor = m_mouseSelectionRect.GetTopLeft();
+  wxRect cell_based_rect =
+      m_mouseSelectionRect.PixelsRectToViewCellRect(m_charW, m_charH);
+  m_mouseSelectionRect.m_rect = m_mouseSelectionRect.ViewCellToPixelsRect(
+      cell_based_rect, m_charW, m_charH);
   m_needsRepaint = false;
   Refresh();
 }
@@ -1006,7 +1001,7 @@ void TerminalView::OnMouseWheel(wxMouseEvent &evt) {
 void TerminalView::OnContextMenu(wxContextMenuEvent &evt) {
   wxMenu menu;
 
-  if (IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
+  if (m_mouseSelectionRect.IsSelectionRectHasMinSize()) {
     menu.Append(wxID_COPY, _("Copy"));
   }
   menu.Append(wxID_PASTE, _("Paste"));
@@ -1061,7 +1056,7 @@ void TerminalView::OnCharHook(wxKeyEvent &evt) {
     SendTab();
     return;
   } else if (key == WXK_ESCAPE) {
-    if (IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
+    if (m_mouseSelectionRect.IsSelectionRectHasMinSize()) {
       ClearMouseSelection();
       return;
     }
@@ -1258,7 +1253,7 @@ const wxFont &TerminalView::GetCachedFont(bool bold, bool underlined) const {
 
 void TerminalView::Copy() {
   TLOG_DEBUG() << "Copy is called!" << std::endl;
-  if (!IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
+  if (!m_mouseSelectionRect.IsSelectionRectHasMinSize()) {
     TLOG_DEBUG() << "No selection is active - will "
                     "do nothing"
                  << std::endl;
@@ -1267,7 +1262,7 @@ void TerminalView::Copy() {
 
   // Get the selected text
   wxString selection;
-  wxRect rect = PixelsRectToViewCellRect(m_mouseSelectionRect);
+  wxRect rect = m_mouseSelectionRect.PixelsRectToViewCellRect(m_charW, m_charH);
   TLOG_DEBUG() << "Copying content: " << rect << std::endl;
   auto viewArea = m_core.GetViewArea();
   for (int y = rect.GetTopLeft().y;
