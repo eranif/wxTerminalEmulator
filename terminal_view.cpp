@@ -519,12 +519,81 @@ bool TerminalView::IsAsciiSafeTextRun(
   }
 
   for (const auto &cell : cells) {
-    if (cell.ch < 0x20 || cell.ch > 0x7e) {
+    if (!IsUnicodeSingleCellSafe(cell.ch)) {
       return false;
     }
   }
 
   return true;
+}
+
+bool TerminalView::IsUnicodeSingleCellSafe(wxChar ch) const {
+  if (ch >= 0x20 && ch <= 0x7e) {
+    return true;
+  }
+
+  if (ch < 0x80) {
+    return false;
+  }
+
+  // Reject control characters and combining marks.
+  if ((ch >= 0x00 && ch < 0x20) || ch == 0x7f) {
+    return false;
+  }
+
+  // Reject common zero-width / combining / joiner code points.
+  switch (ch) {
+  case 0x0300: // Combining Grave Accent
+  case 0x0301:
+  case 0x0302:
+  case 0x0303:
+  case 0x0304:
+  case 0x0308:
+  case 0x030A:
+  case 0x0327:
+  case 0x200C: // ZWNJ
+  case 0x200D: // ZWJ
+  case 0xFE0E: // Variation Selector-15
+  case 0xFE0F: // Variation Selector-16
+    return false;
+  default:
+    break;
+  }
+
+  // Reject common wide/full-width blocks that usually span more than one cell.
+  if ((ch >= 0x1100 && ch <= 0x115F) || (ch >= 0x2329 && ch <= 0x232A) ||
+      (ch >= 0x2E80 && ch <= 0xA4CF) || (ch >= 0xAC00 && ch <= 0xD7A3) ||
+      (ch >= 0xF900 && ch <= 0xFAFF) || (ch >= 0xFE10 && ch <= 0xFE19) ||
+      (ch >= 0xFE30 && ch <= 0xFE6F) || (ch >= 0xFF00 && ch <= 0xFF60) ||
+      (ch >= 0xFFE0 && ch <= 0xFFE6)) {
+    return false;
+  }
+
+  // A conservative whitelist of single-cell Unicode blocks that are typically
+  // safe to render as one terminal cell.
+  if ((ch >= 0x00A0 && ch <= 0x024F) || // Latin-1 supplement + extended Latin
+      (ch >= 0x0370 && ch <= 0x052F) || // Greek, Cyrillic, Armenian
+      (ch >= 0x2000 && ch <= 0x206F) || // General punctuation
+      (ch >= 0x2100 && ch <= 0x214F) || // Letterlike symbols
+      (ch >= 0x2150 && ch <= 0x218F) || // Number forms
+      (ch >= 0x2200 && ch <= 0x22FF) || // Mathematical operators
+      (ch >= 0x2300 && ch <= 0x231F) || // Misc technical
+      (ch >= 0x25A0 && ch <= 0x25FF) || // Geometric shapes
+      (ch >= 0x2600 && ch <= 0x26FF) || // Misc symbols
+      (ch >= 0x2700 && ch <= 0x27BF) || // Dingbats
+      (ch >= 0x2B00 && ch <= 0x2BFF) || // Arrows and symbols
+      (ch >= 0x3000 && ch <= 0x303F) || // CJK symbols/punctuation
+      (ch >= 0x3040 && ch <= 0x30FF) || // Hiragana/Katakana
+      (ch >= 0x31F0 && ch <= 0x31FF) || // Katakana phonetic extensions
+      (ch >= 0x3400 && ch <= 0x4DBF) || // CJK extension A`
+      (ch >= 0x4E00 && ch <= 0x9FFF) || // CJK unified ideographs
+      (ch >= 0xA960 && ch <= 0xA97F) || // Hangul Jamo extended-A
+      (ch >= 0xAC00 && ch <= 0xD7AF) || // Hangul syllables
+      (ch >= 0xF000 && ch <= 0xF8FF)) { // Private use area
+    return true;
+  }
+
+  return false;
 }
 
 void TerminalView::RenderRowWithGrouping(wxDC &dc, int y, int rowIdx,
@@ -541,7 +610,7 @@ void TerminalView::RenderRowWithGrouping(wxDC &dc, int y, int rowIdx,
   if (!IsAsciiSafeTextRun(cells)) {
     return RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, counters);
   }
-
+  counters.grouped_rows_++;
   for (size_t i = 0; i < cells.size();) {
     const auto &firstCell = cells[i];
     wxString text;
@@ -774,7 +843,9 @@ void TerminalView::OnPaint(wxPaintEvent &) {
                               TerminalLogLevel::kTrace};
   PaintCounters paint_counters{
       function_logger.AddCounter("DrawText calls"),
-      function_logger.AddCounter("DrawRectangle calls")};
+      function_logger.AddCounter("DrawRectangle calls"),
+      function_logger.AddCounter("GroupedRows calls"),
+  };
 
   wxAutoBufferedPaintDC dc{this};
 

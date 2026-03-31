@@ -128,10 +128,13 @@ private:
                               bool foreground) const;
   void OnPaint(wxPaintEvent &evt);
   struct PaintCounters {
-    PaintCounters(size_t &draw_text, size_t &draw_rectangle)
-        : draw_text_{draw_text}, draw_rectangle_{draw_rectangle} {}
+    PaintCounters(size_t &draw_text, size_t &draw_rectangle,
+                  size_t &grouped_rows)
+        : draw_text_{draw_text}, draw_rectangle_{draw_rectangle},
+          grouped_rows_{grouped_rows} {}
     size_t &draw_text_;
     size_t &draw_rectangle_;
+    size_t &grouped_rows_;
   };
 
   void RenderRow(wxDC &dc, int y, int rowIdx,
@@ -232,6 +235,16 @@ private:
    * contains a printable ASCII character; otherwise false.
    */
   bool IsAsciiSafeTextRun(const std::vector<CellInfo> &cells) const;
+
+  /**
+   * @brief Checks whether a cell can be safely grouped with neighboring cells
+   * for text rendering.
+   *
+   * This accepts printable ASCII and a conservative subset of Unicode code
+   * points that are expected to occupy exactly one terminal cell and do not
+   * require shaping across adjacent cells.
+   */
+  bool IsUnicodeSingleCellSafe(wxChar ch) const;
 
   std::vector<TerminalView::CellInfo>
   PrepareRowForDrawing(const std::vector<terminal::Cell> &row, int rowIdx,
