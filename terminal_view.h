@@ -176,6 +176,7 @@ private:
 
   wxRect ViewCellToPixelsRect(const wxRect &viewrect) const;
   wxRect PixelsRectToViewCellRect(const wxRect &pixelrect) const;
+  wxRect NormalizeSelectionRect(const wxPoint &p1, const wxPoint &p2) const;
   /**
    * Handles terminal-specific special key events by translating supported
    * wxWidgets key codes into ANSI escape sequences and sending them to the
@@ -252,6 +253,7 @@ private:
   terminal::TerminalCore m_core;
   std::unique_ptr<terminal::PtyBackend> m_backend;
   wxRect m_mouseSelectionRect{};
+  wxPoint m_selectionAnchor{};
   ApiSelection m_userSelection;
   bool m_isDragging{false};
   bool m_needsRepaint{true};

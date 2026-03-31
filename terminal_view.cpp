@@ -433,6 +433,11 @@ wxRect TerminalView::PixelsRectToViewCellRect(const wxRect &pixelrect) const {
   return wxRect(cell_x, cell_y, cell_width, cell_height);
 }
 
+wxRect TerminalView::NormalizeSelectionRect(const wxPoint &p1,
+                                            const wxPoint &p2) const {
+  return MakeRect(p1, p2);
+}
+
 wxColour
 TerminalView::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
                                  bool foreground) const {
@@ -942,7 +947,8 @@ void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
     m_mouseSelectionRect = {};
   }
 
-  m_mouseSelectionRect = wxRect(evt.GetX(), evt.GetY(), 1, 1);
+  m_selectionAnchor = wxPoint{evt.GetX(), evt.GetY()};
+  m_mouseSelectionRect = wxRect(m_selectionAnchor, wxSize{1, 1});
   m_isDragging = true;
   m_needsRepaint = false;
   Refresh();
@@ -955,7 +961,7 @@ void TerminalView::OnMouseMove(wxMouseEvent &evt) {
   }
 
   wxPoint pt2{evt.GetX(), evt.GetY()};
-  m_mouseSelectionRect = MakeRect(m_mouseSelectionRect.GetTopLeft(), pt2);
+  m_mouseSelectionRect = NormalizeSelectionRect(m_selectionAnchor, pt2);
   m_needsRepaint = true;
 }
 
@@ -965,12 +971,14 @@ void TerminalView::OnMouseUp(wxMouseEvent &evt) {
 
   if (!IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
     m_mouseSelectionRect = {};
+    m_selectionAnchor = {};
     return;
   }
 
   // Adjust the selection rect into cell rect.
   wxRect cell_based_rect = PixelsRectToViewCellRect(m_mouseSelectionRect);
   m_mouseSelectionRect = ViewCellToPixelsRect(cell_based_rect);
+  m_selectionAnchor = m_mouseSelectionRect.GetTopLeft();
   m_needsRepaint = false;
   Refresh();
 }
