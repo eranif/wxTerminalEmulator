@@ -33,6 +33,8 @@ public:
    */
   void SendInput(const std::string &text);
   void SetTerminalSizeFromClient();
+
+  // Get the entire screen content
   wxString GetText() const;
 
   // Helper methods for sending special characters
@@ -77,6 +79,20 @@ public:
   void SendAltB();
   // Move forward 1 word
   void SendAltF();
+
+  void Copy();
+  void Paste();
+  /**
+   * @brief Clears the terminal screen and scrollback buffer for this
+   * TerminalView.
+   *
+   * Sends the ANSI escape sequence to clear both the visible screen and the
+   * scrollback history, then marks the view as needing a repaint.
+   *
+   * @param None.
+   * @return void. This function does not return a value.
+   */
+  void ClearAll();
 
   void SetTheme(const wxTerminalTheme &theme);
   const wxTerminalTheme &GetTheme() const;

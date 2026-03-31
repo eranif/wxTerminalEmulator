@@ -926,67 +926,18 @@ void TerminalView::OnContextMenu(wxContextMenuEvent &evt) {
 }
 
 void TerminalView::OnCopy(wxCommandEvent &evt) {
-  TLOG_DEBUG() << "Copy is called!" << std::endl;
-  if (!IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
-    TLOG_DEBUG() << "No selection is active - will "
-                    "do nothing"
-                 << std::endl;
-    return;
-  }
-
-  // Get the selected text
-  wxString selection;
-  wxRect rect = PixelsRectToViewCellRect(m_mouseSelectionRect);
-  TLOG_DEBUG() << "Copying content: " << rect << std::endl;
-  auto viewArea = m_core.GetViewArea();
-  for (int y = rect.GetTopLeft().y;
-       y <= rect.GetBottomLeft().y && y < static_cast<int>(viewArea.size());
-       ++y) {
-    const auto &row = *viewArea[y];
-    for (int x = rect.GetTopLeft().x;
-         x <= rect.GetTopRight().x && x < static_cast<int>(row.size()); ++x) {
-      selection += wxUniChar(row[x].ch);
-    }
-    selection += "\n"; // Add newline between rows
-  }
-
-  if (!selection.empty()) {
-    selection.RemoveLast();
-  }
-
-  TLOG_DEBUG() << "Copying:" << selection.size() << " chars. Content:\n"
-               << selection << std::endl;
-  // Copy to clipboard
-  if (wxTheClipboard->Open()) {
-    wxTheClipboard->SetData(new wxTextDataObject(selection));
-    wxTheClipboard->Flush();
-    wxTheClipboard->Close();
-  }
-  ClearMouseSelection();
-  m_needsRepaint = true;
+  wxUnusedVar(evt);
+  Copy();
 }
 
 void TerminalView::OnClearBuffer(wxCommandEvent &evt) {
   wxUnusedVar(evt);
-  Feed("\033[2J\033[3J");
-  m_needsRepaint = true;
+  ClearAll();
 }
 
 void TerminalView::OnPaste(wxCommandEvent &evt) {
-  TLOG_DEBUG() << "Paste is called!" << std::endl;
-  if (!wxTheClipboard->Open())
-    return;
-
-  if (wxTheClipboard->IsSupported(wxDF_UNICODETEXT) ||
-      wxTheClipboard->IsSupported(wxDF_TEXT)) {
-    wxTextDataObject data;
-    wxTheClipboard->GetData(data);
-    std::string text = data.GetText().ToStdString(wxConvUTF8);
-    SendInput(text);
-  }
-
-  wxTheClipboard->Close();
-  evt.Skip();
+  wxUnusedVar(evt);
+  Paste();
 }
 
 void TerminalView::OnFocus(wxFocusEvent &evt) {
@@ -1205,4 +1156,66 @@ const wxFont &TerminalView::GetCachedFont(bool bold, bool underlined) const {
   } else [[likely]] {
     return m_defaultFont;
   }
+}
+
+void TerminalView::Copy() {
+  TLOG_DEBUG() << "Copy is called!" << std::endl;
+  if (!IsSelectionRectHasMinSize(m_mouseSelectionRect)) {
+    TLOG_DEBUG() << "No selection is active - will "
+                    "do nothing"
+                 << std::endl;
+    return;
+  }
+
+  // Get the selected text
+  wxString selection;
+  wxRect rect = PixelsRectToViewCellRect(m_mouseSelectionRect);
+  TLOG_DEBUG() << "Copying content: " << rect << std::endl;
+  auto viewArea = m_core.GetViewArea();
+  for (int y = rect.GetTopLeft().y;
+       y <= rect.GetBottomLeft().y && y < static_cast<int>(viewArea.size());
+       ++y) {
+    const auto &row = *viewArea[y];
+    for (int x = rect.GetTopLeft().x;
+         x <= rect.GetTopRight().x && x < static_cast<int>(row.size()); ++x) {
+      selection += wxUniChar(row[x].ch);
+    }
+    selection += "\n"; // Add newline between rows
+  }
+
+  if (!selection.empty()) {
+    selection.RemoveLast();
+  }
+
+  TLOG_DEBUG() << "Copying:" << selection.size() << " chars. Content:\n"
+               << selection << std::endl;
+  // Copy to clipboard
+  if (wxTheClipboard->Open()) {
+    wxTheClipboard->SetData(new wxTextDataObject(selection));
+    wxTheClipboard->Flush();
+    wxTheClipboard->Close();
+  }
+  ClearMouseSelection();
+  m_needsRepaint = true;
+}
+
+void TerminalView::Paste() {
+  TLOG_DEBUG() << "Paste is called!" << std::endl;
+  if (!wxTheClipboard->Open())
+    return;
+
+  if (wxTheClipboard->IsSupported(wxDF_UNICODETEXT) ||
+      wxTheClipboard->IsSupported(wxDF_TEXT)) {
+    wxTextDataObject data;
+    wxTheClipboard->GetData(data);
+    std::string text = data.GetText().ToStdString(wxConvUTF8);
+    SendInput(text);
+  }
+
+  wxTheClipboard->Close();
+}
+
+void TerminalView::ClearAll() {
+  Feed("\033[2J\033[3J");
+  m_needsRepaint = true;
 }
