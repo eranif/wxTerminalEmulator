@@ -3,6 +3,7 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdlib>
+#include <sstream>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -24,6 +25,16 @@
 #endif
 
 namespace terminal {
+
+// Split a command string into argv tokens (simple whitespace splitting).
+static std::vector<std::string> TokenizeCommand(const std::string &cmd) {
+  std::vector<std::string> tokens;
+  std::istringstream iss(cmd);
+  std::string token;
+  while (iss >> token)
+    tokens.push_back(token);
+  return tokens;
+}
 std::unique_ptr<PtyBackend> PtyBackend::Create(wxEvtHandler *handler) {
   return std::make_unique<PosixPtyBackend>(handler);
 }
@@ -37,6 +48,38 @@ bool PosixPtyBackend::Start(const std::string &command,
   Stop();
   m_onOutput = std::move(on_output);
 
+  // Resolve shell, build argv and envp BEFORE fork so the child
+  // only calls async-signal-safe functions (exec, setenv, _exit).
+  std::string shellStr = command;
+  if (shellStr.empty()) {
+    const char *envShell = getenv("SHELL");
+    shellStr = envShell ? envShell : "/bin/sh";
+  }
+
+  std::vector<std::string> args = TokenizeCommand(shellStr);
+  if (args.empty())
+    args.push_back("/bin/sh");
+
+  std::vector<char *> shell_argv;
+  for (auto &a : args)
+    shell_argv.push_back(a.data());
+  shell_argv.push_back(nullptr);
+
+  std::vector<char *> envp;
+  bool hasEnv = environment.has_value();
+  if (hasEnv) {
+    TLOG_INFO() << "Starting with env: " << *environment << std::endl;
+    envp.reserve(environment->size() + 2);
+    for (const auto &entry : *environment) {
+      if (entry.starts_with("TERM="))
+        continue;
+      envp.push_back(const_cast<char *>(entry.c_str()));
+    }
+    static constexpr char kTermEnv[] = "TERM=xterm-256color";
+    envp.push_back(const_cast<char *>(kTermEnv));
+    envp.push_back(nullptr);
+  }
+
   struct winsize ws {};
   ws.ws_col = 120;
   ws.ws_row = 30;
@@ -49,51 +92,17 @@ bool PosixPtyBackend::Start(const std::string &command,
   }
 
   if (pid == 0) {
-    // Child process
-    if (environment.has_value()) {
-      TLOG_INFO() << "Starting with env: " << *environment << std::endl;
-      const char *shell = command.empty() ? nullptr : command.c_str();
-      if (!shell) {
-        shell = getenv("SHELL");
-        if (!shell) {
-          shell = "/bin/sh";
-        }
-      }
-
-      std::vector<char *> envp;
-      envp.reserve(environment->size() + 1);
-      for (const auto &entry : *environment) {
-        if (entry.starts_with("TERM="))
-          // we bring our own
-          continue;
-        envp.push_back(const_cast<char *>(entry.c_str()));
-      }
-      static constexpr char kTermEnv[] = "TERM=xterm-256color";
-      envp.push_back(const_cast<char *>(kTermEnv));
-      envp.push_back(nullptr);
-
-      std::vector<char *> shell_argv;
-      shell_argv.push_back(const_cast<char *>(shell));
-      shell_argv.push_back(nullptr);
-
+    // Child process — async-signal-safe calls only.
+    if (hasEnv) {
 #if defined(__APPLE__)
-      execve(shell, shell_argv.data(), envp.data());
+      execve(shell_argv[0], shell_argv.data(), envp.data());
 #else
-      execvpe(shell, shell_argv.data(), envp.data());
+      execvpe(shell_argv[0], shell_argv.data(), envp.data());
 #endif
-      _exit(127);
+    } else {
+      setenv("TERM", "xterm-256color", 1);
+      execvp(shell_argv[0], shell_argv.data());
     }
-
-    // Ensure TERM exists even with inherited or explicit env.
-    const char *shell = command.empty() ? nullptr : command.c_str();
-    if (!shell) {
-      shell = getenv("SHELL");
-      if (!shell) {
-        shell = "/bin/sh";
-      }
-    }
-    setenv("TERM", "xterm-256color", 1);
-    execlp(shell, shell, nullptr);
     _exit(127);
   }
 
@@ -179,6 +188,9 @@ void PosixPtyBackend::ReaderThread() {
         } else if (n < 0 && (errno == EAGAIN || errno == EINTR)) {
           break;
         } else {
+          // EOF or error — child exited
+          wxTerminalEvent terminate_event{wxEVT_TERMINAL_TERMINATED};
+          m_eventHandler->AddPendingEvent(terminate_event);
           m_running = false;
           break;
         }
