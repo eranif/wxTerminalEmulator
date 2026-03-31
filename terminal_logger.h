@@ -3,6 +3,7 @@
 #include "wx/gdicmn.h"
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <vector>
 #include <wx/arrstr.h>
