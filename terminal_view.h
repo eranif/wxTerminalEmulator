@@ -185,6 +185,7 @@ private:
   void OnCopy(wxCommandEvent &evt);
   void OnPaste(wxCommandEvent &evt);
   void OnClearBuffer(wxCommandEvent &evt);
+  void DrawFocusBorder(wxDC &dc) const;
   void DebugDumpViewArea();
   void UpdateFontCache();
   const wxFont &GetCachedFont(bool bold, bool underlined) const;

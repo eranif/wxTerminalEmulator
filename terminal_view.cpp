@@ -861,7 +861,6 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   wxAutoBufferedPaintDC dc{this};
 
   const auto &theme = m_core.GetTheme();
-  wxRect client_rect = GetClientRect();
   dc.SetBackground(wxBrush(theme.bg));
   dc.Clear();
   dc.SetFont(m_defaultFont);
@@ -895,6 +894,8 @@ void TerminalView::OnPaint(wxPaintEvent &) {
     RenderRow(dc, y, rowIdx, row, selected_cells, paint_counters);
     y += m_charH;
   }
+
+  DrawFocusBorder(dc);
 
   // Draw cursor (block caret) — only if shell
   // viewport is visible
@@ -1044,6 +1045,25 @@ void TerminalView::OnPaste(wxCommandEvent &evt) {
 void TerminalView::OnFocus(wxFocusEvent &evt) {
   // Ensure we can receive keyboard events
   evt.Skip();
+  Refresh();
+}
+
+void TerminalView::DrawFocusBorder(wxDC &dc) const {
+  if (!wxWindow::FindFocus() || wxWindow::FindFocus() != this) {
+    return;
+  }
+
+  wxRect r = GetClientRect();
+  if (r.width <= 1 || r.height <= 1) {
+    return;
+  }
+
+  wxPen pen(GetForegroundColour(), 1);
+  pen.SetCap(wxCAP_BUTT);
+  pen.SetJoin(wxJOIN_MITER);
+  dc.SetPen(pen);
+  dc.SetBrush(*wxTRANSPARENT_BRUSH);
+  dc.DrawRectangle(r.GetX(), r.GetY(), r.GetWidth() - 1, r.GetHeight() - 1);
 }
 
 void TerminalView::OnCharHook(wxKeyEvent &evt) {
