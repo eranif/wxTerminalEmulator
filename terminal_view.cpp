@@ -14,6 +14,7 @@
 #include <wx/gdicmn.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
+#include <wx/settings.h>
 #include <wx/window.h>
 
 #ifdef __WXOSX__
@@ -1063,12 +1064,14 @@ void TerminalView::OnFocus(wxFocusEvent &evt) {
   // Ensure we can receive keyboard events
   evt.Skip();
   m_hasFocusBorder = true;
+  SetCursor(wxCursor(wxCURSOR_IBEAM));
   Refresh();
 }
 
 void TerminalView::OnLostFocus(wxFocusEvent &evt) {
   evt.Skip();
   m_hasFocusBorder = false;
+  SetCursor(wxCursor(wxCURSOR_ARROW));
   ClearMouseSelection();
   Refresh();
 }
