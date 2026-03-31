@@ -182,6 +182,7 @@ private:
   void OnContextMenu(wxContextMenuEvent &evt);
   void OnMouseWheel(wxMouseEvent &evt);
   void OnFocus(wxFocusEvent &evt);
+  void OnLostFocus(wxFocusEvent &evt);
   void OnCopy(wxCommandEvent &evt);
   void OnPaste(wxCommandEvent &evt);
   void OnClearBuffer(wxCommandEvent &evt);
@@ -249,6 +250,8 @@ private:
    * contains a printable ASCII character; otherwise false.
    */
   bool IsAsciiSafeTextRun(const std::vector<CellInfo> &cells) const;
+
+  bool m_hasFocusBorder{false};
 
   /**
    * @brief Checks whether a cell can be safely grouped with neighboring cells

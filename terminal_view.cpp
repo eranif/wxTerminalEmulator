@@ -134,6 +134,7 @@ TerminalView::TerminalView(wxWindow *parent, const wxString &shellCommand,
   Bind(wxEVT_CONTEXT_MENU, &TerminalView::OnContextMenu, this);
   Bind(wxEVT_MOUSEWHEEL, &TerminalView::OnMouseWheel, this);
   Bind(wxEVT_SET_FOCUS, &TerminalView::OnFocus, this);
+  Bind(wxEVT_KILL_FOCUS, &TerminalView::OnLostFocus, this);
   Bind(wxEVT_TIMER, &TerminalView::OnTimer, this);
   Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent &e) {
     e.Skip();
@@ -1045,11 +1046,19 @@ void TerminalView::OnPaste(wxCommandEvent &evt) {
 void TerminalView::OnFocus(wxFocusEvent &evt) {
   // Ensure we can receive keyboard events
   evt.Skip();
+  m_hasFocusBorder = true;
+  Refresh();
+}
+
+void TerminalView::OnLostFocus(wxFocusEvent &evt) {
+  evt.Skip();
+  m_hasFocusBorder = false;
+  ClearMouseSelection();
   Refresh();
 }
 
 void TerminalView::DrawFocusBorder(wxDC &dc) const {
-  if (!wxWindow::FindFocus() || wxWindow::FindFocus() != this) {
+  if (!m_hasFocusBorder) {
     return;
   }
 
