@@ -123,6 +123,7 @@ TerminalView::TerminalView(wxWindow *parent, const wxString &shellCommand,
     : wxPanel(parent, wxID_ANY) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   UpdateFontCache();
+  SetCursor(wxCursor(wxCURSOR_IBEAM));
 
   // Bind events using modern API
   Bind(wxEVT_PAINT, &TerminalView::OnPaint, this);
@@ -1064,14 +1065,12 @@ void TerminalView::OnFocus(wxFocusEvent &evt) {
   // Ensure we can receive keyboard events
   evt.Skip();
   m_hasFocusBorder = true;
-  SetCursor(wxCursor(wxCURSOR_IBEAM));
   Refresh();
 }
 
 void TerminalView::OnLostFocus(wxFocusEvent &evt) {
   evt.Skip();
   m_hasFocusBorder = false;
-  SetCursor(wxCursor(wxCURSOR_ARROW));
   ClearMouseSelection();
   Refresh();
 }
@@ -1087,9 +1086,10 @@ void TerminalView::DrawFocusBorder(wxDC &dc) const {
   }
 
   const wxColour bg = GetBackgroundColour();
-  const int bgLuminance = (bg.Red() * 299 + bg.Green() * 587 + bg.Blue() * 114) / 1000;
-  const wxColour focusRectColour = bgLuminance >= 128 ? bg.ChangeLightness(50)
-                                                      : bg.ChangeLightness(150);
+  const int bgLuminance =
+      (bg.Red() * 299 + bg.Green() * 587 + bg.Blue() * 114) / 1000;
+  const wxColour focusRectColour =
+      bgLuminance >= 128 ? bg.ChangeLightness(50) : bg.ChangeLightness(150);
 
   wxPen pen(focusRectColour, 1);
   pen.SetCap(wxCAP_BUTT);
