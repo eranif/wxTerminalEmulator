@@ -24,9 +24,6 @@
 #endif
 
 namespace terminal {
-
-extern char **environ;
-
 std::unique_ptr<PtyBackend> PtyBackend::Create(wxEvtHandler *handler) {
   return std::make_unique<PosixPtyBackend>(handler);
 }
@@ -55,17 +52,6 @@ bool PosixPtyBackend::Start(const std::string &command,
     // Child process
     if (environment.has_value()) {
       TLOG_INFO() << "Starting with env: " << *environment << std::endl;
-      std::vector<char *> envp;
-      envp.reserve(environment->size() + 1);
-      for (const auto &entry : *environment) {
-        if (entry.rfind("TERM=", 0) == 0)
-          continue;
-        envp.push_back(const_cast<char *>(entry.c_str()));
-      }
-      static constexpr char kTermEnv[] = "TERM=xterm-256color";
-      envp.push_back(const_cast<char *>(kTermEnv));
-      envp.push_back(nullptr);
-
       const char *shell = command.empty() ? nullptr : command.c_str();
       if (!shell) {
         shell = getenv("SHELL");
@@ -74,7 +60,23 @@ bool PosixPtyBackend::Start(const std::string &command,
         }
       }
 
-      execve(shell, const_cast<char *const *>(envp.data()), environ);
+      std::vector<char *> envp;
+      envp.reserve(environment->size() + 1);
+      for (const auto &entry : *environment) {
+        if (entry.starts_with("TERM="))
+          // we bring our own
+          continue;
+        envp.push_back(const_cast<char *>(entry.c_str()));
+      }
+      static constexpr char kTermEnv[] = "TERM=xterm-256color";
+      envp.push_back(const_cast<char *>(kTermEnv));
+      envp.push_back(nullptr);
+
+      std::vector<char *> shell_argv;
+      shell_argv.push_back(const_cast<char *>(shell));
+      shell_argv.push_back(nullptr);
+
+      execvpe(shell, shell_argv.data(), envp.data());
       _exit(127);
     }
 

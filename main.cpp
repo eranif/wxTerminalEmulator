@@ -73,13 +73,8 @@ public:
       return EnvironmentList{};
     }
 
-#ifdef __WXMSW__
-    const wxChar separator = ';';
-#else
-    const wxChar separator = ':';
-#endif
     EnvironmentList env;
-    wxStringTokenizer tokens(s, wxString(1, separator), wxTOKEN_RET_EMPTY_ALL);
+    wxStringTokenizer tokens(s, ",", wxTOKEN_RET_EMPTY_ALL);
     while (tokens.HasMoreTokens()) {
       wxString token = tokens.GetNextToken().Strip(wxString::both);
       if (token.empty() || !token.Contains('='))
