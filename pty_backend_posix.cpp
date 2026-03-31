@@ -23,6 +23,30 @@
 
 namespace terminal {
 
+namespace {
+std::vector<std::string> split_storage(const std::string &input) {
+  std::istringstream iss(input);
+  std::vector<std::string> tokens;
+  std::string token;
+
+  while (iss >> token) {
+    tokens.push_back(token);
+  }
+  return tokens;
+}
+
+std::vector<char *> to_argv(const std::vector<std::string> &tokens) {
+  std::vector<char *> argv;
+  argv.reserve(tokens.size() + 1);
+
+  for (const auto &s : tokens) {
+    argv.push_back(const_cast<char *>(s.c_str()));
+  }
+  argv.push_back(nullptr); // optional, for exec-style argv
+  return argv;
+}
+} // namespace
+
 std::unique_ptr<PtyBackend> PtyBackend::Create(wxEvtHandler *handler) {
   return std::make_unique<PosixPtyBackend>(handler);
 }
@@ -42,15 +66,17 @@ bool PosixPtyBackend::Start(const std::string &command,
 
   pid_t pid = forkpty(&m_masterFd, nullptr, nullptr, &ws);
   if (pid < 0) {
-    if (m_onOutput)
+    TLOG_ERROR() << "forkpty failed. " << strerror(errno) << std::endl;
+    if (m_onOutput) {
       m_onOutput("[forkpty failed: " + std::string(strerror(errno)) + "]\r\n");
+    }
     return false;
   }
 
   if (pid == 0) {
     // Child process
     if (environment.has_value()) {
-      TLOG_ERROR() << "Starting with env: " << *environment << std::endl;
+      TLOG_INFO() << "Starting with env: " << *environment << std::endl;
       clearenv();
       for (const auto &entry : *environment) {
         const auto pos = entry.find('=');
@@ -60,6 +86,8 @@ bool PosixPtyBackend::Start(const std::string &command,
         std::string value = entry.substr(pos + 1);
         setenv(key.c_str(), value.c_str(), 1);
       }
+    } else {
+      TLOG_INFO() << "Using default environment" << std::endl;
     }
 
     // Ensure TERM exists even with inherited or explicit env.
@@ -71,7 +99,16 @@ bool PosixPtyBackend::Start(const std::string &command,
       }
     }
     setenv("TERM", "xterm-256color", 1);
-    execlp(shell, shell, nullptr);
+
+    // Need to split the args
+    auto tokens = split_storage(shell);
+    auto argv = to_argv(tokens);
+    if (argv.empty()) {
+      TLOG_ERROR() << "No command to run!" << std::endl;
+      _exit(127);
+    }
+
+    execvp(argv[0], argv.data());
     _exit(127);
   }
 
@@ -80,8 +117,12 @@ bool PosixPtyBackend::Start(const std::string &command,
 
   // Set primary fd to non-blocking
   int flags = fcntl(m_masterFd, F_GETFL);
-  if (flags != -1)
+  if (flags != -1) {
+    TLOG_INFO() << "forkpty succeeded. " << std::endl;
     fcntl(m_masterFd, F_SETFL, flags | O_NONBLOCK);
+  } else {
+    TLOG_ERROR() << "forkpty failed. " << strerror(errno) << std::endl;
+  }
 
   m_running = true;
   m_readerThread = std::thread([this] { ReaderThread(); });
@@ -140,8 +181,10 @@ void PosixPtyBackend::ReaderThread() {
   char buf[4096];
 
   while (m_running) {
-    if (m_masterFd < 0)
+    if (m_masterFd < 0) {
+      TLOG_INFO() << "m_masterFd is negative. Leaving" << std::endl;
       break;
+    }
 
     struct pollfd pfd {};
     pfd.fd = m_masterFd;
@@ -151,16 +194,25 @@ void PosixPtyBackend::ReaderThread() {
     if (ret > 0 && (pfd.revents & POLLIN)) {
       std::string accumulated;
       for (int i = 0; i < 5; ++i) {
+        errno = 0;
         ssize_t n = read(m_masterFd, buf, sizeof(buf));
         if (n > 0) {
           accumulated.append(buf, static_cast<size_t>(n));
         } else if (n < 0 && (errno == EAGAIN || errno == EINTR)) {
+          // This OK
+          break;
+        } else if (n < 0) {
+          TLOG_INFO() << "read(..) < 0. " << strerror(errno) << std::endl;
+          m_running = false;
           break;
         } else {
+          TLOG_INFO() << "child process terminated." << strerror(errno)
+                      << std::endl;
           m_running = false;
           break;
         }
       }
+
       if (!accumulated.empty() && m_onOutput) {
         TLOG_IF_TRACE {
           TLOG_TRACE() << "Terminal output read: " << accumulated << std::endl;
@@ -170,9 +222,14 @@ void PosixPtyBackend::ReaderThread() {
       if (!m_running)
         break;
     } else if (ret < 0 && errno != EINTR) {
+      TLOG_INFO() << "poll(..) returned with error. " << strerror(errno)
+                  << std::endl;
       m_running = false;
       break;
     } else if (ret > 0 && (pfd.revents & (POLLHUP | POLLERR | POLLNVAL))) {
+      TLOG_INFO() << "poll(..) returned with ret > 0 but events are: (POLLHUP "
+                     "| POLLERR | POLLNVAL)"
+                  << std::endl;
       wxTerminalEvent terminate_event{wxEVT_TERMINAL_TERMINATED};
       m_eventHandler->AddPendingEvent(terminate_event);
       m_running = false;

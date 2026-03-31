@@ -14,6 +14,8 @@ wxString LevelToString(TerminalLogLevel level) {
     return "WARN";
   case TerminalLogLevel::kError:
     return "ERROR";
+  case TerminalLogLevel::kInfo:
+    return "INFO";
   }
   return "?";
 }

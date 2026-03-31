@@ -11,7 +11,13 @@
 #include <wx/stopwatch.h>
 #include <wx/string.h>
 
-enum class TerminalLogLevel { kTrace = 0, kDebug = 1, kWarn = 2, kError = 3 };
+enum class TerminalLogLevel {
+  kTrace = 0,
+  kDebug = 1,
+  kInfo = 2,
+  kWarn = 3,
+  kError = 4,
+};
 
 class TerminalLogger {
 public:
@@ -67,7 +73,7 @@ private:
   void Write(TerminalLogLevel level, const wxString &msg);
   void EnsureOpen();
 
-  TerminalLogLevel m_level{TerminalLogLevel::kDebug};
+  TerminalLogLevel m_level{TerminalLogLevel::kError};
   wxString m_logPath;
   wxFFile m_file;
 };
@@ -77,6 +83,7 @@ private:
 #define TLOG_WARN() TLOG(TerminalLogLevel::kWarn)
 #define TLOG_ERROR() TLOG(TerminalLogLevel::kError)
 #define TLOG_TRACE() TLOG(TerminalLogLevel::kTrace)
+#define TLOG_INFO() TLOG(TerminalLogLevel::kInfo)
 
 #define TLOG_IF_TRACE                                                          \
   if (TerminalLogger::Get().GetLevel() <= TerminalLogLevel::kTrace)
