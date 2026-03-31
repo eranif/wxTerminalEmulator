@@ -9,6 +9,7 @@
 #include <wx/frame.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
+#include <wx/notebook.h>
 #include <wx/string.h>
 #include <wx/textdlg.h>
 #include <wx/tokenzr.h>
@@ -24,10 +25,17 @@ public:
     ID_CenterLine,
     ID_SetSelection,
     ID_PrintLine,
-    ID_SendInput
+    ID_SendInput,
+    ID_NewTerminal,
+    ID_Exit
   };
 
   using EnvironmentList = terminal::PtyBackend::EnvironmentList;
+
+  struct TerminalPageConfig {
+    wxString shellCommand;
+    std::optional<EnvironmentList> environment;
+  };
 
   MyFrame(const wxCmdLineParser &parser,
           const std::optional<EnvironmentList> &environment)
@@ -55,16 +63,10 @@ public:
     }
 
     BuildMenuBar();
-
-    m_view = new TerminalView(this, shellCommand, environment);
-    auto theme = m_themeIsDark ? wxTerminalTheme::MakeDarkTheme()
-                               : wxTerminalTheme::MakeLightTheme();
-    if (m_persistedFont.IsOk())
-      theme.font = m_persistedFont;
-    m_view->SetTheme(theme);
-
-    m_view->Bind(wxEVT_TERMINAL_TITLE_CHANGED, &MyFrame::OnTitleChanged, this);
-    m_view->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
+    m_notebook = new wxNotebook(this, wxID_ANY);
+    m_defaultShellCommand = shellCommand;
+    m_defaultEnvironment = environment;
+    m_view = CreateTerminalPage({shellCommand, environment});
   }
 
   static std::optional<EnvironmentList>
@@ -86,6 +88,12 @@ public:
 
   void BuildMenuBar() {
     auto *menuBar = new wxMenuBar();
+    auto *fileMenu = new wxMenu();
+    fileMenu->Append(ID_NewTerminal, "New terminal");
+    fileMenu->AppendSeparator();
+    fileMenu->Append(ID_Exit, "Exit");
+    menuBar->Append(fileMenu, "File");
+
     auto *optionsMenu = new wxMenu();
     optionsMenu->AppendRadioItem(ID_ThemeDark, "Dark theme");
     optionsMenu->AppendRadioItem(ID_ThemeLight, "Light theme");
@@ -99,6 +107,8 @@ public:
     menuBar->Append(optionsMenu, "Options");
     SetMenuBar(menuBar);
 
+    Bind(wxEVT_MENU, &MyFrame::OnNewTerminal, this, ID_NewTerminal);
+    Bind(wxEVT_MENU, &MyFrame::OnExit, this, ID_Exit);
     Bind(wxEVT_MENU, &MyFrame::OnDarkTheme, this, ID_ThemeDark);
     Bind(wxEVT_MENU, &MyFrame::OnLightTheme, this, ID_ThemeLight);
     Bind(wxEVT_MENU, &MyFrame::OnChangeFont, this, ID_ChangeFont);
@@ -108,62 +118,127 @@ public:
     Bind(wxEVT_MENU, &MyFrame::OnSendInput, this, ID_SendInput);
   }
 
+  void ApplyThemeToAllTabs(const wxTerminalTheme &theme) {
+    if (!m_notebook) {
+      return;
+    }
+
+    for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
+      if (auto *view = dynamic_cast<TerminalView *>(m_notebook->GetPage(i))) {
+        view->SetTheme(theme);
+        view->Refresh();
+      }
+    }
+  }
+
+  void ApplyFontToAllTabs(const wxFont &font) {
+    if (!m_notebook) {
+      return;
+    }
+
+    for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
+      if (auto *view = dynamic_cast<TerminalView *>(m_notebook->GetPage(i))) {
+        wxTerminalTheme theme = view->GetTheme();
+        theme.font = font;
+        view->SetTheme(theme);
+        view->Refresh();
+      }
+    }
+  }
+
+  TerminalView *GetActiveTerminalView() const {
+    if (!m_notebook || m_notebook->GetPageCount() == 0) {
+      return nullptr;
+    }
+    return dynamic_cast<TerminalView *>(m_notebook->GetCurrentPage());
+  }
+
+  TerminalView *CreateTerminalPage(const TerminalPageConfig &config) {
+    auto *page =
+        new TerminalView(m_notebook, config.shellCommand, config.environment);
+    m_notebook->AddPage(page, "Terminal", true);
+    ApplyThemeToTab(page);
+    page->Bind(wxEVT_TERMINAL_TITLE_CHANGED, &MyFrame::OnTitleChanged, this);
+    page->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
+    return page;
+  }
+
+  void ApplyThemeToTab(TerminalView *view) {
+    if (!view) {
+      return;
+    }
+
+    auto theme = m_themeIsDark ? wxTerminalTheme::MakeDarkTheme()
+                               : wxTerminalTheme::MakeLightTheme();
+    if (m_persistedFont.IsOk()) {
+      theme.font = m_persistedFont;
+    }
+    view->SetTheme(theme);
+  }
+
+  void OnNewTerminal(wxCommandEvent &event) {
+    wxUnusedVar(event);
+    CreateTerminalPage({m_defaultShellCommand, m_defaultEnvironment});
+    m_notebook->SetSelection(m_notebook->GetPageCount() - 1);
+  }
+
+  void OnExit(wxCommandEvent &event) {
+    wxUnusedVar(event);
+    Close(true);
+  }
+
   void OnDarkTheme(wxCommandEvent &event) {
     wxUnusedVar(event);
-    if (m_view) {
-      auto theme = wxTerminalTheme::MakeDarkTheme();
-      if (m_persistedFont.IsOk()) {
-        theme.font = m_persistedFont;
-      }
-      m_view->SetTheme(theme);
-      m_themeIsDark = true;
-      PersistSettings();
+    auto theme = wxTerminalTheme::MakeDarkTheme();
+    if (m_persistedFont.IsOk()) {
+      theme.font = m_persistedFont;
     }
+    ApplyThemeToAllTabs(theme);
+    m_themeIsDark = true;
+    PersistSettings();
   }
 
   void OnLightTheme(wxCommandEvent &event) {
     wxUnusedVar(event);
-    if (m_view) {
-      auto theme = wxTerminalTheme::MakeLightTheme();
-      if (m_persistedFont.IsOk()) {
-        theme.font = m_persistedFont;
-      }
-      m_view->SetTheme(theme);
-      m_themeIsDark = false;
-      PersistSettings();
+    auto theme = wxTerminalTheme::MakeLightTheme();
+    if (m_persistedFont.IsOk()) {
+      theme.font = m_persistedFont;
     }
+    ApplyThemeToAllTabs(theme);
+    m_themeIsDark = false;
+    PersistSettings();
   }
 
   void OnChangeFont(wxCommandEvent &event) {
     wxUnusedVar(event);
-    if (!m_view) {
+    TerminalView *activeView = GetActiveTerminalView();
+    if (!activeView) {
       return;
     }
 
     wxFontData fontData;
     fontData.EnableEffects(false);
-    fontData.SetInitialFont(m_view->GetTheme().font);
+    fontData.SetInitialFont(
+        m_persistedFont.IsOk() ? m_persistedFont : activeView->GetTheme().font);
 
     wxFontDialog dlg(this, fontData);
     if (dlg.ShowModal() != wxID_OK) {
       return;
     }
 
-    wxTerminalTheme theme = m_view->GetTheme();
-    theme.font = dlg.GetFontData().GetChosenFont();
-    m_view->SetTheme(theme);
-    m_view->Refresh();
-    m_persistedFont = theme.font;
+    m_persistedFont = dlg.GetFontData().GetChosenFont();
+    ApplyFontToAllTabs(m_persistedFont);
     PersistSettings();
   }
 
   void OnCenterLine(wxCommandEvent &event) {
     wxUnusedVar(event);
-    if (!m_view) {
+    TerminalView *activeView = GetActiveTerminalView();
+    if (!activeView) {
       return;
     }
 
-    const std::size_t totalLines = m_view->GetLineCount();
+    const std::size_t totalLines = activeView->GetLineCount();
     const wxString prompt = wxString::Format("Enter line number (1-%zu):",
                                              totalLines > 0 ? totalLines : 1);
 
@@ -181,17 +256,17 @@ public:
       return;
     }
 
-    m_view->CenterLine(static_cast<std::size_t>(lineNumber - 1));
+    activeView->CenterLine(static_cast<std::size_t>(lineNumber - 1));
   }
 
   void OnSetSelection(wxCommandEvent &event) {
     wxUnusedVar(event);
-    if (!m_view) {
+    TerminalView *activeView = GetActiveTerminalView();
+    if (!activeView) {
       return;
     }
 
-    const std::size_t totalLines = m_view->GetLineCount();
-    const std::size_t maxCols = m_view->GetTheme().fg.IsOk() ? 0 : 0;
+    const std::size_t totalLines = activeView->GetLineCount();
 
     wxString lineStr =
         wxGetTextFromUser(wxString::Format("Enter line number (1-%zu):",
@@ -225,18 +300,19 @@ public:
       return;
     }
 
-    m_view->SetUserSelection(static_cast<std::size_t>(colStart - 1),
-                             static_cast<std::size_t>(lineNumber - 1),
-                             static_cast<std::size_t>(count));
+    activeView->SetUserSelection(static_cast<std::size_t>(colStart - 1),
+                                 static_cast<std::size_t>(lineNumber - 1),
+                                 static_cast<std::size_t>(count));
   }
 
   void OnPrintLine(wxCommandEvent &event) {
     wxUnusedVar(event);
-    if (!m_view) {
+    TerminalView *activeView = GetActiveTerminalView();
+    if (!activeView) {
       return;
     }
 
-    const std::size_t totalLines = m_view->GetLineCount();
+    const std::size_t totalLines = activeView->GetLineCount();
     wxString lineStr =
         wxGetTextFromUser(wxString::Format("Enter line number (1-%zu):",
                                            totalLines > 0 ? totalLines : 1),
@@ -254,14 +330,15 @@ public:
     }
 
     wxString content =
-        m_view->GetLine(static_cast<std::size_t>(lineNumber - 1));
+        activeView->GetLine(static_cast<std::size_t>(lineNumber - 1));
     wxMessageBox(content.empty() ? "<empty line>" : content, "Line Content",
                  wxOK | wxICON_INFORMATION, this);
   }
 
   void OnSendInput(wxCommandEvent &event) {
     wxUnusedVar(event);
-    if (!m_view) {
+    TerminalView *activeView = GetActiveTerminalView();
+    if (!activeView) {
       return;
     }
 
@@ -270,28 +347,73 @@ public:
     if (input.empty()) {
       return;
     }
-    m_view->SendCommand(input);
+    activeView->SendCommand(input);
   }
 
   void OnTerminated(wxTerminalEvent &event) {
     wxUnusedVar(event);
-    ::wxMessageBox("Terminal terminated!", "wxTerminalEmulator",
-                   wxICON_WARNING | wxOK | wxCENTER);
-    CallAfter(&MyFrame::Terminate);
+    auto *view = dynamic_cast<TerminalView *>(event.GetEventObject());
+    if (!view || !m_notebook) {
+      return;
+    }
+
+    int tabIndex = wxNOT_FOUND;
+    for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
+      if (m_notebook->GetPage(i) == view) {
+        tabIndex = static_cast<int>(i);
+        break;
+      }
+    }
+
+    if (tabIndex == wxNOT_FOUND) {
+      return;
+    }
+
+    CallAfter([this, tabIndex]() {
+      if (!m_notebook) {
+        return;
+      }
+
+      if (tabIndex >= 0 &&
+          tabIndex < static_cast<int>(m_notebook->GetPageCount())) {
+        m_notebook->DeletePage(static_cast<size_t>(tabIndex));
+      }
+
+      if (m_notebook->GetPageCount() == 0) {
+        Close(true);
+      }
+    });
   }
-  void OnTitleChanged(wxTerminalEvent &event) { SetTitle(event.GetTitle()); }
+  void OnTitleChanged(wxTerminalEvent &event) {
+    if (auto *view = dynamic_cast<TerminalView *>(event.GetEventObject())) {
+      if (m_notebook) {
+        for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
+          if (m_notebook->GetPage(i) == view) {
+            m_notebook->SetPageText(i, event.GetTitle());
+            break;
+          }
+        }
+      }
+    }
+    SetTitle(event.GetTitle());
+  }
   void Terminate() { Close(true); }
 
   void PersistSettings() {
-    if (!m_view)
+    if (!m_notebook)
       return;
     const wxString themeName = m_themeIsDark ? "dark" : "light";
-    const wxFont font = m_view->GetTheme().font;
+    const wxFont font = m_persistedFont.IsOk()
+                            ? m_persistedFont
+                            : (m_view ? m_view->GetTheme().font : wxFont{});
     AppPersistence::Save(themeName, font);
   }
 
 private:
+  wxNotebook *m_notebook{nullptr};
   TerminalView *m_view{nullptr};
+  wxString m_defaultShellCommand;
+  std::optional<EnvironmentList> m_defaultEnvironment;
   bool m_themeIsDark{true};
   wxFont m_persistedFont;
 };

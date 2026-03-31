@@ -607,6 +607,7 @@ void WindowsPtyBackend::ReaderThread() {
                     << std::hex << exitCode << std::endl;
         m_running = false;
         wxTerminalEvent terminate_event{wxEVT_TERMINAL_TERMINATED};
+        terminate_event.SetEventObject(m_eventHandler);
         m_eventHandler->AddPendingEvent(terminate_event);
         break;
       }

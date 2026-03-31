@@ -190,6 +190,7 @@ void PosixPtyBackend::ReaderThread() {
         } else {
           // EOF or error — child exited
           wxTerminalEvent terminate_event{wxEVT_TERMINAL_TERMINATED};
+          terminate_event.SetEventObject(m_eventHandler);
           m_eventHandler->AddPendingEvent(terminate_event);
           m_running = false;
           break;
@@ -208,6 +209,7 @@ void PosixPtyBackend::ReaderThread() {
       break;
     } else if (ret > 0 && (pfd.revents & (POLLHUP | POLLERR | POLLNVAL))) {
       wxTerminalEvent terminate_event{wxEVT_TERMINAL_TERMINATED};
+      terminate_event.SetEventObject(m_eventHandler);
       m_eventHandler->AddPendingEvent(terminate_event);
       m_running = false;
       break;
