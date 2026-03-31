@@ -23,6 +23,7 @@ public:
     ID_ThemeLight,
     ID_ChangeFont,
     ID_CenterLine,
+    ID_SafeDrawing,
     ID_SetSelection,
     ID_PrintLine,
     ID_SendInput,
@@ -55,12 +56,16 @@ public:
 
     wxString persistedTheme = "dark";
     wxFont persistedFont;
+    bool persistedSafeDrawing = false;
     if (AppPersistence::Load(persistedTheme, persistedFont)) {
       m_themeIsDark = (persistedTheme.Lower() != "light");
       m_persistedFont = persistedFont;
     } else {
       m_themeIsDark = true;
     }
+
+    AppPersistence::Load(persistedSafeDrawing);
+    m_safeDrawingEnabled = persistedSafeDrawing;
 
     BuildMenuBar();
     m_notebook = new wxNotebook(this, wxID_ANY);
@@ -100,6 +105,7 @@ public:
     optionsMenu->AppendSeparator();
     optionsMenu->Append(ID_ChangeFont, "Change Font...");
     optionsMenu->Append(ID_CenterLine, "Center Line...");
+    optionsMenu->AppendCheckItem(ID_SafeDrawing, "Safe Drawing");
     optionsMenu->Append(ID_SetSelection, "Set Selection...");
     optionsMenu->Append(ID_PrintLine, "Print Line...");
     optionsMenu->Append(ID_SendInput, "Send Input...");
@@ -113,6 +119,7 @@ public:
     Bind(wxEVT_MENU, &MyFrame::OnLightTheme, this, ID_ThemeLight);
     Bind(wxEVT_MENU, &MyFrame::OnChangeFont, this, ID_ChangeFont);
     Bind(wxEVT_MENU, &MyFrame::OnCenterLine, this, ID_CenterLine);
+    Bind(wxEVT_MENU, &MyFrame::OnSafeDrawing, this, ID_SafeDrawing);
     Bind(wxEVT_MENU, &MyFrame::OnSetSelection, this, ID_SetSelection);
     Bind(wxEVT_MENU, &MyFrame::OnPrintLine, this, ID_PrintLine);
     Bind(wxEVT_MENU, &MyFrame::OnSendInput, this, ID_SendInput);
@@ -158,9 +165,33 @@ public:
         new TerminalView(m_notebook, config.shellCommand, config.environment);
     m_notebook->AddPage(page, "Terminal", true);
     ApplyThemeToTab(page);
+    page->EnableSafeDrawing(m_safeDrawingEnabled);
+    UpdateSafeDrawingMenuCheck();
     page->Bind(wxEVT_TERMINAL_TITLE_CHANGED, &MyFrame::OnTitleChanged, this);
     page->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
     return page;
+  }
+
+  void ApplySafeDrawingToAllTabs(bool enabled) {
+    if (!m_notebook) {
+      return;
+    }
+
+    for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
+      if (auto *view = dynamic_cast<TerminalView *>(m_notebook->GetPage(i))) {
+        view->EnableSafeDrawing(enabled);
+        view->Refresh();
+      }
+    }
+  }
+
+  void UpdateSafeDrawingMenuCheck() {
+    if (auto *menuBar = GetMenuBar()) {
+      auto *optionsMenu = menuBar->GetMenu(1);
+      if (optionsMenu && optionsMenu->FindItem(ID_SafeDrawing)) {
+        optionsMenu->Check(ID_SafeDrawing, m_safeDrawingEnabled);
+      }
+    }
   }
 
   void ApplyThemeToTab(TerminalView *view) {
@@ -257,6 +288,12 @@ public:
     }
 
     activeView->CenterLine(static_cast<std::size_t>(lineNumber - 1));
+  }
+
+  void OnSafeDrawing(wxCommandEvent &event) {
+    m_safeDrawingEnabled = event.IsChecked();
+    ApplySafeDrawingToAllTabs(m_safeDrawingEnabled);
+    PersistSettings();
   }
 
   void OnSetSelection(wxCommandEvent &event) {
@@ -406,7 +443,7 @@ public:
     const wxFont font = m_persistedFont.IsOk()
                             ? m_persistedFont
                             : (m_view ? m_view->GetTheme().font : wxFont{});
-    AppPersistence::Save(themeName, font);
+    AppPersistence::Save(themeName, font, m_safeDrawingEnabled);
   }
 
 private:
@@ -416,6 +453,7 @@ private:
   std::optional<EnvironmentList> m_defaultEnvironment;
   bool m_themeIsDark{true};
   wxFont m_persistedFont;
+  bool m_safeDrawingEnabled{false};
 };
 
 class MyApp : public wxApp {

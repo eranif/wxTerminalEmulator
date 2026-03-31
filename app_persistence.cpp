@@ -63,7 +63,36 @@ bool AppPersistence::Load(wxString &themeName, wxFont &font) {
   return true;
 }
 
-bool AppPersistence::Save(const wxString &themeName, const wxFont &font) {
+bool AppPersistence::Load(bool &safeDrawingEnabled) {
+  const wxString path = GetConfigPath();
+  if (!wxFileName::FileExists(path))
+    return false;
+
+  wxTextFile file;
+  if (!file.Open(path))
+    return false;
+
+  for (size_t i = 0; i < file.GetLineCount(); ++i) {
+    wxString s = file.GetLine(i);
+    s = s.Strip(wxString::both);
+    if (s.empty() || s.StartsWith("#") || s.StartsWith(";"))
+      continue;
+
+    const int eq = s.Find('=');
+    if (eq == wxNOT_FOUND)
+      continue;
+
+    const wxString key = s.Left(eq).Strip(wxString::both).Lower();
+    const wxString value = s.Mid(eq + 1).Strip(wxString::both).Lower();
+    if (key == "safedrawing") {
+      safeDrawingEnabled = (value == "1" || value == "true" || value == "yes" || value == "on");
+    }
+  }
+  return true;
+}
+
+bool AppPersistence::Save(const wxString &themeName, const wxFont &font,
+                          bool safeDrawingEnabled) {
   const wxString path = GetConfigPath();
   wxFileName fn(path);
   if (!fn.DirExists())
@@ -81,5 +110,7 @@ bool AppPersistence::Save(const wxString &themeName, const wxFont &font) {
 
   file.AddLine("theme=" + ThemeToString(themeName));
   file.AddLine("font=" + font.GetNativeFontInfoDesc());
+  file.AddLine(wxString::Format("safedrawing=%s",
+                                safeDrawingEnabled ? "true" : "false"));
   return file.Write();
 }

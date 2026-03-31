@@ -82,6 +82,10 @@ public:
 
   void Copy();
   void Paste();
+
+  inline void EnableSafeDrawing(bool b) { m_safeDrawing = b; }
+  inline bool IsSafeDrawing() const { return m_safeDrawing; }
+
   /**
    * @brief Clears the terminal screen and scrollback buffer for this
    * TerminalView.
@@ -250,6 +254,7 @@ private:
    * contains a printable ASCII character; otherwise false.
    */
   bool IsAsciiSafeTextRun(const std::vector<CellInfo> &cells) const;
+  bool HasRiskyAsciiGlyphs(const std::vector<CellInfo> &cells) const;
 
   bool m_hasFocusBorder{false};
 
@@ -285,4 +290,5 @@ private:
   bool m_contextMenuShowing{false};
   wxString m_shell_command;
   std::optional<EnvironmentList> m_environment{std::nullopt};
+  bool m_safeDrawing{false};
 };

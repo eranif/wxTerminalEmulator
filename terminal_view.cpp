@@ -840,6 +840,14 @@ void TerminalView::RenderRow(wxDC &dc, int y, int rowIdx,
                              const std::vector<terminal::Cell> &row,
                              const wxRect &selected_cells,
                              PaintCounters &counters) {
+  if (IsSafeDrawing()) {
+    // When enabled, we draw cell by cell, it is slower
+    // but it can handle unicode and other non aligned grids with
+    // accuracy and avoid drawing glitches.
+    RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, counters);
+    return;
+  }
+
 #if defined(__WXMSW__)
   RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
 #elif defined(__WXMAC__)
@@ -868,8 +876,16 @@ void TerminalView::OnPaint(wxPaintEvent &) {
 
   if (m_charH == 0 && m_charW == 0) {
     // first time — measure font, set size, then start the shell
-    m_charW = dc.GetTextExtent("X").GetWidth();
-    m_charH = dc.GetTextExtent("X").GetHeight();
+    m_charW = wxMax(dc.GetTextExtent("X").GetWidth(), m_charW);
+    m_charH = wxMax(dc.GetTextExtent("X").GetHeight(), m_charH);
+
+    const wxString sample_text = "Administrator";
+    int group_width =
+        dc.GetTextExtent(sample_text).GetWidth() / sample_text.length();
+    TLOG_IF_DEBUG {
+      TLOG_DEBUG() << "m_charW=" << m_charW << ", m_charH=" << m_charH
+                   << ", group_width=" << group_width << std::endl;
+    }
     SetTerminalSizeFromClient();
     if (m_backend == nullptr) {
       CallAfter(&TerminalView::StartProcess, m_shell_command, m_environment);
