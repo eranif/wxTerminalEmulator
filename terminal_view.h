@@ -131,6 +131,7 @@ private:
     bool IsSelectionRectHasMinSize() const;
     void SetAnchor(const wxPoint &anchor);
     void UpdateCurrent(const wxPoint &current);
+    void SnapToCellGrid(int char_width, int char_height);
     inline bool IsEmpty() const { return m_rect.IsEmpty(); }
   };
 

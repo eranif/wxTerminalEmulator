@@ -54,6 +54,17 @@ TerminalView::SelectionRect::PixelsRectToViewCellRect(int char_width,
   return wxRect(cell_x, cell_y, cell_width, cell_height);
 }
 
+void TerminalView::SelectionRect::SnapToCellGrid(int char_width,
+                                                 int char_height) {
+  if (char_width == 0 || char_height == 0 || m_rect.IsEmpty()) {
+    return;
+  }
+
+  m_rect =
+      ViewCellToPixelsRect(PixelsRectToViewCellRect(char_width, char_height),
+                           char_width, char_height);
+}
+
 wxRect TerminalView::SelectionRect::ViewCellToPixelsRect(
     const wxRect &viewrect, int char_width, int char_height) const {
   if (char_width == 0 || char_height == 0 || viewrect.IsEmpty()) {
@@ -970,10 +981,7 @@ void TerminalView::OnMouseUp(wxMouseEvent &evt) {
   }
 
   // Adjust the selection rect into cell rect.
-  wxRect cell_based_rect =
-      m_mouseSelectionRect.PixelsRectToViewCellRect(m_charW, m_charH);
-  m_mouseSelectionRect.m_rect = m_mouseSelectionRect.ViewCellToPixelsRect(
-      cell_based_rect, m_charW, m_charH);
+  m_mouseSelectionRect.SnapToCellGrid(m_charW, m_charH);
   m_needsRepaint = false;
   Refresh();
 }
