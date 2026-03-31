@@ -222,6 +222,16 @@ private:
     CellAttributes attrs;
     inline bool IsUnicode() const { return ch >= 0x80; }
   };
+  /**
+   * @brief Checks whether a range of cells contains only printable ASCII text.
+   *
+   * @param cells const std::vector<TerminalView::CellInfo>& The cell buffer to
+   * inspect.
+   *
+   * @return bool True if the specified range is non-empty and every cell
+   * contains a printable ASCII character; otherwise false.
+   */
+  bool IsAsciiSafeTextRun(const std::vector<CellInfo> &cells) const;
 
   std::vector<TerminalView::CellInfo>
   PrepareRowForDrawing(const std::vector<terminal::Cell> &row, int rowIdx,

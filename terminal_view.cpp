@@ -512,6 +512,21 @@ TerminalView::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
   return cells;
 }
 
+bool TerminalView::IsAsciiSafeTextRun(
+    const std::vector<TerminalView::CellInfo> &cells) const {
+  if (cells.empty()) {
+    return false;
+  }
+
+  for (const auto &cell : cells) {
+    if (cell.ch < 0x20 || cell.ch > 0x7e) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 void TerminalView::RenderRowWithGrouping(wxDC &dc, int y, int rowIdx,
                                          const std::vector<terminal::Cell> &row,
                                          const wxRect &selected_cells,
@@ -521,6 +536,10 @@ void TerminalView::RenderRowWithGrouping(wxDC &dc, int y, int rowIdx,
 
   if (cells.empty()) {
     return;
+  }
+
+  if (!IsAsciiSafeTextRun(cells)) {
+    return RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, counters);
   }
 
   for (size_t i = 0; i < cells.size();) {
