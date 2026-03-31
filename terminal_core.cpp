@@ -948,15 +948,18 @@ void TerminalCore::ApplySgr(const std::string &params) {
   }
 }
 
-std::string TerminalCore::Flatten() const {
-  std::string out;
+wxString TerminalCore::Flatten() const {
+  wxString out;
+  out.reserve(MaxLines() * Cols() * 2);
   for (std::size_t r = 0; r < m_rows; ++r) {
     std::size_t abs = m_viewStart + r;
     if (abs < m_buffer.size()) {
-      for (const auto &cell : m_buffer[abs])
-        out.push_back(static_cast<char>(cell.ch));
+      for (const auto &cell : m_buffer[abs]) {
+        wxString ch(wxUniChar(cell.ch));
+        out << ch;
+      }
     }
-    out.push_back('\n');
+    out << "\n";
   }
   return out;
 }

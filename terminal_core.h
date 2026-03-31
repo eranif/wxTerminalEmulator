@@ -139,7 +139,7 @@ public:
   // Returns the visible rows (view area) as a vector of pointers to rows
   std::vector<const std::vector<Cell> *> GetViewArea() const;
 
-  std::string Flatten() const;
+  wxString Flatten() const;
 
   // Convert viewport-relative row to absolute buffer row
   std::size_t AbsRow(std::size_t viewportRow) const;

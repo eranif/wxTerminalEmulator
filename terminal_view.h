@@ -33,7 +33,7 @@ public:
    */
   void SendInput(const std::string &text);
   void SetTerminalSizeFromClient();
-  std::string Contents() const;
+  wxString GetText() const;
 
   // Helper methods for sending special characters
   void SendEnter();
@@ -50,7 +50,33 @@ public:
   void SendInsert();
   void SendPageUp();
   void SendPageDown();
+
+  // Common keyboard shortcuts
+
+  // Ctrl-C
   void SendCtrlC();
+  // Clear screen
+  void SendCtrlL();
+  // Delete from cursor to start of line
+  void SendCtrlU();
+  // Delete from cursor to end of line
+  void SendCtrlK();
+  // Delete a word
+  void SendCtrlW();
+  // Suspend process
+  void SendCtrlZ();
+  // Trigger history search
+  void SendCtrlR();
+  // Logout
+  void SendCtrlD();
+  // Move cursor to beginning of line
+  void SendCtrlA();
+  // Move cursor to end of line
+  void SendCtrlE();
+  // Move backward 1 word
+  void SendAltB();
+  // Move forward 1 word
+  void SendAltF();
 
   void SetTheme(const wxTerminalTheme &theme);
   const wxTerminalTheme &GetTheme() const;

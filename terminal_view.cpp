@@ -201,7 +201,95 @@ void TerminalView::SendPageUp() { SendInput("\x1b[5~"); }
 
 void TerminalView::SendPageDown() { SendInput("\x1b[6~"); }
 
-std::string TerminalView::Contents() const { return m_core.Flatten(); }
+void TerminalView::SendCtrlR() { SendInput("\x12"); }
+
+void TerminalView::SendCtrlU() {
+  wxString lower_case_shell = m_shell_command.Lower();
+  if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
+                                    lower_case_shell.Contains("powershell"))) {
+    // Windows style "Ctrl-U" for CMD / PS
+    SendEscape();
+    return;
+  }
+  SendInput("\x15");
+}
+
+void TerminalView::SendCtrlL() {
+  wxString lower_case_shell = m_shell_command.Lower();
+  if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
+                                    lower_case_shell.Contains("powershell"))) {
+    // Windows style "Ctrl-L" for CMD / PS
+    SendInput("cls\r");
+    return;
+  }
+  SendInput("\x0c");
+}
+
+void TerminalView::SendCtrlD() { SendInput("\x04"); }
+void TerminalView::SendCtrlW() { SendInput("\x17"); }
+void TerminalView::SendCtrlZ() { SendInput("\x1a"); }
+
+void TerminalView::SendCtrlK() {
+  wxString lower_case_shell = m_shell_command.Lower();
+  if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
+                                    lower_case_shell.Contains("powershell"))) {
+    // Windows shells typically use a command-line kill behavior via Escape.
+    SendEscape();
+    return;
+  }
+  SendInput("\x0b");
+}
+
+void TerminalView::SendCtrlA() {
+  wxString lower_case_shell = m_shell_command.Lower();
+  if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
+                                    lower_case_shell.Contains("powershell"))) {
+    // Windows shells often interpret Ctrl-A as Select All rather than
+    // beginning-of-line editing.
+    SendInput("^a");
+    return;
+  }
+  SendInput("\x01");
+}
+
+void TerminalView::SendCtrlE() {
+  wxString lower_case_shell = m_shell_command.Lower();
+  if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
+                                    lower_case_shell.Contains("powershell"))) {
+    // No special Windows equivalent; fall back to the raw control code.
+    SendInput("\x05");
+    return;
+  }
+  SendInput("\x05");
+}
+
+void TerminalView::SendAltB() {
+  wxString lower_case_shell = m_shell_command.Lower();
+  if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
+                                    lower_case_shell.Contains("powershell"))) {
+    // Use a common readline-style escape sequence only when supported.
+    SendInput("\x1b"
+              "b");
+    return;
+  }
+  SendInput("\x1b"
+            "b");
+}
+
+void TerminalView::SendAltF() {
+  wxString lower_case_shell = m_shell_command.Lower();
+  if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
+                                    lower_case_shell.Contains("powershell"))) {
+    // Use a common readline-style escape sequence only when supported.
+    SendInput("\x1b"
+              "f");
+    return;
+  }
+  SendInput("\x1b"
+            "f");
+}
+
+wxString TerminalView::GetText() const { return m_core.Flatten(); }
 
 void TerminalView::SetTheme(const wxTerminalTheme &theme) {
   m_core.SetTheme(theme);
@@ -984,26 +1072,14 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
     // Handle Ctrl+U - Clear current line
     // (Unix-style line kill)
     if (key == 'U' || key == 'u') {
-#ifdef __WXMSW__
-      if (m_shell_command.empty()) {
-        SendEscape();
-        return;
-      }
-#endif
-      // User is using a custom shell on Windows or
-      // non Windows code, anyways, use the
-      // standard
-      SendInput(std::string(1, '\x15'));
+      SendCtrlU();
       return;
     }
 
-#ifdef __WXMSW__
-    if (m_shell_command.empty() && key == 'L' || key == 'l') {
-      // Windows style "Ctrl-L" for CMD / PS
-      SendInput("cls\r");
+    if (key == 'L' || key == 'l') {
+      SendCtrlL();
       return;
     }
-#endif
 
     if (key >= 'A' && key <= 'Z') {
       // Ctrl+A through Ctrl+Z
