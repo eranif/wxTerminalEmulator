@@ -2,7 +2,7 @@
 
 [![wxTerminalEmulator demo](wxterminal.gif)](wxterminal.gif)
 
-[Open a larger preview](wxterminal.gif){:target="_blank"}
+[Open a larger preview](wxterminal.gif)
 
 A wxWidgets-based terminal emulator project with two deliverables:
 
