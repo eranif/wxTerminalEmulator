@@ -32,14 +32,13 @@ inline wxRect MakeRect(const wxPoint &p1, const wxPoint &p2) {
   return wxRect{x, y, w, h};
 }
 
-void TerminalView::SelectionRect::Clear() {
+void wxTerminalViewCtrl::SelectionRect::Clear() {
   m_rect = {};
   m_selectionAnchor = {};
 }
 
-wxRect
-TerminalView::SelectionRect::PixelsRectToViewCellRect(int char_width,
-                                                      int char_height) const {
+wxRect wxTerminalViewCtrl::SelectionRect::PixelsRectToViewCellRect(
+    int char_width, int char_height) const {
   if (char_width == 0 || char_height == 0 || m_rect.IsEmpty()) {
     return {};
   }
@@ -62,8 +61,8 @@ TerminalView::SelectionRect::PixelsRectToViewCellRect(int char_width,
   return wxRect(cell_x, cell_y, cell_width, cell_height);
 }
 
-void TerminalView::SelectionRect::SnapToCellGrid(int char_width,
-                                                 int char_height) {
+void wxTerminalViewCtrl::SelectionRect::SnapToCellGrid(int char_width,
+                                                       int char_height) {
   if (char_width == 0 || char_height == 0 || m_rect.IsEmpty()) {
     return;
   }
@@ -73,7 +72,7 @@ void TerminalView::SelectionRect::SnapToCellGrid(int char_width,
                            char_width, char_height);
 }
 
-wxRect TerminalView::SelectionRect::ViewCellToPixelsRect(
+wxRect wxTerminalViewCtrl::SelectionRect::ViewCellToPixelsRect(
     const wxRect &viewrect, int char_width, int char_height) const {
   if (char_width == 0 || char_height == 0 || viewrect.IsEmpty()) {
     return {};
@@ -84,18 +83,18 @@ wxRect TerminalView::SelectionRect::ViewCellToPixelsRect(
                 viewrect.GetHeight() * char_height);
 }
 
-bool TerminalView::SelectionRect::IsSelectionRectHasMinSize() const {
+bool wxTerminalViewCtrl::SelectionRect::IsSelectionRectHasMinSize() const {
   static constexpr int kMinRectSize = 2;
   return !m_rect.IsEmpty() && (m_rect.GetSize().GetWidth() >= kMinRectSize ||
                                m_rect.GetSize().GetHeight() >= kMinRectSize);
 }
 
-void TerminalView::SelectionRect::SetAnchor(const wxPoint &anchor) {
+void wxTerminalViewCtrl::SelectionRect::SetAnchor(const wxPoint &anchor) {
   m_selectionAnchor = anchor;
   m_rect = wxRect(anchor, wxSize{1, 1});
 }
 
-void TerminalView::SelectionRect::UpdateCurrent(const wxPoint &current) {
+void wxTerminalViewCtrl::SelectionRect::UpdateCurrent(const wxPoint &current) {
   m_rect = MakeRect(m_selectionAnchor, current);
 }
 
@@ -125,25 +124,26 @@ static const std::unordered_map<int, int> shiftMap = {
     {'=', '+'},
     {'`', '~'}};
 
-TerminalView::TerminalView(wxWindow *parent, const wxString &shellCommand,
-                           const std::optional<EnvironmentList> &environment)
+wxTerminalViewCtrl::wxTerminalViewCtrl(
+    wxWindow *parent, const wxString &shellCommand,
+    const std::optional<EnvironmentList> &environment)
     : wxPanel(parent, wxID_ANY) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   UpdateFontCache();
 
   // Bind events using modern API
-  Bind(wxEVT_PAINT, &TerminalView::OnPaint, this);
-  Bind(wxEVT_SIZE, &TerminalView::OnSize, this);
-  Bind(wxEVT_CHAR_HOOK, &TerminalView::OnCharHook, this);
-  Bind(wxEVT_KEY_DOWN, &TerminalView::OnKeyDown, this);
-  Bind(wxEVT_LEFT_DOWN, &TerminalView::OnMouseLeftDown, this);
-  Bind(wxEVT_LEFT_UP, &TerminalView::OnMouseUp, this);
-  Bind(wxEVT_MOTION, &TerminalView::OnMouseMove, this);
-  Bind(wxEVT_CONTEXT_MENU, &TerminalView::OnContextMenu, this);
-  Bind(wxEVT_MOUSEWHEEL, &TerminalView::OnMouseWheel, this);
-  Bind(wxEVT_SET_FOCUS, &TerminalView::OnFocus, this);
-  Bind(wxEVT_KILL_FOCUS, &TerminalView::OnLostFocus, this);
-  Bind(wxEVT_TIMER, &TerminalView::OnTimer, this);
+  Bind(wxEVT_PAINT, &wxTerminalViewCtrl::OnPaint, this);
+  Bind(wxEVT_SIZE, &wxTerminalViewCtrl::OnSize, this);
+  Bind(wxEVT_CHAR_HOOK, &wxTerminalViewCtrl::OnCharHook, this);
+  Bind(wxEVT_KEY_DOWN, &wxTerminalViewCtrl::OnKeyDown, this);
+  Bind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
+  Bind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseUp, this);
+  Bind(wxEVT_MOTION, &wxTerminalViewCtrl::OnMouseMove, this);
+  Bind(wxEVT_CONTEXT_MENU, &wxTerminalViewCtrl::OnContextMenu, this);
+  Bind(wxEVT_MOUSEWHEEL, &wxTerminalViewCtrl::OnMouseWheel, this);
+  Bind(wxEVT_SET_FOCUS, &wxTerminalViewCtrl::OnFocus, this);
+  Bind(wxEVT_KILL_FOCUS, &wxTerminalViewCtrl::OnLostFocus, this);
+  Bind(wxEVT_TIMER, &wxTerminalViewCtrl::OnTimer, this);
   Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent &e) { e.Skip(); });
   Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent &) {});
   m_shell_command = shellCommand;
@@ -161,23 +161,23 @@ TerminalView::TerminalView(wxWindow *parent, const wxString &shellCommand,
     event.SetEventObject(this);
     AddPendingEvent(event);
   });
-  CallAfter(&TerminalView::SetFocus);
+  CallAfter(&wxTerminalViewCtrl::SetFocus);
 }
 
-TerminalView::~TerminalView() {
+wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   if (m_timer.IsRunning())
     m_timer.Stop();
   if (m_backend)
     m_backend->Stop();
 }
 
-void TerminalView::Feed(const std::string &data) {
+void wxTerminalViewCtrl::Feed(const std::string &data) {
   m_core.PutData(data);
   m_core.SetViewStart(m_core.ShellStart());
   m_needsRepaint = true;
 }
 
-void TerminalView::SetTerminalSizeFromClient() {
+void wxTerminalViewCtrl::SetTerminalSizeFromClient() {
   if (m_charH == 0 || m_charW == 0) {
     return;
   }
@@ -196,7 +196,7 @@ void TerminalView::SetTerminalSizeFromClient() {
   }
 }
 
-void TerminalView::StartProcess(
+void wxTerminalViewCtrl::StartProcess(
     const wxString &command,
     const std::optional<EnvironmentList> &environment) {
   if (m_backend)
@@ -209,7 +209,7 @@ void TerminalView::StartProcess(
   bool ok = m_backend &&
             m_backend->Start(m_shell_command.ToStdString(wxConvUTF8),
                              m_environment, [this](const std::string &out) {
-                               CallAfter(&TerminalView::Feed, out);
+                               CallAfter(&wxTerminalViewCtrl::Feed, out);
                              });
   if (ok && m_core.Cols() > 0 && m_core.Rows() > 0) {
     m_backend->Resize(static_cast<int>(m_core.Cols()),
@@ -217,50 +217,50 @@ void TerminalView::StartProcess(
   }
 }
 
-void TerminalView::SendInput(const std::string &text) {
+void wxTerminalViewCtrl::SendInput(const std::string &text) {
   if (m_backend) {
     m_backend->Write(text);
   }
 }
 
 // Helper methods for sending special characters
-void TerminalView::SendCtrlC() {
+void wxTerminalViewCtrl::SendCtrlC() {
   if (m_backend) {
     m_backend->SendBreak();
   }
 }
 
-void TerminalView::SendEnter() { SendInput("\r"); }
+void wxTerminalViewCtrl::SendEnter() { SendInput("\r"); }
 
-void TerminalView::SendTab() { SendInput("\t"); }
+void wxTerminalViewCtrl::SendTab() { SendInput("\t"); }
 
-void TerminalView::SendEscape() { SendInput("\x1b"); }
+void wxTerminalViewCtrl::SendEscape() { SendInput("\x1b"); }
 
-void TerminalView::SendBackspace() { SendInput("\x7f"); }
+void wxTerminalViewCtrl::SendBackspace() { SendInput("\x7f"); }
 
-void TerminalView::SendArrowUp() { SendInput("\x1b[A"); }
+void wxTerminalViewCtrl::SendArrowUp() { SendInput("\x1b[A"); }
 
-void TerminalView::SendArrowDown() { SendInput("\x1b[B"); }
+void wxTerminalViewCtrl::SendArrowDown() { SendInput("\x1b[B"); }
 
-void TerminalView::SendArrowRight() { SendInput("\x1b[C"); }
+void wxTerminalViewCtrl::SendArrowRight() { SendInput("\x1b[C"); }
 
-void TerminalView::SendArrowLeft() { SendInput("\x1b[D"); }
+void wxTerminalViewCtrl::SendArrowLeft() { SendInput("\x1b[D"); }
 
-void TerminalView::SendHome() { SendInput("\x1b[H"); }
+void wxTerminalViewCtrl::SendHome() { SendInput("\x1b[H"); }
 
-void TerminalView::SendEnd() { SendInput("\x1b[F"); }
+void wxTerminalViewCtrl::SendEnd() { SendInput("\x1b[F"); }
 
-void TerminalView::SendDelete() { SendInput("\x1b[3~"); }
+void wxTerminalViewCtrl::SendDelete() { SendInput("\x1b[3~"); }
 
-void TerminalView::SendInsert() { SendInput("\x1b[2~"); }
+void wxTerminalViewCtrl::SendInsert() { SendInput("\x1b[2~"); }
 
-void TerminalView::SendPageUp() { SendInput("\x1b[5~"); }
+void wxTerminalViewCtrl::SendPageUp() { SendInput("\x1b[5~"); }
 
-void TerminalView::SendPageDown() { SendInput("\x1b[6~"); }
+void wxTerminalViewCtrl::SendPageDown() { SendInput("\x1b[6~"); }
 
-void TerminalView::SendCtrlR() { SendInput("\x12"); }
+void wxTerminalViewCtrl::SendCtrlR() { SendInput("\x12"); }
 
-void TerminalView::SendCtrlU() {
+void wxTerminalViewCtrl::SendCtrlU() {
 
   if (IsCmdOrPowerShell()) {
     // Windows style "Ctrl-U" for CMD / PS
@@ -270,7 +270,7 @@ void TerminalView::SendCtrlU() {
   SendInput("\x15");
 }
 
-void TerminalView::SendCtrlL() {
+void wxTerminalViewCtrl::SendCtrlL() {
   m_mouseSelectionRect.Clear();
   m_userSelection.Clear();
   if (IsCmdOrPowerShell()) {
@@ -282,11 +282,11 @@ void TerminalView::SendCtrlL() {
   SendInput("\x0c");
 }
 
-void TerminalView::SendCtrlD() { SendInput("\x04"); }
-void TerminalView::SendCtrlW() { SendInput("\x17"); }
-void TerminalView::SendCtrlZ() { SendInput("\x1a"); }
+void wxTerminalViewCtrl::SendCtrlD() { SendInput("\x04"); }
+void wxTerminalViewCtrl::SendCtrlW() { SendInput("\x17"); }
+void wxTerminalViewCtrl::SendCtrlZ() { SendInput("\x1a"); }
 
-void TerminalView::SendCtrlK() {
+void wxTerminalViewCtrl::SendCtrlK() {
   if (IsCmdOrPowerShell()) {
     // Windows shells typically use a command-line kill behavior via Escape.
     SendEscape();
@@ -295,7 +295,7 @@ void TerminalView::SendCtrlK() {
   SendInput("\x0b");
 }
 
-void TerminalView::SendCtrlA() {
+void wxTerminalViewCtrl::SendCtrlA() {
   if (IsCmdOrPowerShell()) {
     // Windows shells often interpret Ctrl-A as Select All rather than
     // beginning-of-line editing.
@@ -305,7 +305,7 @@ void TerminalView::SendCtrlA() {
   SendInput("\x01");
 }
 
-void TerminalView::SendCtrlE() {
+void wxTerminalViewCtrl::SendCtrlE() {
   if (IsCmdOrPowerShell()) {
     // No special Windows equivalent; fall back to the raw control code.
     SendInput("\x05");
@@ -314,7 +314,7 @@ void TerminalView::SendCtrlE() {
   SendInput("\x05");
 }
 
-void TerminalView::SendAltB() {
+void wxTerminalViewCtrl::SendAltB() {
   if (IsCmdOrPowerShell()) {
     // Use a common readline-style escape sequence only when supported.
     SendInput("\x1b"
@@ -325,7 +325,7 @@ void TerminalView::SendAltB() {
             "b");
 }
 
-void TerminalView::SendAltF() {
+void wxTerminalViewCtrl::SendAltF() {
   if (IsCmdOrPowerShell()) {
     // Use a common readline-style escape sequence only when supported.
     SendInput("\x1b"
@@ -336,9 +336,9 @@ void TerminalView::SendAltF() {
             "f");
 }
 
-wxString TerminalView::GetText() const { return m_core.Flatten(); }
+wxString wxTerminalViewCtrl::GetText() const { return m_core.Flatten(); }
 
-void TerminalView::SetTheme(const wxTerminalTheme &theme) {
+void wxTerminalViewCtrl::SetTheme(const wxTerminalTheme &theme) {
   m_core.SetTheme(theme);
   UpdateFontCache();
   m_charH = m_charW = 0; // This needs to be recalculated based on the new font.
@@ -346,31 +346,35 @@ void TerminalView::SetTheme(const wxTerminalTheme &theme) {
   PostSizeEvent();
 }
 
-const wxTerminalTheme &TerminalView::GetTheme() const {
+const wxTerminalTheme &wxTerminalViewCtrl::GetTheme() const {
   return m_core.GetTheme();
 }
 
-void TerminalView::ScrollToLastLine() {
+void wxTerminalViewCtrl::ScrollToLastLine() {
   m_core.SetViewStart(m_core.ShellStart());
   m_needsRepaint = true;
 }
 
-std::size_t TerminalView::GetLineCount() const { return m_core.TotalLines(); }
+std::size_t wxTerminalViewCtrl::GetLineCount() const {
+  return m_core.TotalLines();
+}
 
-void TerminalView::SetBufferSize(std::size_t maxLines) {
+void wxTerminalViewCtrl::SetBufferSize(std::size_t maxLines) {
   m_core.SetMaxLines(maxLines);
 }
 
-std::size_t TerminalView::GetBufferSize() const { return m_core.MaxLines(); }
+std::size_t wxTerminalViewCtrl::GetBufferSize() const {
+  return m_core.MaxLines();
+}
 
-void TerminalView::CenterLine(std::size_t line) {
+void wxTerminalViewCtrl::CenterLine(std::size_t line) {
   std::size_t half = m_core.Rows() / 2;
   std::size_t vs = (line > half) ? line - half : 0;
   m_core.SetViewStart(vs);
   m_needsRepaint = true;
 }
 
-wxString TerminalView::GetLine(std::size_t line) const {
+wxString wxTerminalViewCtrl::GetLine(std::size_t line) const {
   const auto &row = m_core.BufferRow(line);
   wxString result;
   result.reserve(row.size());
@@ -380,8 +384,8 @@ wxString TerminalView::GetLine(std::size_t line) const {
   return result;
 }
 
-void TerminalView::SetUserSelection(std::size_t col, std::size_t row,
-                                    std::size_t count) {
+void wxTerminalViewCtrl::SetUserSelection(std::size_t col, std::size_t row,
+                                          std::size_t count) {
   if (row >= m_core.TotalLines() || col >= m_core.Cols() || count == 0) {
     ClearUserSelection();
     return;
@@ -391,19 +395,19 @@ void TerminalView::SetUserSelection(std::size_t col, std::size_t row,
   m_needsRepaint = true;
 }
 
-void TerminalView::ClearUserSelection() {
+void wxTerminalViewCtrl::ClearUserSelection() {
   m_userSelection.Clear();
   m_needsRepaint = true;
   TLOG_IF_DEBUG { TLOG_DEBUG() << "User selection is cleared" << std::endl; }
 }
 
-void TerminalView::ClearMouseSelection() {
+void wxTerminalViewCtrl::ClearMouseSelection() {
   m_mouseSelectionRect.Clear();
   m_isDragging = false;
   m_needsRepaint = true;
 }
 
-void TerminalView::UpdateFontCache() {
+void wxTerminalViewCtrl::UpdateFontCache() {
   m_defaultFont = m_core.GetTheme().font;
   m_defaultFontBold = m_defaultFont;
   m_defaultFontBold.MakeBold();
@@ -416,7 +420,7 @@ void TerminalView::UpdateFontCache() {
   m_defaultFontBoldUnderlined.MakeUnderlined();
 }
 
-void TerminalView::DebugDumpViewArea() {
+void wxTerminalViewCtrl::DebugDumpViewArea() {
   TLOG_IF_TRACE {
     auto viewArea = m_core.GetViewArea();
     size_t row_num{0};
@@ -439,8 +443,8 @@ void TerminalView::DebugDumpViewArea() {
 }
 
 wxColour
-TerminalView::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
-                                 bool foreground) const {
+wxTerminalViewCtrl::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
+                                       bool foreground) const {
   const auto &theme = m_core.GetTheme();
   if (!spec.has_value() || spec->kind == ColourSpec::Kind::Default)
     return foreground ? theme.fg : theme.bg;
@@ -457,9 +461,10 @@ TerminalView::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
   return foreground ? theme.fg : theme.bg;
 }
 
-std::vector<TerminalView::CellInfo>
-TerminalView::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
-                                   int rowIdx, const wxRect &selected_cells) {
+std::vector<wxTerminalViewCtrl::CellInfo>
+wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
+                                         int rowIdx,
+                                         const wxRect &selected_cells) {
   const auto &theme = m_core.GetTheme();
   // Build a list of cells with their attributes, skipping truly empty ones
   std::vector<CellInfo> cells;
@@ -519,8 +524,8 @@ TerminalView::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
   return cells;
 }
 
-bool TerminalView::IsAsciiSafeTextRun(
-    const std::vector<TerminalView::CellInfo> &cells) const {
+bool wxTerminalViewCtrl::IsAsciiSafeTextRun(
+    const std::vector<wxTerminalViewCtrl::CellInfo> &cells) const {
   if (cells.empty()) {
     return false;
   }
@@ -534,7 +539,7 @@ bool TerminalView::IsAsciiSafeTextRun(
   return true;
 }
 
-bool TerminalView::IsUnicodeSingleCellSafe(wxChar ch) const {
+bool wxTerminalViewCtrl::IsUnicodeSingleCellSafe(wxChar ch) const {
   if (ch >= 0x20 && ch <= 0x7e) {
     return true;
   }
@@ -603,10 +608,9 @@ bool TerminalView::IsUnicodeSingleCellSafe(wxChar ch) const {
   return false;
 }
 
-void TerminalView::RenderRowWithGrouping(wxDC &dc, int y, int rowIdx,
-                                         const std::vector<terminal::Cell> &row,
-                                         const wxRect &selected_cells,
-                                         PaintCounters &counters) {
+void wxTerminalViewCtrl::RenderRowWithGrouping(
+    wxDC &dc, int y, int rowIdx, const std::vector<terminal::Cell> &row,
+    const wxRect &selected_cells, PaintCounters &counters) {
   std::vector<CellInfo> cells =
       PrepareRowForDrawing(row, rowIdx, selected_cells);
 
@@ -658,10 +662,9 @@ void TerminalView::RenderRowWithGrouping(wxDC &dc, int y, int rowIdx,
   }
 }
 
-void TerminalView::RenderRowNoGrouping(wxDC &dc, int y, int rowIdx,
-                                       const std::vector<terminal::Cell> &row,
-                                       const wxRect &selected_cells,
-                                       PaintCounters &counters) {
+void wxTerminalViewCtrl::RenderRowNoGrouping(
+    wxDC &dc, int y, int rowIdx, const std::vector<terminal::Cell> &row,
+    const wxRect &selected_cells, PaintCounters &counters) {
   // Build a list of cells with their attributes, skipping truly empty ones
   std::vector<CellInfo> cells =
       PrepareRowForDrawing(row, rowIdx, selected_cells);
@@ -702,10 +705,10 @@ void TerminalView::RenderRowNoGrouping(wxDC &dc, int y, int rowIdx,
   }
 }
 
-void TerminalView::RenderRowPosix(wxDC &dc, int y, int rowIdx,
-                                  const std::vector<terminal::Cell> &row,
-                                  const wxRect &selected_cells,
-                                  PaintCounters &counters) {
+void wxTerminalViewCtrl::RenderRowPosix(wxDC &dc, int y, int rowIdx,
+                                        const std::vector<terminal::Cell> &row,
+                                        const wxRect &selected_cells,
+                                        PaintCounters &counters) {
   std::vector<CellInfo> cells =
       PrepareRowForDrawing(row, rowIdx, selected_cells);
 
@@ -849,10 +852,10 @@ void TerminalView::MACRenderRow(wxDC &dc, int y, int rowIdx,
 }
 #endif
 
-void TerminalView::RenderRow(wxDC &dc, int y, int rowIdx,
-                             const std::vector<terminal::Cell> &row,
-                             const wxRect &selected_cells,
-                             PaintCounters &counters) {
+void wxTerminalViewCtrl::RenderRow(wxDC &dc, int y, int rowIdx,
+                                   const std::vector<terminal::Cell> &row,
+                                   const wxRect &selected_cells,
+                                   PaintCounters &counters) {
   if (IsSafeDrawing()) {
     // When enabled, we draw cell by cell, it is slower
     // but it can handle unicode and other non aligned grids with
@@ -870,7 +873,7 @@ void TerminalView::RenderRow(wxDC &dc, int y, int rowIdx,
 #endif
 }
 
-void TerminalView::OnPaint(wxPaintEvent &) {
+void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
   // For logging purposes
   LogFunction function_logger{"TerminalView::OnPaint",
                               TerminalLogLevel::kTrace};
@@ -916,10 +919,11 @@ void TerminalView::OnPaint(wxPaintEvent &) {
     }
     SetTerminalSizeFromClient();
     if (m_backend == nullptr) {
-      CallAfter(&TerminalView::StartProcess, m_shell_command, m_environment);
+      CallAfter(&wxTerminalViewCtrl::StartProcess, m_shell_command,
+                m_environment);
     }
     // Now that the char width is known, do another paint.
-    CallAfter(&TerminalView::Refresh, true, nullptr);
+    CallAfter(&wxTerminalViewCtrl::Refresh, true, nullptr);
     return;
   }
 
@@ -980,7 +984,7 @@ void TerminalView::OnPaint(wxPaintEvent &) {
   }
 }
 
-void TerminalView::OnSize(wxSizeEvent &evt) {
+void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
   TLOG_DEBUG() << "OnSize: " << GetClientSize().GetWidth() << "x"
                << GetClientSize().GetHeight() << std::endl;
   SetTerminalSizeFromClient();
@@ -989,7 +993,7 @@ void TerminalView::OnSize(wxSizeEvent &evt) {
   evt.Skip();
 }
 
-void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
+void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
   evt.Skip();
   if (m_charW == 0 || m_charH == 0) {
     return;
@@ -1007,7 +1011,7 @@ void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
   Refresh();
 }
 
-void TerminalView::OnMouseMove(wxMouseEvent &evt) {
+void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
   evt.Skip();
   if (!m_isDragging) {
     return;
@@ -1018,7 +1022,7 @@ void TerminalView::OnMouseMove(wxMouseEvent &evt) {
   m_needsRepaint = true;
 }
 
-void TerminalView::OnMouseUp(wxMouseEvent &evt) {
+void wxTerminalViewCtrl::OnMouseUp(wxMouseEvent &evt) {
   evt.Skip();
   m_isDragging = false;
   if (HasCapture()) {
@@ -1037,7 +1041,7 @@ void TerminalView::OnMouseUp(wxMouseEvent &evt) {
   Refresh();
 }
 
-void TerminalView::OnMouseWheel(wxMouseEvent &evt) {
+void wxTerminalViewCtrl::OnMouseWheel(wxMouseEvent &evt) {
   m_wheelAccum += evt.GetWheelRotation();
   int delta = evt.GetWheelDelta();
   int lines = m_wheelAccum / delta;
@@ -1057,7 +1061,7 @@ void TerminalView::OnMouseWheel(wxMouseEvent &evt) {
   m_needsRepaint = true;
 }
 
-void TerminalView::OnContextMenu(wxContextMenuEvent &evt) {
+void wxTerminalViewCtrl::OnContextMenu(wxContextMenuEvent &evt) {
   wxMenu menu;
 
   if (m_mouseSelectionRect.IsSelectionRectHasMinSize()) {
@@ -1067,9 +1071,9 @@ void TerminalView::OnContextMenu(wxContextMenuEvent &evt) {
   menu.AppendSeparator();
   menu.Append(wxID_CLEAR, _("Clear buffer"));
 
-  menu.Bind(wxEVT_MENU, &TerminalView::OnCopy, this, wxID_COPY);
-  menu.Bind(wxEVT_MENU, &TerminalView::OnPaste, this, wxID_PASTE);
-  menu.Bind(wxEVT_MENU, &TerminalView::OnClearBuffer, this, wxID_CLEAR);
+  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnCopy, this, wxID_COPY);
+  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnPaste, this, wxID_PASTE);
+  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnClearBuffer, this, wxID_CLEAR);
 
   m_contextMenuShowing = true;
   PopupMenu(&menu);
@@ -1077,22 +1081,22 @@ void TerminalView::OnContextMenu(wxContextMenuEvent &evt) {
   evt.Skip();
 }
 
-void TerminalView::OnCopy(wxCommandEvent &evt) {
+void wxTerminalViewCtrl::OnCopy(wxCommandEvent &evt) {
   wxUnusedVar(evt);
   Copy();
 }
 
-void TerminalView::OnClearBuffer(wxCommandEvent &evt) {
+void wxTerminalViewCtrl::OnClearBuffer(wxCommandEvent &evt) {
   wxUnusedVar(evt);
   ClearAll();
 }
 
-void TerminalView::OnPaste(wxCommandEvent &evt) {
+void wxTerminalViewCtrl::OnPaste(wxCommandEvent &evt) {
   wxUnusedVar(evt);
   Paste();
 }
 
-void TerminalView::OnFocus(wxFocusEvent &evt) {
+void wxTerminalViewCtrl::OnFocus(wxFocusEvent &evt) {
   // Ensure we can receive keyboard events
   evt.Skip();
   m_hasFocusBorder = true;
@@ -1100,7 +1104,7 @@ void TerminalView::OnFocus(wxFocusEvent &evt) {
   Refresh();
 }
 
-void TerminalView::OnLostFocus(wxFocusEvent &evt) {
+void wxTerminalViewCtrl::OnLostFocus(wxFocusEvent &evt) {
   evt.Skip();
   m_hasFocusBorder = false;
   SetCursor(wxCursor(wxCURSOR_ARROW));
@@ -1108,7 +1112,7 @@ void TerminalView::OnLostFocus(wxFocusEvent &evt) {
   Refresh();
 }
 
-void TerminalView::DrawFocusBorder(wxDC &dc) const {
+void wxTerminalViewCtrl::DrawFocusBorder(wxDC &dc) const {
   if (!m_hasFocusBorder) {
     return;
   }
@@ -1132,7 +1136,7 @@ void TerminalView::DrawFocusBorder(wxDC &dc) const {
   dc.DrawRectangle(r.GetX(), r.GetY(), r.GetWidth() - 1, r.GetHeight() - 1);
 }
 
-void TerminalView::OnCharHook(wxKeyEvent &evt) {
+void wxTerminalViewCtrl::OnCharHook(wxKeyEvent &evt) {
   if (!HasFocus()) {
     evt.Skip();
     return;
@@ -1169,7 +1173,7 @@ void TerminalView::OnCharHook(wxKeyEvent &evt) {
   evt.Skip();
 }
 
-void TerminalView::OnKeyDown(wxKeyEvent &evt) {
+void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
   if (!HasFocus()) {
     evt.Skip();
     return;
@@ -1282,7 +1286,7 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
   }
 }
 
-bool TerminalView::HandleSpecialKeys(wxKeyEvent &key_event) {
+bool wxTerminalViewCtrl::HandleSpecialKeys(wxKeyEvent &key_event) {
   auto key = key_event.GetKeyCode();
   if (key == WXK_UP || key == WXK_DOWN) {
     key == WXK_UP ? SendArrowUp() : SendArrowDown();
@@ -1326,14 +1330,15 @@ bool TerminalView::HandleSpecialKeys(wxKeyEvent &key_event) {
   return false;
 }
 
-void TerminalView::OnTimer(wxTimerEvent &evt) {
+void wxTerminalViewCtrl::OnTimer(wxTimerEvent &evt) {
   if (m_needsRepaint) {
     m_needsRepaint = false;
     Refresh(false);
   }
 }
 
-const wxFont &TerminalView::GetCachedFont(bool bold, bool underlined) const {
+const wxFont &wxTerminalViewCtrl::GetCachedFont(bool bold,
+                                                bool underlined) const {
   if (bold && underlined) [[unlikely]] {
     return m_defaultFontBoldUnderlined;
   } else if (bold) [[unlikely]] {
@@ -1345,7 +1350,7 @@ const wxFont &TerminalView::GetCachedFont(bool bold, bool underlined) const {
   }
 }
 
-void TerminalView::Copy() {
+void wxTerminalViewCtrl::Copy() {
   TLOG_DEBUG() << "Copy is called!" << std::endl;
   if (!m_mouseSelectionRect.IsSelectionRectHasMinSize()) {
     TLOG_DEBUG() << "No selection is active - will "
@@ -1386,7 +1391,7 @@ void TerminalView::Copy() {
   m_needsRepaint = true;
 }
 
-void TerminalView::Paste() {
+void wxTerminalViewCtrl::Paste() {
   TLOG_DEBUG() << "Paste is called!" << std::endl;
   if (!wxTheClipboard->Open())
     return;
@@ -1402,14 +1407,14 @@ void TerminalView::Paste() {
   wxTheClipboard->Close();
 }
 
-void TerminalView::ClearAll() {
+void wxTerminalViewCtrl::ClearAll() {
   Feed("\033[2J\033[3J");
   m_userSelection.Clear();
   m_mouseSelectionRect.Clear();
   m_needsRepaint = true;
 }
 
-bool TerminalView::IsCmdOrPowerShell() const {
+bool wxTerminalViewCtrl::IsCmdOrPowerShell() const {
 #ifdef __WXMSW__
   if (m_shell_command.empty()) {
     return true;

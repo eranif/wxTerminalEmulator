@@ -12,13 +12,13 @@
 #include <memory>
 #include <optional>
 
-class TerminalView : public wxPanel {
+class wxTerminalViewCtrl : public wxPanel {
 public:
   using EnvironmentList = terminal::PtyBackend::EnvironmentList;
 
-  TerminalView(wxWindow *parent, const wxString &shellCommand,
-               const std::optional<EnvironmentList> &environment);
-  ~TerminalView() override;
+  wxTerminalViewCtrl(wxWindow *parent, const wxString &shellCommand,
+                     const std::optional<EnvironmentList> &environment);
+  ~wxTerminalViewCtrl() override;
 
   /**
    * @brief Sends input text to the terminal backend.
@@ -289,7 +289,7 @@ private:
    */
   bool IsUnicodeSingleCellSafe(wxChar ch) const;
 
-  std::vector<TerminalView::CellInfo>
+  std::vector<wxTerminalViewCtrl::CellInfo>
   PrepareRowForDrawing(const std::vector<terminal::Cell> &row, int rowIdx,
                        const wxRect &selected_cells);
   terminal::TerminalCore m_core;

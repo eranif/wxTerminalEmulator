@@ -142,7 +142,8 @@ public:
     }
 
     for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
-      if (auto *view = dynamic_cast<TerminalView *>(m_notebook->GetPage(i))) {
+      if (auto *view =
+              dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetPage(i))) {
         view->SetTheme(theme);
         view->Refresh();
       }
@@ -155,7 +156,8 @@ public:
     }
 
     for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
-      if (auto *view = dynamic_cast<TerminalView *>(m_notebook->GetPage(i))) {
+      if (auto *view =
+              dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetPage(i))) {
         wxTerminalTheme theme = view->GetTheme();
         theme.font = font;
         view->SetTheme(theme);
@@ -164,16 +166,16 @@ public:
     }
   }
 
-  TerminalView *GetActiveTerminalView() const {
+  wxTerminalViewCtrl *GetActiveTerminalView() const {
     if (!m_notebook || m_notebook->GetPageCount() == 0) {
       return nullptr;
     }
-    return dynamic_cast<TerminalView *>(m_notebook->GetCurrentPage());
+    return dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetCurrentPage());
   }
 
-  TerminalView *CreateTerminalPage(const TerminalPageConfig &config) {
-    auto *page =
-        new TerminalView(m_notebook, config.shellCommand, config.environment);
+  wxTerminalViewCtrl *CreateTerminalPage(const TerminalPageConfig &config) {
+    auto *page = new wxTerminalViewCtrl(m_notebook, config.shellCommand,
+                                        config.environment);
     m_notebook->AddPage(page, "Terminal", true);
     ApplyThemeToTab(page);
     page->EnableSafeDrawing(m_safeDrawingEnabled);
@@ -189,7 +191,8 @@ public:
     }
 
     for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
-      if (auto *view = dynamic_cast<TerminalView *>(m_notebook->GetPage(i))) {
+      if (auto *view =
+              dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetPage(i))) {
         view->EnableSafeDrawing(enabled);
         view->Refresh();
       }
@@ -205,7 +208,7 @@ public:
     }
   }
 
-  void ApplyThemeToTab(TerminalView *view) {
+  void ApplyThemeToTab(wxTerminalViewCtrl *view) {
     if (!view) {
       return;
     }
@@ -255,7 +258,7 @@ public:
 
   void OnChangeFont(wxCommandEvent &event) {
     wxUnusedVar(event);
-    TerminalView *activeView = GetActiveTerminalView();
+    wxTerminalViewCtrl *activeView = GetActiveTerminalView();
     if (!activeView) {
       return;
     }
@@ -277,7 +280,7 @@ public:
 
   void OnCenterLine(wxCommandEvent &event) {
     wxUnusedVar(event);
-    TerminalView *activeView = GetActiveTerminalView();
+    wxTerminalViewCtrl *activeView = GetActiveTerminalView();
     if (!activeView) {
       return;
     }
@@ -311,7 +314,7 @@ public:
 
   void OnSetSelection(wxCommandEvent &event) {
     wxUnusedVar(event);
-    TerminalView *activeView = GetActiveTerminalView();
+    wxTerminalViewCtrl *activeView = GetActiveTerminalView();
     if (!activeView) {
       return;
     }
@@ -357,7 +360,7 @@ public:
 
   void OnPrintLine(wxCommandEvent &event) {
     wxUnusedVar(event);
-    TerminalView *activeView = GetActiveTerminalView();
+    wxTerminalViewCtrl *activeView = GetActiveTerminalView();
     if (!activeView) {
       return;
     }
@@ -387,7 +390,7 @@ public:
 
   void OnSendInput(wxCommandEvent &event) {
     wxUnusedVar(event);
-    TerminalView *activeView = GetActiveTerminalView();
+    wxTerminalViewCtrl *activeView = GetActiveTerminalView();
     if (!activeView) {
       return;
     }
@@ -402,7 +405,7 @@ public:
 
   void OnTerminated(wxTerminalEvent &event) {
     wxUnusedVar(event);
-    auto *view = dynamic_cast<TerminalView *>(event.GetEventObject());
+    auto *view = dynamic_cast<wxTerminalViewCtrl *>(event.GetEventObject());
     if (!view || !m_notebook) {
       return;
     }
@@ -435,7 +438,8 @@ public:
     });
   }
   void OnTitleChanged(wxTerminalEvent &event) {
-    if (auto *view = dynamic_cast<TerminalView *>(event.GetEventObject())) {
+    if (auto *view =
+            dynamic_cast<wxTerminalViewCtrl *>(event.GetEventObject())) {
       if (m_notebook) {
         for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
           if (m_notebook->GetPage(i) == view) {
@@ -476,7 +480,7 @@ public:
 
 private:
   wxNotebook *m_notebook{nullptr};
-  TerminalView *m_view{nullptr};
+  wxTerminalViewCtrl *m_view{nullptr};
   wxString m_defaultShellCommand;
   std::optional<EnvironmentList> m_defaultEnvironment;
   bool m_themeIsDark{true};
