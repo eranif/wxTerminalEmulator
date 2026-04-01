@@ -1,39 +1,43 @@
 # wxTerminalEmulator
 
-A real terminal emulator library for the wxWidgets framework with cross-platform support.
+A wxWidgets-based terminal emulator project with two deliverables:
+
+- A static library: `wxterminal_lib`
+- A demo application: `wxterminal`
 
 ## Overview
 
-wxTerminalEmulator provides a complete terminal emulation solution for wxWidgets applications. The project consists of a static library (`wxterminal_lib`) that implements a full-featured terminal emulator with VT100/ANSI escape sequence support, and a demo application (`wxterminal`) that showcases the library's capabilities.
+wxTerminalEmulator provides a terminal emulation solution for wxWidgets applications. The current codebase includes a terminal core, a wxWidgets terminal view, platform PTY backends, custom terminal events, theming support, logging, and a demo program that exercises the API.
+
+The project status is: the core library and demo app are present and functional in the repository.
 
 ## Features
 
 ### Terminal Emulation
-- **Complete VT100/ANSI Support**: Handles cursor movement, text attributes (bold, underline, reverse), colors (16-color ANSI, 256-color palette, 24-bit true color), and advanced control sequences
-- **UTF-8 Support**: Full Unicode character rendering
-- **Scrollback Buffer**: Configurable history with smooth scrolling
-- **Alternate Screen Buffer**: Support for full-screen applications (vim, less, etc.)
-- **Scroll Regions**: Partial screen scrolling for advanced terminal applications
-- **Escape Sequence Handling**: CSI, OSC sequences including title changes, color queries, and cursor position reports
+- **VT100/ANSI escape sequence handling** in `terminal_core.cpp`
+- **UTF-8 / Unicode character support**
+- **Scrollback buffer** and viewport management
+- **Alternate screen buffer** support
+- **Scroll regions** and cursor save/restore handling
+- **OSC/CSI processing**, including title updates and terminal responses
 
 ### Display Features
-- **Theme Support**: Built-in dark and light themes with customizable colors
-- **Font Rendering**: Platform-optimized font selection (Consolas on Windows, Menlo on macOS, monospace on Linux)
-- **Text Selection**: Mouse-based text selection with copy/paste support
-- **API Selection**: Programmatic text selection for automation
-- **Smooth Rendering**: Optimized drawing with batched text operations
-- **Cross-platform Graphics**: Uses wxGCDC on Windows for proper Unicode rendering
+- **Dark and light themes** via `terminal_theme.h`
+- **Custom font selection** in the demo application
+- **Mouse selection, copy/paste, and programmatic selection**
+- **Buffered rendering** with wxWidgets drawing APIs
+- **Cross-platform view implementation** in `terminal_view.cpp`
 
 ### Platform Support
-- **Windows**: ConPTY-based pseudo-terminal backend for native Windows Console API support
-- **Linux/Unix**: POSIX PTY backend using `forkpty`
-- **macOS**: POSIX PTY backend with platform-specific optimizations
+- **Windows**: ConPTY-based backend in `pty_backend_windows.cpp`
+- **POSIX platforms**: PTY backend in `pty_backend_posix.cpp`
+- The build links platform-specific system libraries as needed
 
 ### Input Handling
-- **Full Keyboard Support**: All printable characters, control sequences (Ctrl+A-Z), Alt combinations
-- **Special Keys**: Navigation keys (arrows, home, end, page up/down), function keys (F1-F12), insert, delete
-- **Terminal-specific Keys**: Tab, Enter, Backspace, Escape with proper escape sequence generation
-- **Clipboard Integration**: Copy/paste support with platform-specific shortcuts (Ctrl+C/V on Windows/Linux, Cmd+C/V on macOS)
+- **Printable character input**
+- **Special key translation** for navigation, insert/delete, page keys, and function keys
+- **Common terminal shortcuts** such as Ctrl+C, Ctrl+L, Ctrl+U, Ctrl+K, Ctrl+W, Ctrl+Z, Ctrl+R, Ctrl+D, Ctrl+A, Ctrl+E
+- **Clipboard integration** through the terminal view
 
 ## Architecture
 
@@ -48,7 +52,7 @@ The heart of the terminal emulation engine:
 - Supports alternate screen buffer
 - Provides callback mechanisms for title changes and terminal responses
 
-#### `TerminalView` (`terminal_view.h/cpp`)
+#### `wxTerminalViewCtrl` (`terminal_view.h/cpp`)
 wxWidgets panel that provides the visual interface:
 - Renders terminal content using wxDC/wxGCDC
 - Handles user input (keyboard and mouse)
@@ -56,6 +60,7 @@ wxWidgets panel that provides the visual interface:
 - Implements scrolling with mouse wheel support
 - Provides font caching for performance
 - Auto-updates display with timer-based refresh
+- Supports safe drawing mode, buffer navigation, and line centering
 
 #### PTY Backend (`pty_backend.h`)
 Abstract interface for platform-specific pseudo-terminal implementations:
@@ -67,6 +72,8 @@ Each backend provides:
 - Bidirectional I/O with the child process
 - Terminal resizing support
 - Threaded I/O to prevent blocking
+
+The demo supports launching a default shell or a custom command, and it can also pass environment variables to the spawned process.
 
 #### Terminal Events (`terminal_event.h/cpp`)
 Custom wxWidgets events for terminal-specific notifications:
@@ -101,6 +108,10 @@ Debugging and diagnostics support:
   - **Linux**: libutil-dev (for forkpty)
   - **macOS**: Xcode command line tools
 
+### Build Targets
+- `wxterminal_lib` - static library
+- `wxterminal` - demo application (enabled by default through `BUILD_WXTERMINAL_DEMO`)
+
 ### Build Instructions
 
 #### Windows (MinGW)
@@ -120,6 +131,7 @@ cmake --build .
 ### CMake Options
 - `WXWIN`: Path to wxWidgets installation (required on Windows with MinGW)
 - `WXCFG`: wxWidgets configuration string (Windows MinGW only, default: `clang_x64_dll/mswu`)
+- `BUILD_WXTERMINAL_DEMO`: Enable/disable the demo executable
 
 ## Usage
 
@@ -129,16 +141,16 @@ cmake --build .
 #include "terminal_view.h"
 
 // Create terminal view in your window
-TerminalView* terminal = new TerminalView(parentWindow);
+wxTerminalViewCtrl* terminal = new wxTerminalViewCtrl(parentWindow, "", std::nullopt);
 
 // Set theme
 terminal->SetTheme(wxTerminalTheme::MakeDarkTheme());
 
 // Start a shell process
-terminal->StartProcess(""); // Empty string uses default shell
+// The constructor starts the process; pass a command string there if needed.
 
-// Or start a specific command
-terminal->StartProcess("/bin/bash");
+// Or create the view with a specific command
+wxTerminalViewCtrl* terminal2 = new wxTerminalViewCtrl(parentWindow, "/bin/bash", std::nullopt);
 ```
 
 ### Event Handling
@@ -198,20 +210,25 @@ terminal->ClearMouseSelection();
 
 ## Demo Application
 
-The included demo (`main.cpp`) showcases the library features:
+The included demo application (`main.cpp`) showcases the library features:
 
 ### Features
 - Dark/Light theme switching
-- Window automatically sized to 1/2 screen dimensions
+- Window sized to about half of the available screen area
 - Menu options for:
+  - New terminal tab
   - Theme selection
+  - Font selection
+  - Safe drawing toggle
   - Line centering by number
   - Programmatic text selection
   - Line content display
   - Direct input sending
+- Multiple terminal tabs in a notebook control
 - Automatic terminal title updates
-- Process termination handling
+- Process termination handling that closes tabs and exits when the last one closes
 - Command-line log level control
+- Optional shell override and environment list support
 
 ### Running the Demo
 
@@ -221,9 +238,13 @@ The included demo (`main.cpp`) showcases the library features:
 
 Log levels: `trace`, `debug`, `warn`, `error`
 
+Additional options:
+- `--shell=<command>` to launch a specific shell or command
+- `--env=<list>` to pass environment variables to the launched process
+
 ## API Reference
 
-### TerminalView Public Methods
+### wxTerminalViewCtrl Public Methods
 
 | Method | Description |
 |--------|-------------|
@@ -309,7 +330,7 @@ This is an open-source project. Contributions are welcome via pull requests.
 The library is optimized for performance:
 - Batched text rendering reduces draw calls
 - Font caching minimizes object creation
-- Timer-based refresh prevents excessive redraws
+- Timer-based refresh prevents excessive redraws (only when needed)
 - Efficient buffer management with deque structure
 - Minimal allocations in hot paths
 
