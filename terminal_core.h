@@ -103,6 +103,7 @@ public:
 
   void SetTheme(const wxTerminalTheme &theme);
   const wxTerminalTheme &GetTheme() const { return m_theme; }
+  wxTerminalTheme &GetTheme() { return m_theme; }
 
   void Resize(std::size_t rows, std::size_t cols);
   void Reset();

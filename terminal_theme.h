@@ -47,6 +47,8 @@ struct wxTerminalTheme {
   // Cursor
   wxColour cursorColour{255, 255, 255};
 
+  bool isMonospaced{true};
+
   // Convert wxColour to packed uint32_t (RGB)
   static std::uint32_t ToU32(const wxColour &c) {
     return (c.Red() << 16) | (c.Green() << 8) | c.Blue();

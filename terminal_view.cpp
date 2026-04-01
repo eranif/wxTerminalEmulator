@@ -44,14 +44,21 @@ TerminalView::SelectionRect::PixelsRectToViewCellRect(int char_width,
     return {};
   }
 
-  int cell_x = m_rect.GetX() / char_width;
-  int cell_y = m_rect.GetY() / char_height;
-  int pixel_right = m_rect.GetRight();
-  int pixel_bottom = m_rect.GetBottom();
+  int cell_x = std::max(m_rect.GetX() / char_width, 0);
+  int cell_y = std::max(m_rect.GetY() / char_height, 0);
+  int pixel_right = std::max(m_rect.GetRight(), 0);
+  int pixel_bottom = std::max(m_rect.GetBottom(), 0);
   int cell_right = (pixel_right + char_width - 1) / char_width - 1;
   int cell_bottom = (pixel_bottom + char_height - 1) / char_height - 1;
+  cell_right = std::max(cell_right, 0);
+  cell_bottom = std::max(cell_bottom, 0);
+
   int cell_width = cell_right - cell_x + 1;
   int cell_height = cell_bottom - cell_y + 1;
+
+  cell_right = std::max(cell_width, 0);
+  cell_bottom = std::max(cell_height, 0);
+
   return wxRect(cell_x, cell_y, cell_width, cell_height);
 }
 
@@ -138,13 +145,7 @@ TerminalView::TerminalView(wxWindow *parent, const wxString &shellCommand,
   Bind(wxEVT_SET_FOCUS, &TerminalView::OnFocus, this);
   Bind(wxEVT_KILL_FOCUS, &TerminalView::OnLostFocus, this);
   Bind(wxEVT_TIMER, &TerminalView::OnTimer, this);
-  Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent &e) {
-    e.Skip();
-    if (!m_contextMenuShowing) {
-      TLOG_DEBUG() << "Leaving window!" << std::endl;
-      ClearMouseSelection();
-    }
-  });
+  Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent &e) { e.Skip(); });
   Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent &) {});
   m_shell_command = shellCommand;
   m_environment = std::move(environment);
@@ -683,11 +684,11 @@ void TerminalView::RenderRowNoGrouping(wxDC &dc, int y, int rowIdx,
     return;
   }
 
+  const auto &theme = m_core.GetTheme();
   std::optional<CellAttributes> prev_cell{std::nullopt};
   for (size_t i = 0; i < cells.size(); ++i) {
     const auto &cell = cells[i];
 
-    // Draw background for the entire group
     int x = cell.colIdx * m_charW;
     if (!prev_cell.has_value() || prev_cell.value() != cell.attrs) {
       dc.SetBrush(wxBrush(cell.attrs.bgColor));
@@ -698,9 +699,18 @@ void TerminalView::RenderRowNoGrouping(wxDC &dc, int y, int rowIdx,
     }
 
     wxString cell_content(wxUniChar(cell.ch));
-    dc.DrawRectangle(x, y, m_charW, m_charH);
-    counters.draw_rectangle_++;
-    dc.DrawText(cell_content, x, y);
+    wxRect cell_rect{x, y, m_charW, m_charH};
+    dc.DrawRectangle(cell_rect);
+    if (theme.isMonospaced) {
+      // Incase of non-monospced font, draw each character at the center of the
+      // cell rect.
+      counters.draw_rectangle_++;
+      dc.DrawText(cell_content, x, y);
+    } else {
+      wxRect text_rect{wxPoint{x, y}, dc.GetTextExtent(cell_content)};
+      text_rect = text_rect.CentreIn(cell_rect, wxHORIZONTAL);
+      dc.DrawText(cell_content, text_rect.GetTopLeft());
+    }
     counters.draw_text_++;
   }
 }
@@ -865,7 +875,7 @@ void TerminalView::RenderRow(wxDC &dc, int y, int rowIdx,
   }
 
 #if defined(__WXMSW__)
-  RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
+  RenderRowPosix(dc, y, rowIdx, row, selected_cells, counters);
 #elif defined(__WXMAC__)
   MACRenderRow(dc, y, rowIdx, row, selected_cells, counters);
 #else
@@ -892,8 +902,16 @@ void TerminalView::OnPaint(wxPaintEvent &) {
 
   if (m_charH == 0 && m_charW == 0) {
     // first time — measure font, set size, then start the shell
-    m_charW = wxMax(dc.GetTextExtent("X").GetWidth(), m_charW);
-    m_charH = wxMax(dc.GetTextExtent("X").GetHeight(), m_charH);
+    int i_width = dc.GetTextExtent("i").GetWidth();
+    m_charW = dc.GetTextExtent("W").GetWidth();
+
+    int i_height = dc.GetTextExtent("i").GetHeight();
+    m_charH = dc.GetTextExtent("W").GetHeight();
+
+    if (i_width != m_charW || i_height != m_charH) {
+      // Mark the font has "non-monospaced" font.
+      m_core.GetTheme().isMonospaced = false;
+    }
 
     const wxString sample_text = "Administrator";
     int group_width =
@@ -991,6 +1009,7 @@ void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
   m_mouseSelectionRect.SetAnchor(wxPoint{evt.GetX(), evt.GetY()});
   m_isDragging = true;
   m_needsRepaint = false;
+  CaptureMouse();
   Refresh();
 }
 
@@ -1008,6 +1027,10 @@ void TerminalView::OnMouseMove(wxMouseEvent &evt) {
 void TerminalView::OnMouseUp(wxMouseEvent &evt) {
   evt.Skip();
   m_isDragging = false;
+  if (HasCapture()) {
+    // Release the moouse
+    ReleaseMouse();
+  }
 
   if (!m_mouseSelectionRect.IsSelectionRectHasMinSize()) {
     m_mouseSelectionRect.Clear();
