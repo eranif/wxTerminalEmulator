@@ -509,13 +509,15 @@ TerminalView::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
     CellInfo info;
     info.colIdx = colIdx;
     info.ch = static_cast<wxChar>(cell.ch);
-    info.attrs.fgColor = fgColor;
     if (isMouseSelected) {
       info.attrs.bgColor = theme.selectionBg;
+      info.attrs.fgColor = theme.selectionFg;
     } else if (isApiSelected) {
       info.attrs.bgColor = theme.highlightBg;
+      info.attrs.fgColor = theme.highlightFg;
     } else {
       info.attrs.bgColor = theme.bg;
+      info.attrs.fgColor = fgColor;
     }
     info.attrs.bold = cell.bold;
     info.attrs.underline = cell.underline;

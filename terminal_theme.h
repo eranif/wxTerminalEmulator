@@ -40,7 +40,9 @@ struct wxTerminalTheme {
 
   // Selection colours (with alpha)
   wxColour selectionBg{70, 130, 180, 100};
+  wxColour selectionFg{0xFF, 0xFF, 0xFF};
   wxColour highlightBg{180, 140, 50, 100};
+  wxColour highlightFg{0xFF, 0xFF, 0xFF};
 
   // Cursor
   wxColour cursorColour{255, 255, 255};
@@ -128,7 +130,9 @@ struct wxTerminalTheme {
     t.brightCyan = wxColour(0x00, 0xFF, 0xFF);
     t.brightWhite = wxColour(0xFF, 0xFF, 0xFF);
     t.selectionBg = wxColour(51, 153, 255, 80);
+    t.selectionFg = wxColour(0x00, 0x00, 0x00);
     t.highlightBg = wxColour(255, 200, 50, 80);
+    t.highlightFg = wxColour(0x00, 0x00, 0x00);
     t.cursorColour = wxColour(0, 0, 0);
     return t;
   }
