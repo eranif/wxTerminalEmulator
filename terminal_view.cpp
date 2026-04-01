@@ -516,7 +516,7 @@ TerminalView::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
       info.attrs.bgColor = theme.highlightBg;
       info.attrs.fgColor = theme.highlightFg;
     } else {
-      info.attrs.bgColor = theme.bg;
+      info.attrs.bgColor = bgColor;
       info.attrs.fgColor = fgColor;
     }
     info.attrs.bold = cell.bold;
