@@ -758,10 +758,10 @@ void wxTerminalViewCtrl::RenderRowPosix(wxDC &dc, int y, int rowIdx,
 }
 
 #if defined(__WXMAC__)
-void TerminalView::MACRenderRow(wxDC &dc, int y, int rowIdx,
-                                const std::vector<terminal::Cell> &row,
-                                const wxRect &selected_cells,
-                                PaintCounters &counters) {
+void wxTerminalViewCtrl::MACRenderRow(wxDC &dc, int y, int rowIdx,
+                                      const std::vector<terminal::Cell> &row,
+                                      const wxRect &selected_cells,
+                                      PaintCounters &counters) {
   std::vector<CellInfo> cells =
       PrepareRowForDrawing(row, rowIdx, selected_cells);
 
