@@ -867,7 +867,7 @@ void wxTerminalViewCtrl::RenderRow(wxDC &dc, int y, int rowIdx,
 #if defined(__WXMSW__)
   RenderRowPosix(dc, y, rowIdx, row, selected_cells, counters);
 #elif defined(__WXMAC__)
-  MACRenderRow(dc, y, rowIdx, row, selected_cells, counters);
+  RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
 #else
   RenderRowPosix(dc, y, rowIdx, row, selected_cells, counters);
 #endif
