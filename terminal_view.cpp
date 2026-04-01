@@ -896,8 +896,15 @@ void TerminalView::OnPaint(wxPaintEvent &) {
     m_charH = dc.GetTextExtent("W").GetHeight();
 
     if (i_width != m_charW || i_height != m_charH) {
+      m_charW = 0;
       // Mark the font has "non-monospaced" font.
       m_core.GetTheme().isMonospaced = false;
+      // Find the widest letter from the A-Z
+      for (auto c = 'A'; c <= 'Z'; c++) {
+        wxString t(c, 1);
+        int tmp_width = dc.GetTextExtent(t).GetWidth();
+        m_charW = std::max(tmp_width, m_charW);
+      }
     }
 
     const wxString sample_text = "Administrator";
