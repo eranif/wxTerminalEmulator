@@ -452,7 +452,7 @@ public:
   }
 
   void ApplyNativeAppTheme(std::optional<bool> darkMode = std::nullopt) {
-#ifdef __WXMSW__
+#if defined(__WXMSW__) && wxCHECK_VERSION(3, 3, 0)
     const bool enableDark = darkMode.value_or(m_themeIsDark);
     if (enableDark) {
       // force dark

@@ -1151,7 +1151,7 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
   // On macOS, Cmd+C/V for copy/paste
   // (ControlDown() = Cmd key)
   if (evt.ControlDown() && !evt.AltDown()) {
-    if (IsSelectionRectHasMinSize(m_mouseSelectionRect) &&
+    if (m_mouseSelectionRect.IsSelectionRectHasMinSize() &&
         (key == 'C' || key == 'c')) {
       wxCommandEvent copyEvt(wxEVT_MENU, wxID_COPY);
       OnCopy(copyEvt);
