@@ -524,7 +524,7 @@ public:
       environment = MyFrame::ParseEnvironmentList(envStr);
     }
 
-#ifdef __WXMSW__
+#if defined(__WXMSW__) && wxCHECK_VERSION(3, 3, 0)
     SetAppearance(wxAppBase::Appearance::System);
 #endif
 

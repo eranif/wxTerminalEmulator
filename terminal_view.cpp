@@ -150,7 +150,7 @@ TerminalView::TerminalView(wxWindow *parent, const wxString &shellCommand,
   m_environment = std::move(environment);
 
   m_timer.SetOwner(this);
-  m_timer.Start(16); // Roughly 60fps
+  m_timer.Start(10); // 100HZ
 
   // Set up callback for terminal responses (e.g., cursor position reports)
   m_core.SetResponseCallback(
@@ -272,6 +272,8 @@ void TerminalView::SendCtrlU() {
 }
 
 void TerminalView::SendCtrlL() {
+  m_mouseSelectionRect.Clear();
+  m_userSelection.Clear();
   wxString lower_case_shell = m_shell_command.Lower();
   if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
                                     lower_case_shell.Contains("powershell"))) {
@@ -402,8 +404,9 @@ void TerminalView::SetUserSelection(std::size_t col, std::size_t row,
 }
 
 void TerminalView::ClearUserSelection() {
-  m_userSelection.active = false;
+  m_userSelection.Clear();
   m_needsRepaint = true;
+  TLOG_IF_DEBUG { TLOG_DEBUG() << "User selection is cleared" << std::endl; }
 }
 
 void TerminalView::ClearMouseSelection() {
@@ -426,7 +429,7 @@ void TerminalView::UpdateFontCache() {
 }
 
 void TerminalView::DebugDumpViewArea() {
-  TLOG_IF_DEBUG {
+  TLOG_IF_TRACE {
     auto viewArea = m_core.GetViewArea();
     size_t row_num{0};
     for (const auto &row : viewArea) {
@@ -440,7 +443,7 @@ void TerminalView::DebugDumpViewArea() {
         }
       }
       wxString line_utf8 = wxString::FromUTF8(line);
-      TLOG_DEBUG() << wxString::Format("%03d", row_num) << line_utf8
+      TLOG_TRACE() << wxString::Format("%03d", row_num) << line_utf8
                    << std::endl;
       row_num++;
     }
@@ -633,10 +636,22 @@ void TerminalView::RenderRowWithGrouping(wxDC &dc, int y, int rowIdx,
     text.Append(firstCell.ch);
 
     size_t j = i + 1;
-    while (j < cells.size() && cells[j].attrs == firstCell.attrs &&
-           cells[j].colIdx == cells[j - 1].colIdx + 1) {
-      text.Append(cells[j].ch);
-      ++j;
+    const CellInfo *current_cell = &firstCell;
+    if (!firstCell.HasAnySelection()) {
+      while (true) {
+        if (j >= cells.size()) {
+          break;
+        }
+        const auto &next_cell = cells[j];
+        if (current_cell->HasSameAttributes(next_cell) &&
+            current_cell->IsAdjacent(next_cell)) {
+          text.Append(next_cell.ch);
+          current_cell = &next_cell;
+          j++;
+          continue;
+        }
+        break;
+      }
     }
 
     int x = firstCell.colIdx * m_charW;
@@ -973,7 +988,7 @@ void TerminalView::OnMouseLeftDown(wxMouseEvent &evt) {
 
   if (!m_mouseSelectionRect.IsEmpty()) {
     // Clear and start a new selection.
-    m_mouseSelectionRect = {};
+    m_mouseSelectionRect.Clear();
   }
 
   m_mouseSelectionRect.SetAnchor(wxPoint{evt.GetX(), evt.GetY()});
@@ -1024,7 +1039,7 @@ void TerminalView::OnMouseWheel(wxMouseEvent &evt) {
     m_core.SetViewStart(0);
   else
     m_core.SetViewStart(vs + static_cast<std::size_t>(-lines));
-  m_mouseSelectionRect = {};
+  m_mouseSelectionRect.Clear();
   m_needsRepaint = true;
 }
 
@@ -1373,5 +1388,7 @@ void TerminalView::Paste() {
 
 void TerminalView::ClearAll() {
   Feed("\033[2J\033[3J");
+  m_userSelection.Clear();
+  m_mouseSelectionRect.Clear();
   m_needsRepaint = true;
 }

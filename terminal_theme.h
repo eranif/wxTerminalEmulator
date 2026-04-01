@@ -39,9 +39,9 @@ struct wxTerminalTheme {
   wxColour brightWhite{0xFF, 0xFF, 0xFF};
 
   // Selection colours (with alpha)
-  wxColour selectionBg{70, 130, 180, 100};
+  wxColour selectionBg{70, 130, 180};
   wxColour selectionFg{0xFF, 0xFF, 0xFF};
-  wxColour highlightBg{180, 140, 50, 100};
+  wxColour highlightBg{180, 140, 50};
   wxColour highlightFg{0xFF, 0xFF, 0xFF};
 
   // Cursor
@@ -129,9 +129,9 @@ struct wxTerminalTheme {
     t.brightMagenta = t.magenta.ChangeLightness(120);
     t.brightCyan = wxColour(0x00, 0xFF, 0xFF);
     t.brightWhite = wxColour(0xFF, 0xFF, 0xFF);
-    t.selectionBg = wxColour(51, 153, 255, 80);
+    t.selectionBg = wxColour(51, 153, 255);
     t.selectionFg = wxColour(0x00, 0x00, 0x00);
-    t.highlightBg = wxColour(255, 200, 50, 80);
+    t.highlightBg = wxColour(255, 200, 50);
     t.highlightFg = wxColour(0x00, 0x00, 0x00);
     t.cursorColour = wxColour(0, 0, 0);
     return t;

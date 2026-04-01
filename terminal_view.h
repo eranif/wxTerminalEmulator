@@ -216,6 +216,10 @@ private:
   struct ApiSelection {
     std::size_t row{0}, col{0}, endCol{0};
     bool active{false};
+    inline void Clear() {
+      row = col = endCol = 0;
+      active = false;
+    }
   };
 
   struct CellAttributes {
@@ -243,7 +247,23 @@ private:
     wxChar ch;
     CellAttributes attrs;
     inline bool IsUnicode() const { return ch >= 0x80; }
+    inline bool HasSameAttributes(const CellInfo &other) const {
+      return attrs == other.attrs;
+    }
+    inline bool IsAdjacent(const CellInfo &other) const {
+      return IsLeftTo(other) || IsRightTo(other);
+    }
+    inline bool IsLeftTo(const CellInfo &other) const {
+      return colIdx == other.colIdx - 1;
+    }
+    inline bool IsRightTo(const CellInfo &other) const {
+      return colIdx == other.colIdx + 1;
+    }
+    inline bool HasAnySelection() const {
+      return attrs.isMouseSelected || attrs.isApiSelected;
+    }
   };
+
   /**
    * @brief Checks whether a range of cells contains only printable ASCII text.
    *
