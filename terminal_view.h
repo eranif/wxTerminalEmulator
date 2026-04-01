@@ -2,6 +2,7 @@
 
 #include "pty_backend.h"
 #include "terminal_core.h"
+#include <thread>
 #include <wx/dcbuffer.h>
 #include <wx/dcgraph.h>
 #include <wx/panel.h>
@@ -180,7 +181,6 @@ private:
   void OnSize(wxSizeEvent &evt);
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);
-  void OnTimer(wxTimerEvent &evt);
   void OnMouseLeftDown(wxMouseEvent &evt);
   void OnMouseMove(wxMouseEvent &evt);
   void OnMouseUp(wxMouseEvent &evt);
@@ -297,7 +297,6 @@ private:
   SelectionRect m_mouseSelectionRect{};
   ApiSelection m_userSelection;
   bool m_isDragging{false};
-  bool m_needsRepaint{true};
   int m_scrollOffset{0}; // 0 = at bottom, >0 = scrolled back
   int m_wheelAccum{0};
 
@@ -305,11 +304,14 @@ private:
   wxFont m_defaultFontBold;
   wxFont m_defaultFontUnderlined;
   wxFont m_defaultFontBoldUnderlined;
-  wxTimer m_timer;
   int m_charW{0};
   int m_charH{0};
   bool m_contextMenuShowing{false};
   wxString m_shell_command;
   std::optional<EnvironmentList> m_environment{std::nullopt};
   bool m_safeDrawing{false};
+  std::atomic_bool m_needsRepaint{true};
+  std::atomic_bool m_shutdownFlag{false};
+  std::thread m_drawingTimerThread;
+  
 };

@@ -3,6 +3,7 @@
 #include "terminal_event.h"
 #include "terminal_logger.h"
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <unordered_map>
 #include <wx/app.h>
@@ -131,6 +132,20 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   UpdateFontCache();
 
+  // Use thread to trigger paint events (if needed).
+  // This is more accurate then using wxTimer.
+  m_drawingTimerThread = std::thread([this]() {
+    while (!m_shutdownFlag.load()) {
+      // Check for paint event every 10ms, as best this will render the screen
+      // at a 100HZ rate.
+      std::this_thread::sleep_for(std::chrono::milliseconds{10});
+      if (m_needsRepaint.load()) {
+        m_needsRepaint.store(false);
+        CallAfter(&wxTerminalViewCtrl::Refresh, true, nullptr);
+      }
+    }
+  });
+
   // Bind events using modern API
   Bind(wxEVT_PAINT, &wxTerminalViewCtrl::OnPaint, this);
   Bind(wxEVT_SIZE, &wxTerminalViewCtrl::OnSize, this);
@@ -143,14 +158,11 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   Bind(wxEVT_MOUSEWHEEL, &wxTerminalViewCtrl::OnMouseWheel, this);
   Bind(wxEVT_SET_FOCUS, &wxTerminalViewCtrl::OnFocus, this);
   Bind(wxEVT_KILL_FOCUS, &wxTerminalViewCtrl::OnLostFocus, this);
-  Bind(wxEVT_TIMER, &wxTerminalViewCtrl::OnTimer, this);
   Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent &e) { e.Skip(); });
   Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent &) {});
+
   m_shell_command = shellCommand;
   m_environment = std::move(environment);
-
-  m_timer.SetOwner(this);
-  m_timer.Start(10); // 100HZ
 
   // Set up callback for terminal responses (e.g., cursor position reports)
   m_core.SetResponseCallback(
@@ -165,10 +177,15 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
 }
 
 wxTerminalViewCtrl::~wxTerminalViewCtrl() {
-  if (m_timer.IsRunning())
-    m_timer.Stop();
-  if (m_backend)
+  if (m_backend) {
     m_backend->Stop();
+  }
+
+  m_shutdownFlag.store(true);
+  if (m_drawingTimerThread.joinable()) {
+    m_drawingTimerThread.join();
+  }
+  m_shutdownFlag.store(false);
 }
 
 void wxTerminalViewCtrl::Feed(const std::string &data) {
@@ -647,7 +664,8 @@ void wxTerminalViewCtrl::RenderRowWithGrouping(
     }
 
     int x = firstCell.colIdx * m_charW;
-    int width = (cells[j - 1].colIdx - firstCell.colIdx + 1) * m_charW;
+    int num_of_cells = cells[j - 1].colIdx - firstCell.colIdx + 1;
+    int width = num_of_cells * m_charW;
     dc.SetBrush(wxBrush(firstCell.attrs.bgColor));
     dc.SetPen(*wxTRANSPARENT_PEN);
     dc.DrawRectangle(x, y, width, m_charH);
@@ -865,7 +883,7 @@ void wxTerminalViewCtrl::RenderRow(wxDC &dc, int y, int rowIdx,
   }
 
 #if defined(__WXMSW__)
-  RenderRowPosix(dc, y, rowIdx, row, selected_cells, counters);
+  RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
 #elif defined(__WXMAC__)
   RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
 #else
@@ -891,6 +909,7 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
   dc.SetFont(m_defaultFont);
 
   if (m_charH == 0 && m_charW == 0) {
+    wxDCFontChanger font_changer{dc, GetCachedFont(true, false)};
     // first time — measure font, set size, then start the shell
     int i_width = dc.GetTextExtent("i").GetWidth();
     m_charW = dc.GetTextExtent("W").GetWidth();
@@ -1328,13 +1347,6 @@ bool wxTerminalViewCtrl::HandleSpecialKeys(wxKeyEvent &key_event) {
     return true;
   }
   return false;
-}
-
-void wxTerminalViewCtrl::OnTimer(wxTimerEvent &evt) {
-  if (m_needsRepaint) {
-    m_needsRepaint = false;
-    Refresh(false);
-  }
 }
 
 const wxFont &wxTerminalViewCtrl::GetCachedFont(bool bold,
