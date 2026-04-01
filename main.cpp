@@ -75,6 +75,14 @@ public:
     m_defaultShellCommand = shellCommand;
     m_defaultEnvironment = environment;
     m_view = CreateTerminalPage({shellCommand, environment});
+    m_notebook->Bind(
+        wxEVT_BOOKCTRL_PAGE_CHANGED, [this](wxBookCtrlEvent &event) {
+          event.Skip();
+          auto page = m_notebook->GetPage(m_notebook->GetSelection());
+          if (page) {
+            page->SetFocus();
+          }
+        });
   }
 
   static std::optional<EnvironmentList>

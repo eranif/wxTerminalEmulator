@@ -130,7 +130,6 @@ TerminalView::TerminalView(wxWindow *parent, const wxString &shellCommand,
     : wxPanel(parent, wxID_ANY) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   UpdateFontCache();
-  SetCursor(wxCursor(wxCURSOR_IBEAM));
 
   // Bind events using modern API
   Bind(wxEVT_PAINT, &TerminalView::OnPaint, this);
@@ -1090,12 +1089,14 @@ void TerminalView::OnFocus(wxFocusEvent &evt) {
   // Ensure we can receive keyboard events
   evt.Skip();
   m_hasFocusBorder = true;
+  SetCursor(wxCursor(wxCURSOR_IBEAM));
   Refresh();
 }
 
 void TerminalView::OnLostFocus(wxFocusEvent &evt) {
   evt.Skip();
   m_hasFocusBorder = false;
+  SetCursor(wxCursor(wxCURSOR_ARROW));
   ClearMouseSelection();
   Refresh();
 }
