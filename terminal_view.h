@@ -139,6 +139,7 @@ private:
     inline bool IsEmpty() const { return m_rect.IsEmpty(); }
   };
 
+  bool IsCmdOrPowerShell() const;
   void Feed(const std::string &data);
   void StartProcess(const wxString &command,
                     const std::optional<EnvironmentList> &environment);

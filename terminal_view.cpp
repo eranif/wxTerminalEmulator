@@ -262,9 +262,8 @@ void TerminalView::SendPageDown() { SendInput("\x1b[6~"); }
 void TerminalView::SendCtrlR() { SendInput("\x12"); }
 
 void TerminalView::SendCtrlU() {
-  wxString lower_case_shell = m_shell_command.Lower();
-  if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
-                                    lower_case_shell.Contains("powershell"))) {
+
+  if (IsCmdOrPowerShell()) {
     // Windows style "Ctrl-U" for CMD / PS
     SendEscape();
     return;
@@ -275,10 +274,9 @@ void TerminalView::SendCtrlU() {
 void TerminalView::SendCtrlL() {
   m_mouseSelectionRect.Clear();
   m_userSelection.Clear();
-  wxString lower_case_shell = m_shell_command.Lower();
-  if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
-                                    lower_case_shell.Contains("powershell"))) {
+  if (IsCmdOrPowerShell()) {
     // Windows style "Ctrl-L" for CMD / PS
+    TLOG_DEBUG() << "Sending Windows 'cls' command" << std::endl;
     SendInput("cls\r");
     return;
   }
@@ -290,9 +288,7 @@ void TerminalView::SendCtrlW() { SendInput("\x17"); }
 void TerminalView::SendCtrlZ() { SendInput("\x1a"); }
 
 void TerminalView::SendCtrlK() {
-  wxString lower_case_shell = m_shell_command.Lower();
-  if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
-                                    lower_case_shell.Contains("powershell"))) {
+  if (IsCmdOrPowerShell()) {
     // Windows shells typically use a command-line kill behavior via Escape.
     SendEscape();
     return;
@@ -301,9 +297,7 @@ void TerminalView::SendCtrlK() {
 }
 
 void TerminalView::SendCtrlA() {
-  wxString lower_case_shell = m_shell_command.Lower();
-  if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
-                                    lower_case_shell.Contains("powershell"))) {
+  if (IsCmdOrPowerShell()) {
     // Windows shells often interpret Ctrl-A as Select All rather than
     // beginning-of-line editing.
     SendInput("^a");
@@ -313,9 +307,7 @@ void TerminalView::SendCtrlA() {
 }
 
 void TerminalView::SendCtrlE() {
-  wxString lower_case_shell = m_shell_command.Lower();
-  if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
-                                    lower_case_shell.Contains("powershell"))) {
+  if (IsCmdOrPowerShell()) {
     // No special Windows equivalent; fall back to the raw control code.
     SendInput("\x05");
     return;
@@ -324,9 +316,7 @@ void TerminalView::SendCtrlE() {
 }
 
 void TerminalView::SendAltB() {
-  wxString lower_case_shell = m_shell_command.Lower();
-  if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
-                                    lower_case_shell.Contains("powershell"))) {
+  if (IsCmdOrPowerShell()) {
     // Use a common readline-style escape sequence only when supported.
     SendInput("\x1b"
               "b");
@@ -337,9 +327,7 @@ void TerminalView::SendAltB() {
 }
 
 void TerminalView::SendAltF() {
-  wxString lower_case_shell = m_shell_command.Lower();
-  if (!lower_case_shell.empty() && (lower_case_shell.Contains("cmd") ||
-                                    lower_case_shell.Contains("powershell"))) {
+  if (IsCmdOrPowerShell()) {
     // Use a common readline-style escape sequence only when supported.
     SendInput("\x1b"
               "f");
@@ -1202,7 +1190,7 @@ void TerminalView::OnKeyDown(wxKeyEvent &evt) {
   }
 #endif
 
-  if (ctrl && !evt.AltDown()) {
+  if (evt.GetModifiers() == wxMOD_RAW_CONTROL) {
     // Handle Ctrl+C - Copy if text is selected,
     // otherwise send SIGINT
     if (key == 'C' || key == 'c') {
@@ -1411,4 +1399,18 @@ void TerminalView::ClearAll() {
   m_userSelection.Clear();
   m_mouseSelectionRect.Clear();
   m_needsRepaint = true;
+}
+
+bool TerminalView::IsCmdOrPowerShell() const {
+#ifdef __WXMSW__
+  if (m_shell_command.empty()) {
+    return true;
+  }
+
+  wxString lower_case_shell = m_shell_command.Lower();
+  return (lower_case_shell.Contains("cmd") ||
+          lower_case_shell.Contains("powershell"));
+#else
+  return false;
+#endif
 }
