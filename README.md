@@ -1,5 +1,9 @@
 # wxTerminalEmulator
 
+[![wxTerminalEmulator demo](wxterminal.gif)](wxterminal.gif)
+
+[Open a larger preview](wxterminal.gif){:target="_blank"}
+
 A wxWidgets-based terminal emulator project with two deliverables:
 
 - A static library: `wxterminal_lib`
