@@ -741,11 +741,8 @@ void TerminalView::RenderRowPosix(wxDC &dc, int y, int rowIdx,
     text.Append(firstCell.ch);
 
     size_t j = i + 1;
-    while (j < cells.size() &&
-           cells[j].attrs.fgColor == firstCell.attrs.fgColor &&
-           cells[j].attrs.bold == firstCell.attrs.bold &&
-           cells[j].attrs.underline == firstCell.attrs.underline &&
-           cells[j].colIdx == cells[j - 1].colIdx + 1) {
+    while (j < cells.size() && cells[j].HasSameAttributes(firstCell) &&
+           cells[j].IsAdjacent(cells[j - 1])) {
       text.Append(cells[j].ch);
       ++j;
     }
