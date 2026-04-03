@@ -26,6 +26,62 @@
 
 using terminal::ColourSpec;
 
+#ifndef __WXMSW__
+extern char **environ;
+#endif
+
+namespace {
+using EnvMap = std::unordered_map<wxString, wxString>;
+/**
+ * @brief Builds a map of the current process environment variables.
+ *
+ * Scans the platform-provided environment block and copies each "name=value"
+ * pair into a new EnvMap. On Unix-like systems, keys and values are converted
+ * from UTF-8 into wxString before insertion; on Windows, wide-character strings
+ * are used directly.
+ *
+ * @return EnvMap A map containing the environment variables available to the
+ *         current process. If the environment cannot be accessed, an empty map
+ *         is returned.
+ */
+EnvMap BuildEnvMap() {
+  EnvMap env_map;
+
+#ifdef _WIN32
+  // Windows implementation
+  LPWCH env_strings = GetEnvironmentStrings();
+  if (env_strings != nullptr) {
+    LPWCH current = env_strings;
+    while (*current != '\0') {
+      std::wstring env_entry(current);
+      size_t eq_pos = env_entry.find('=');
+      if (eq_pos != std::wstring::npos && eq_pos > 0) {
+        std::wstring key = env_entry.substr(0, eq_pos);
+        std::wstring value = env_entry.substr(eq_pos + 1);
+        env_map[key] = value;
+      }
+      current += env_entry.size() + 1;
+    }
+    FreeEnvironmentStrings(env_strings);
+  }
+#else
+  // Unix-like systems
+  if (environ != nullptr) {
+    for (char **env = environ; *env != nullptr; ++env) {
+      std::string env_entry(*env);
+      size_t eq_pos = env_entry.find('=');
+      if (eq_pos != std::string::npos) {
+        std::string key = env_entry.substr(0, eq_pos);
+        std::string value = env_entry.substr(eq_pos + 1);
+        env_map[wxString::FromUTF8(key)] = wxString::FromUTF8(value);
+      }
+    }
+  }
+#endif
+
+  return env_map;
+}
+
 inline wxRect MakeRect(const wxPoint &p1, const wxPoint &p2) {
   const int x = std::min(p1.x, p2.x);
   const int y = std::min(p1.y, p2.y);
@@ -33,6 +89,7 @@ inline wxRect MakeRect(const wxPoint &p1, const wxPoint &p2) {
   const int h = std::abs(p2.y - p1.y);
   return wxRect{x, y, w, h};
 }
+} // namespace
 
 void wxTerminalViewCtrl::SelectionRect::Clear() {
   m_rect = {};
@@ -182,6 +239,20 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
 
   m_shell_command = shellCommand;
   m_environment = std::move(environment);
+
+  if (!m_environment.has_value()) {
+    TLOG_DEBUG() << "No env provided. Building one." << std::endl;
+    // If no env provided, create one.
+    EnvironmentList env_list;
+    auto env_map = BuildEnvMap();
+    for (const auto &[n, v] : env_map) {
+      wxString entry;
+      entry << n << "=" << v;
+      TLOG_DEBUG() << "    " << entry << std::endl;
+      env_list.push_back(entry.ToStdString(wxConvUTF8));
+    }
+    m_environment = env_list;
+  }
 
   // Set up callback for terminal responses (e.g., cursor position reports)
   m_core.SetResponseCallback(
