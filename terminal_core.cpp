@@ -65,7 +65,21 @@ static ColourSpec MakeTrueColorSpec(std::uint32_t rgb) {
 }
 
 std::size_t TerminalCore::AbsRow(std::size_t viewportRow) const {
-  return m_shellStart + viewportRow;
+  return m_viewStart + viewportRow;
+}
+
+Cell *TerminalCore::GetCell(const wxPoint &absCoords) {
+  size_t row = static_cast<size_t>(absCoords.y);
+  if (row >= m_buffer.size()) {
+    return nullptr;
+  }
+
+  auto &line = m_buffer[row];
+  size_t col = static_cast<size_t>(absCoords.x);
+  if (col >= line.size()) {
+    return nullptr;
+  }
+  return &line[col];
 }
 
 std::optional<std::size_t> TerminalCore::ViewPortRow(std::size_t absrow) const {
@@ -79,6 +93,15 @@ wxPoint TerminalCore::Cursor() const { return m_cursor; }
 
 const std::vector<Cell> &TerminalCore::BufferRow(std::size_t absRow) const {
   static const std::vector<Cell> empty;
+  if (absRow < m_buffer.size())
+    return m_buffer[absRow];
+  return empty;
+}
+
+const std::vector<Cell> &
+TerminalCore::ViewBufferRow(std::size_t viewareaRow) const {
+  static const std::vector<Cell> empty;
+  auto absRow = viewareaRow + m_viewStart;
   if (absRow < m_buffer.size())
     return m_buffer[absRow];
   return empty;
@@ -851,22 +874,22 @@ void TerminalCore::ApplySgr(const std::string &params) {
       m_attr = Cell::New(m_theme);
       break;
     case 1:
-      m_attr.bold = true;
+      m_attr.SetBold(true);
       break;
     case 4:
-      m_attr.underline = true;
+      m_attr.SetUnderlined(true);
       break;
     case 7:
-      m_attr.reverse = true;
+      m_attr.SetReverse(true);
       break;
     case 22:
-      m_attr.bold = false;
+      m_attr.SetBold(false);
       break;
     case 24:
-      m_attr.underline = false;
+      m_attr.SetUnderlined(false);
       break;
     case 27:
-      m_attr.reverse = false;
+      m_attr.SetReverse(false);
       break;
     case 30:
     case 31:
@@ -964,4 +987,59 @@ wxString TerminalCore::Flatten() const {
   return out;
 }
 
+void TerminalCore::DoSetClickedRange(bool b) {
+  if (m_clickedRect.IsEmpty()) {
+    return;
+  }
+
+  for (size_t row = m_clickedRect.y;
+       row < m_clickedRect.height + m_clickedRect.y; ++row) {
+    for (size_t col = m_clickedRect.x;
+         col < m_clickedRect.width + m_clickedRect.x; ++col) {
+      auto cell =
+          GetCell(wxPoint{static_cast<int>(col), static_cast<int>(row)});
+      if (cell) {
+        cell->SetClicked(b);
+      }
+    }
+  }
+}
+
+void TerminalCore::SetClickedRange(const wxRect &absRect) {
+  DoSetClickedRange(false);
+  m_clickedRect = absRect;
+  DoSetClickedRange(true);
+}
+
+void TerminalCore::ClearClickedRange() { SetClickedRange({}); }
+wxString TerminalCore::GetClickedText() const {
+  if (m_clickedRect.IsEmpty()) {
+    return wxEmptyString;
+  }
+  TLOG_DEBUG() << "Clicked rect:" << m_clickedRect << std::endl;
+
+  wxString clicked_text =
+      GetTextRange(m_clickedRect.y, m_clickedRect.x, m_clickedRect.width);
+  TLOG_DEBUG() << "Clicked text:" << clicked_text << std::endl;
+  return clicked_text;
+}
+
+wxString TerminalCore::GetTextRange(std::size_t row, std::size_t col,
+                                    std::size_t count) const {
+  const auto &line = BufferRow(row);
+  if (col >= line.size() || count == 0) {
+    return wxEmptyString;
+  }
+
+  wxString text_range;
+  text_range.reserve(count);
+  for (size_t i = col; i < line.size(); ++i) {
+    if (count == 0) {
+      break;
+    }
+    text_range << wxString{wxUniChar{line[i].ch}};
+    count--;
+  }
+  return text_range;
+}
 } // namespace terminal

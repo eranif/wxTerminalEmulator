@@ -13,6 +13,35 @@
 
 namespace terminal {
 
+template <typename EnumName>
+inline bool IsFlagSet(EnumName flags, EnumName flag) {
+  using T = std::underlying_type_t<EnumName>;
+  return (static_cast<T>(flags) & static_cast<T>(flag)) == static_cast<T>(flag);
+}
+
+template <typename EnumName>
+inline void AddFlagSet(EnumName &flags, EnumName flag) {
+  using T = std::underlying_type_t<EnumName>;
+  T &t = reinterpret_cast<T &>(flags);
+  t |= static_cast<T>(flag);
+}
+
+template <typename EnumName>
+inline void RemoveFlag(EnumName &flags, EnumName flag) {
+  using T = std::underlying_type_t<EnumName>;
+  T &t = reinterpret_cast<T &>(flags);
+  t &= ~static_cast<T>(flag);
+}
+
+template <typename EnumName>
+inline void SetFlag(EnumName &flags, EnumName flag, bool b) {
+  if (b) {
+    AddFlagSet(flags, flag);
+  } else {
+    RemoveFlag(flags, flag);
+  }
+}
+
 struct ColourIndex {
   int index{-1};
   bool bright{false};
@@ -45,13 +74,35 @@ inline wxColour ToColour(std::uint32_t c) {
   return wxColour((c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF);
 }
 
+enum class CellFlags {
+  kNone = 0,
+  kBold = (1 << 0),
+  kUnderlined = (1 << 1),
+  kReverse = (1 << 2),
+  kClicked = (1 << 3),
+};
+
 struct Cell {
   char32_t ch{U' '};
   std::optional<CellColours> colours{std::nullopt};
-  bool bold{false};
-  bool underline{false};
-  bool reverse{false};
+  CellFlags flags{CellFlags::kNone};
 
+  inline void SetBold(bool b) { SetFlag(flags, CellFlags::kBold, b); }
+  inline bool IsBold() const { return IsFlagSet(flags, CellFlags::kBold); }
+  inline void SetUnderlined(bool b) {
+    SetFlag(flags, CellFlags::kUnderlined, b);
+  }
+  inline bool IsUnderlined() const {
+    return IsFlagSet(flags, CellFlags::kUnderlined);
+  }
+  inline void SetReverse(bool b) { SetFlag(flags, CellFlags::kReverse, b); }
+  inline bool IsReverse() const {
+    return IsFlagSet(flags, CellFlags::kReverse);
+  }
+  inline void SetClicked(bool b) { SetFlag(flags, CellFlags::kClicked, b); }
+  inline bool IsClicked() const {
+    return IsFlagSet(flags, CellFlags::kClicked);
+  }
   inline bool IsEmpty() const { return ch == U' ' && !colours.has_value(); }
   inline void SetColours(const wxTerminalTheme &theme) {
     SetColours(theme.bg, theme.fg);
@@ -137,6 +188,9 @@ public:
   // Access a row by absolute index in the buffer
   const std::vector<Cell> &BufferRow(std::size_t absRow) const;
 
+  // Access a row by its view index
+  const std::vector<Cell> &ViewBufferRow(std::size_t absRow) const;
+
   // Returns the visible rows (view area) as a vector of pointers to rows
   std::vector<const std::vector<Cell> *> GetViewArea() const;
 
@@ -147,8 +201,16 @@ public:
 
   // Convert abs-row row to viewport row, return std::nullopt if it out of range
   std::optional<std::size_t> ViewPortRow(std::size_t absrow) const;
+  Cell *GetCell(const wxPoint &absCoords);
+
+  void SetClickedRange(const wxRect &absRect);
+  void ClearClickedRange();
+  wxString GetClickedText() const;
+  wxString GetTextRange(std::size_t row, std::size_t col,
+                        std::size_t count) const;
 
 private:
+  void DoSetClickedRange(bool b);
   void PutChar(char c);
   void NewLine();
   void CarriageReturn();
@@ -160,7 +222,6 @@ private:
   void PutPrintable(char32_t cp);
   void ApplySgr(const std::string &params);
   void PutString(const std::string &text);
-  void HandleCsi(const std::string &seq);
   void PutCell(char c) { PutCell(static_cast<char32_t>(c)); }
   void PutCell(char32_t cp);
 
@@ -206,6 +267,7 @@ private:
   std::function<void(const std::string &)> m_responseCallback;
   std::function<void(const std::string &)> m_titleCallback;
   std::string m_utf8Buf;
+  wxRect m_clickedRect;
 };
 
 } // namespace terminal

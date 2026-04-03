@@ -12,6 +12,7 @@
 
 #include <memory>
 #include <optional>
+#include <unordered_set>
 
 class wxTerminalViewCtrl : public wxPanel {
 public:
@@ -108,9 +109,27 @@ public:
   std::size_t GetBufferSize() const;
   void CenterLine(std::size_t line);
   wxString GetLine(std::size_t line) const;
-  void SetUserSelection(std::size_t col, std::size_t row, std::size_t count);
+  wxString GetViewLine(std::size_t line) const;
+  void SetUserSelection(std::size_t row, std::size_t col, std::size_t count);
+  wxString
+  GetRange(std::size_t row, std::size_t col,
+           std::size_t count = std::numeric_limits<std::size_t>::max());
   void ClearUserSelection();
   void ClearMouseSelection();
+  void SetSelectionDelimChars(const wxString &delims);
+
+  /**
+   * @brief Converts a mouse position in client coordinates into a terminal
+   * cell position.
+   *
+   * The returned point uses terminal cell coordinates, where x is the column
+   * index and y is the row index. The input point must be relative to this
+   * control's client area, not screen coordinates.
+   *
+   * @param pt wxPoint The mouse position in client coordinates.
+   * @return wxPoint The corresponding cell coordinate (col, row).
+   */
+  std::optional<wxPoint> PointToCell(const wxPoint &pt) const;
   void SendCommand(const wxString &command) {
     SendInput(command.ToStdString(wxConvUTF8));
     SendEnter();
@@ -129,7 +148,16 @@ private:
     wxRect m_rect; // in pixels
     wxPoint m_selectionAnchor;
 
+    SelectionRect() = default;
+    inline SelectionRect &operator=(const wxRect &rect) {
+      m_rect = rect;
+      m_selectionAnchor = rect.GetTopLeft();
+      return *this;
+    }
+
     void Clear();
+    static wxRect PixelsRectToViewCellRect(const wxRect &pixels_rect,
+                                           int char_width, int char_height);
     wxRect PixelsRectToViewCellRect(int char_width, int char_height) const;
     wxRect ViewCellToPixelsRect(const wxRect &viewrect, int char_width,
                                 int char_height) const;
@@ -138,6 +166,8 @@ private:
     void UpdateCurrent(const wxPoint &current);
     void SnapToCellGrid(int char_width, int char_height);
     inline bool IsEmpty() const { return m_rect.IsEmpty(); }
+    static SelectionRect FromViewRect(const wxRect &rect, int char_width,
+                                      int char_height);
   };
 
   bool IsCmdOrPowerShell() const;
@@ -182,6 +212,7 @@ private:
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);
   void OnMouseLeftDown(wxMouseEvent &evt);
+  void OnMouseLeftDoubleClick(wxMouseEvent &evt);
   void OnMouseMove(wxMouseEvent &evt);
   void OnMouseUp(wxMouseEvent &evt);
   void OnContextMenu(wxContextMenuEvent &evt);
@@ -195,6 +226,26 @@ private:
   void DebugDumpViewArea();
   void UpdateFontCache();
   const wxFont &GetCachedFont(bool bold, bool underlined) const;
+  /**
+   * @brief Computes the selection rectangle from mouse position.
+   *
+   * The rectangle represents a view cells.
+   *
+   * This method maps the given point to a terminal cell, then expands left and
+   * right across the current row until a selection delimiter is reached. If the
+   * point does not map to a valid cell, or the row/cell is out of bounds, no
+   * selection rectangle is produced.
+   *
+   * @param pt const wxPoint& The mouse position in view coordinates (i.e. not
+   * screen coordinates)
+   * @param is_valid_char callback the be called on each character.
+   *
+   * @return std::optional<wxRect> The selection rectangle in view **cell**
+   * coordinates, or std::nullopt if no valid selection can be determined.
+   */
+  std::optional<wxRect> SelectionRectFromMousePoint(
+      const wxPoint &pt,
+      std::function<bool(const wxUniChar &)> is_valid_char) const;
 
   /**
    * Handles terminal-specific special key events by translating supported
@@ -213,6 +264,8 @@ private:
    * was sent; returns false if the key is not handled by this method.
    */
   bool HandleSpecialKeys(wxKeyEvent &key_event);
+
+  void DoClickable(wxMouseEvent &event);
 
   struct ApiSelection {
     std::size_t row{0}, col{0}, endCol{0};
@@ -274,8 +327,8 @@ private:
    * @return bool True if the specified range is non-empty and every cell
    * contains a printable ASCII character; otherwise false.
    */
-  bool IsAsciiSafeTextRun(const std::vector<CellInfo> &cells) const;
-  bool HasRiskyAsciiGlyphs(const std::vector<CellInfo> &cells) const;
+  bool IsAsciiSafeTextRun(
+      const std::vector<wxTerminalViewCtrl::CellInfo> &cells) const;
 
   bool m_hasFocusBorder{false};
 
@@ -313,5 +366,5 @@ private:
   std::atomic_bool m_needsRepaint{true};
   std::atomic_bool m_shutdownFlag{false};
   std::thread m_drawingTimerThread;
-  
+  std::unordered_set<wxChar> m_selectionDelimChars;
 };

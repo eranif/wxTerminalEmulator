@@ -11,11 +11,21 @@ A wxWidgets-based terminal emulator project with two deliverables:
 
 ## Overview
 
-wxTerminalEmulator provides a terminal emulation solution for wxWidgets applications. The current codebase includes a terminal core, a wxWidgets terminal view, platform PTY backends, custom terminal events, theming support, logging, and a demo program that exercises the API.
+wxTerminalEmulator provides a cross-platform terminal emulation solution for wxWidgets applications. The current codebase
+includes a terminal core, a wxWidgets terminal view, platform PTY backends, custom terminal events, theming support,
+logging, and a demo program that exercises the API.
 
-The project status is: the core library and demo app are present and functional in the repository.
+All you need is **wxWidgets** and **CMake** — no third-party libraries are required.
 
 ## Features
+
+### Prerequisites
+
+- CMake 3.10 or later
+- C++20 compatible compiler
+- wxWidgets 3.2.x
+- Platform-specific requirements:
+  - **Windows**: MinGW with Windows 10+ (for `ConPTY` support)
 
 ### Terminal Emulation
 - **VT100/ANSI escape sequence handling** in `terminal_core.cpp`
@@ -102,15 +112,6 @@ Debugging and diagnostics support:
 - Counter tracking for performance analysis
 
 ## Building
-
-### Prerequisites
-- CMake 3.10 or later
-- C++20 compatible compiler
-- wxWidgets 3.x
-- Platform-specific requirements:
-  - **Windows**: MinGW/MSVC with Windows 10+ (for ConPTY support)
-  - **Linux**: libutil-dev (for forkpty)
-  - **macOS**: Xcode command line tools
 
 ### Build Targets
 - `wxterminal_lib` - static library

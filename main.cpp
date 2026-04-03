@@ -353,8 +353,8 @@ public:
       return;
     }
 
-    activeView->SetUserSelection(static_cast<std::size_t>(colStart - 1),
-                                 static_cast<std::size_t>(lineNumber - 1),
+    activeView->SetUserSelection(static_cast<std::size_t>(lineNumber - 1),
+                                 static_cast<std::size_t>(colStart - 1),
                                  static_cast<std::size_t>(count));
   }
 

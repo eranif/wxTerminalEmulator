@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdio>
 #include <unordered_map>
+#include <unordered_set>
 #include <wx/app.h>
 #include <wx/clipbrd.h>
 #include <wx/dcbuffer.h>
@@ -40,14 +41,19 @@ void wxTerminalViewCtrl::SelectionRect::Clear() {
 
 wxRect wxTerminalViewCtrl::SelectionRect::PixelsRectToViewCellRect(
     int char_width, int char_height) const {
-  if (char_width == 0 || char_height == 0 || m_rect.IsEmpty()) {
+  return PixelsRectToViewCellRect(m_rect, char_width, char_height);
+}
+
+wxRect wxTerminalViewCtrl::SelectionRect::PixelsRectToViewCellRect(
+    const wxRect &pixels_rect, int char_width, int char_height) {
+  if (char_width == 0 || char_height == 0 || pixels_rect.IsEmpty()) {
     return {};
   }
 
-  int cell_x = std::max(m_rect.GetX() / char_width, 0);
-  int cell_y = std::max(m_rect.GetY() / char_height, 0);
-  int pixel_right = std::max(m_rect.GetRight(), 0);
-  int pixel_bottom = std::max(m_rect.GetBottom(), 0);
+  int cell_x = std::max(pixels_rect.GetX() / char_width, 0);
+  int cell_y = std::max(pixels_rect.GetY() / char_height, 0);
+  int pixel_right = std::max(pixels_rect.GetRight(), 0);
+  int pixel_bottom = std::max(pixels_rect.GetBottom(), 0);
   int cell_right = (pixel_right + char_width - 1) / char_width - 1;
   int cell_bottom = (pixel_bottom + char_height - 1) / char_height - 1;
   cell_right = std::max(cell_right, 0);
@@ -99,6 +105,17 @@ void wxTerminalViewCtrl::SelectionRect::UpdateCurrent(const wxPoint &current) {
   m_rect = MakeRect(m_selectionAnchor, current);
 }
 
+wxTerminalViewCtrl::SelectionRect
+wxTerminalViewCtrl::SelectionRect::FromViewRect(const wxRect &rect,
+                                                int char_width,
+                                                int char_height) {
+  wxTerminalViewCtrl::SelectionRect selection_rect;
+  selection_rect.m_rect =
+      selection_rect.ViewCellToPixelsRect(rect, char_width, char_height);
+  selection_rect.m_selectionAnchor = selection_rect.m_rect.GetTopLeft();
+  return selection_rect;
+}
+
 // Map of character key codes to their shifted values
 static const std::unordered_map<int, int> shiftMap = {
     // Numbers
@@ -131,6 +148,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     : wxPanel(parent, wxID_ANY) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   UpdateFontCache();
+  SetSelectionDelimChars(" \t<>{}[]()$%");
 
   // Use thread to trigger paint events (if needed).
   // This is more accurate then using wxTimer.
@@ -152,6 +170,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   Bind(wxEVT_CHAR_HOOK, &wxTerminalViewCtrl::OnCharHook, this);
   Bind(wxEVT_KEY_DOWN, &wxTerminalViewCtrl::OnKeyDown, this);
   Bind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
+  Bind(wxEVT_LEFT_DCLICK, &wxTerminalViewCtrl::OnMouseLeftDoubleClick, this);
   Bind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseUp, this);
   Bind(wxEVT_MOTION, &wxTerminalViewCtrl::OnMouseMove, this);
   Bind(wxEVT_CONTEXT_MENU, &wxTerminalViewCtrl::OnContextMenu, this);
@@ -391,6 +410,11 @@ void wxTerminalViewCtrl::CenterLine(std::size_t line) {
   m_needsRepaint = true;
 }
 
+wxString wxTerminalViewCtrl::GetViewLine(std::size_t line) const {
+  auto abs_line = m_core.AbsRow(line);
+  return GetLine(abs_line);
+}
+
 wxString wxTerminalViewCtrl::GetLine(std::size_t line) const {
   const auto &row = m_core.BufferRow(line);
   wxString result;
@@ -401,14 +425,19 @@ wxString wxTerminalViewCtrl::GetLine(std::size_t line) const {
   return result;
 }
 
-void wxTerminalViewCtrl::SetUserSelection(std::size_t col, std::size_t row,
+void wxTerminalViewCtrl::SetUserSelection(std::size_t row, std::size_t col,
                                           std::size_t count) {
   if (row >= m_core.TotalLines() || col >= m_core.Cols() || count == 0) {
     ClearUserSelection();
     return;
   }
   std::size_t endCol = std::min(col + count, m_core.Cols());
-  m_userSelection = {row, col, endCol, true};
+  m_userSelection = {
+      .row = row,
+      .col = col,
+      .endCol = endCol,
+      .active = true,
+  };
   m_needsRepaint = true;
 }
 
@@ -422,6 +451,14 @@ void wxTerminalViewCtrl::ClearMouseSelection() {
   m_mouseSelectionRect.Clear();
   m_isDragging = false;
   m_needsRepaint = true;
+}
+
+std::optional<wxPoint>
+wxTerminalViewCtrl::PointToCell(const wxPoint &pt) const {
+  if (m_charW <= 0 || m_charH <= 0 || pt.x < 0 || pt.y < 0) {
+    return std::nullopt;
+  }
+  return wxPoint{std::max(pt.x, 0) / m_charW, std::max(pt.y, 0) / m_charH};
 }
 
 void wxTerminalViewCtrl::UpdateFontCache() {
@@ -515,7 +552,7 @@ wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
     wxColour fgColor = GetColourFromTheme(
         cell.colours ? cell.colours->fg : std::nullopt, true);
 
-    if (cell.reverse) {
+    if (cell.IsReverse()) {
       std::swap(bgColor, fgColor);
     }
 
@@ -532,8 +569,8 @@ wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
       info.attrs.bgColor = bgColor;
       info.attrs.fgColor = fgColor;
     }
-    info.attrs.bold = cell.bold;
-    info.attrs.underline = cell.underline;
+    info.attrs.bold = cell.IsBold();
+    info.attrs.underline = cell.IsUnderlined();
     info.attrs.isMouseSelected = isMouseSelected;
     info.attrs.isApiSelected = isApiSelected;
     cells.push_back(info);
@@ -932,8 +969,8 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
     const wxString sample_text = "Administrator";
     int group_width =
         dc.GetTextExtent(sample_text).GetWidth() / sample_text.length();
-    TLOG_IF_DEBUG {
-      TLOG_DEBUG() << "m_charW=" << m_charW << ", m_charH=" << m_charH
+    TLOG_IF_TRACE {
+      TLOG_TRACE() << "m_charW=" << m_charW << ", m_charH=" << m_charH
                    << ", group_width=" << group_width << std::endl;
     }
     SetTerminalSizeFromClient();
@@ -993,7 +1030,8 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
         if (cell.ch != U' ') {
           dc.SetTextForeground(theme.bg); // Use background color
                                           // (typically black)
-          const wxFont &font = GetCachedFont(cell.bold, cell.underline);
+          const wxFont &font =
+              GetCachedFont(cell.IsBold(), cell.IsUnderlined());
           dc.SetFont(font);
           dc.DrawText(wxString(wxUniChar(cell.ch)), cx, cy);
           dc.SetFont(m_defaultFont);
@@ -1014,7 +1052,15 @@ void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
 
 void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
   evt.Skip();
+
+  if (evt.GetModifiers() == wxMOD_RAW_CONTROL) {
+    // Control down
+    DoClickable(evt);
+    return;
+  }
+
   if (m_charW == 0 || m_charH == 0) {
+    ClearMouseSelection();
     return;
   }
 
@@ -1438,4 +1484,118 @@ bool wxTerminalViewCtrl::IsCmdOrPowerShell() const {
 #else
   return false;
 #endif
+}
+
+void wxTerminalViewCtrl::SetSelectionDelimChars(const wxString &delims) {
+  m_selectionDelimChars.clear();
+  for (const auto &delim : delims) {
+    m_selectionDelimChars.insert(delim);
+  }
+}
+
+std::optional<wxRect> wxTerminalViewCtrl::SelectionRectFromMousePoint(
+    const wxPoint &pt,
+    std::function<bool(const wxUniChar &)> is_valid_char) const {
+  auto res = PointToCell(pt);
+  if (!res.has_value()) {
+    return std::nullopt;
+  }
+  auto cell = std::move(res.value());
+  auto row = m_core.ViewBufferRow(cell.y);
+  // sanity
+  if (row.empty() || cell.x >= static_cast<int>(row.size()) || cell.x < 0) {
+    return std::nullopt;
+  }
+
+  // Select as much we can
+  int selection_start{cell.x};
+  int selection_end{cell.x};
+
+  // Go left
+  for (int x = cell.x; x >= 0; x--) {
+    if (x >= static_cast<int>(row.size())) {
+      break;
+    }
+    wxUniChar ch{row[x].ch};
+    if (!is_valid_char(ch)) {
+      break;
+    }
+    selection_start = x;
+  }
+
+  // Go right
+  for (int x = cell.x + 1; x < static_cast<int>(row.size()); x++) {
+    wxUniChar ch{row[x].ch};
+    if (!is_valid_char(ch)) {
+      break;
+    }
+    selection_end = x;
+  }
+
+  if (selection_end - selection_start < 0) {
+    return std::nullopt;
+  }
+  return wxRect{
+      selection_start,
+      cell.y,
+      selection_end - selection_start + 1,
+      1,
+  };
+}
+
+void wxTerminalViewCtrl::OnMouseLeftDoubleClick(wxMouseEvent &evt) {
+  ClearMouseSelection();
+
+  auto is_valid_char = [this](const wxUniChar &ch) -> bool {
+    return !m_selectionDelimChars.contains(ch);
+  };
+  auto res =
+      SelectionRectFromMousePoint(evt.GetPosition(), std::move(is_valid_char));
+  if (!res.has_value()) {
+    return;
+  }
+
+  m_mouseSelectionRect =
+      SelectionRect::FromViewRect(res.value(), m_charW, m_charH);
+  m_needsRepaint = true;
+}
+
+void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event) {
+  ClearMouseSelection();
+  m_core.ClearClickedRange();
+
+  wxString file_delims =
+      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890-:/\\._";
+  std::unordered_set<wxChar> delims;
+  for (const auto &delim : file_delims) {
+    delims.insert(delim);
+  }
+
+  auto is_valid_char = [&delims](const wxUniChar &ch) -> bool {
+    return delims.contains(ch);
+  };
+
+  auto res = SelectionRectFromMousePoint(event.GetPosition(),
+                                         std::move(is_valid_char));
+  if (!res.has_value()) {
+    return;
+  }
+
+  // rect is in pixels, convert it to cells.
+  wxRect selected_rect = res.value();
+  selected_rect.y = m_core.AbsRow(selected_rect.y);
+
+  // Mark all cells as
+  // Send an event
+  m_core.SetClickedRange(selected_rect);
+
+  wxTerminalEvent click_event{wxEVT_TERMINAL_TEXT_LINK};
+  click_event.SetClickedText(m_core.GetClickedText());
+  click_event.SetEventObject(this);
+  AddPendingEvent(click_event);
+}
+
+wxString wxTerminalViewCtrl::GetRange(std::size_t row, std::size_t col,
+                                      std::size_t count) {
+  return m_core.GetTextRange(row, col, count);
 }
