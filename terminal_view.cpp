@@ -930,7 +930,7 @@ void wxTerminalViewCtrl::RenderRow(wxDC &dc, int y, int rowIdx,
 #elif defined(__WXMAC__)
   RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
 #else
-  RenderRowPosix(dc, y, rowIdx, row, selected_cells, counters);
+  RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
 #endif
 }
 
