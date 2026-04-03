@@ -203,8 +203,39 @@ public:
   std::optional<std::size_t> ViewPortRow(std::size_t absrow) const;
   Cell *GetCell(const wxPoint &absCoords);
 
+  /**
+   * @brief Sets the clicked range for this TerminalCore instance.
+   *
+   * Updates the stored absolute clicked rectangle and refreshes the internal
+   * clicked-range state before and after the assignment.
+   *
+   * @param absRect const wxRect& The absolute rectangle to store as the clicked
+   * range.
+   *
+   * @return void
+   */
   void SetClickedRange(const wxRect &absRect);
-  void ClearClickedRange();
+
+  /**
+   * @brief Clears the current clicked range, if any, from the terminal core.
+   *
+   * This method belongs to TerminalCore and resets the stored clicked rectangle
+   * only when a non-empty range is currently selected.
+   *
+   * @return bool True if a clicked range was present and was cleared; false if
+   * there was no clicked range to clear.
+   */
+  bool ClearClickedRange();
+  /**
+   * @brief Returns the text currently associated with the clicked rectangle.
+   *
+   * This TerminalCore method uses the stored click geometry to extract the text
+   * range at the clicked location. If no clicked rectangle is set, it returns
+   * an empty string without performing any text lookup.
+   *
+   * @return wxString The text extracted from the clicked rectangle, or an empty
+   *         string if no clicked rectangle is available.
+   */
   wxString GetClickedText() const;
   wxString GetTextRange(std::size_t row, std::size_t col,
                         std::size_t count) const;

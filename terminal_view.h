@@ -283,11 +283,13 @@ private:
     bool underline;
     bool isMouseSelected;
     bool isApiSelected;
+    bool isClicked{false};
 
     bool operator==(const CellAttributes &other) const {
       return fgColor == other.fgColor && bgColor == other.bgColor &&
              bold == other.bold && underline == other.underline &&
              isMouseSelected == other.isMouseSelected &&
+             isClicked == other.isClicked &&
              isApiSelected == other.isApiSelected;
     }
 
@@ -313,10 +315,13 @@ private:
     inline bool IsRightTo(const CellInfo &other) const {
       return colIdx == other.colIdx + 1;
     }
-    inline bool HasAnySelection() const {
+    inline bool CanBeGrouped() const {
       return attrs.isMouseSelected || attrs.isApiSelected;
     }
   };
+
+  void PrepareDcForTextDrawing(wxDC &dc,
+                               const wxTerminalViewCtrl::CellInfo &cell);
 
   /**
    * @brief Checks whether a range of cells contains only printable ASCII text.

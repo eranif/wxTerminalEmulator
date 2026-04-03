@@ -571,6 +571,7 @@ wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
     }
     info.attrs.bold = cell.IsBold();
     info.attrs.underline = cell.IsUnderlined();
+    info.attrs.isClicked = cell.IsClicked();
     info.attrs.isMouseSelected = isMouseSelected;
     info.attrs.isApiSelected = isApiSelected;
     cells.push_back(info);
@@ -662,6 +663,15 @@ bool wxTerminalViewCtrl::IsUnicodeSingleCellSafe(wxChar ch) const {
   return false;
 }
 
+void wxTerminalViewCtrl::PrepareDcForTextDrawing(
+    wxDC &dc, const wxTerminalViewCtrl::CellInfo &cell) {
+  dc.SetPen(*wxTRANSPARENT_PEN);
+  dc.SetBrush(wxBrush(cell.attrs.bgColor));
+  dc.SetFont(GetCachedFont(cell.attrs.bold,
+                           cell.attrs.underline || cell.attrs.isClicked));
+  dc.SetTextForeground(cell.attrs.fgColor);
+}
+
 void wxTerminalViewCtrl::RenderRowWithGrouping(
     wxDC &dc, int y, int rowIdx, const std::vector<terminal::Cell> &row,
     const wxRect &selected_cells, PaintCounters &counters) {
@@ -683,7 +693,7 @@ void wxTerminalViewCtrl::RenderRowWithGrouping(
 
     size_t j = i + 1;
     const CellInfo *current_cell = &firstCell;
-    if (!firstCell.HasAnySelection()) {
+    if (!firstCell.CanBeGrouped()) {
       while (true) {
         if (j >= cells.size()) {
           break;
@@ -703,13 +713,12 @@ void wxTerminalViewCtrl::RenderRowWithGrouping(
     int x = firstCell.colIdx * m_charW;
     int num_of_cells = cells[j - 1].colIdx - firstCell.colIdx + 1;
     int width = num_of_cells * m_charW;
-    dc.SetBrush(wxBrush(firstCell.attrs.bgColor));
-    dc.SetPen(*wxTRANSPARENT_PEN);
+
+    PrepareDcForTextDrawing(dc, firstCell);
     dc.DrawRectangle(x, y, width, m_charH);
     counters.draw_rectangle_++;
 
-    dc.SetTextForeground(firstCell.attrs.fgColor);
-    dc.SetFont(GetCachedFont(firstCell.attrs.bold, firstCell.attrs.underline));
+    PrepareDcForTextDrawing(dc, firstCell);
     dc.DrawText(text, x, y);
     counters.draw_text_++;
 
@@ -736,10 +745,7 @@ void wxTerminalViewCtrl::RenderRowNoGrouping(
 
     int x = cell.colIdx * m_charW;
     if (!prev_cell.has_value() || prev_cell.value() != cell.attrs) {
-      dc.SetBrush(wxBrush(cell.attrs.bgColor));
-      dc.SetFont(GetCachedFont(cell.attrs.bold, cell.attrs.underline));
-      dc.SetPen(*wxTRANSPARENT_PEN);
-      dc.SetTextForeground(cell.attrs.fgColor);
+      PrepareDcForTextDrawing(dc, cell);
       prev_cell = cell.attrs;
     }
 
@@ -1078,6 +1084,17 @@ void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
 
 void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
   evt.Skip();
+
+  if (!::wxGetKeyState(WXK_RAW_CONTROL)) {
+    // Clear any clicked range
+    if (m_core.ClearClickedRange()) {
+      // We cleared a previously clicked range, refresh is needed.
+      m_needsRepaint = true;
+      // Restore the cursor
+      SetCursor(wxCURSOR_IBEAM);
+    }
+  }
+
   if (!m_isDragging) {
     return;
   }
@@ -1588,6 +1605,7 @@ void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event) {
   // Mark all cells as
   // Send an event
   m_core.SetClickedRange(selected_rect);
+  SetCursor(wxCURSOR_HAND);
 
   wxTerminalEvent click_event{wxEVT_TERMINAL_TEXT_LINK};
   click_event.SetClickedText(m_core.GetClickedText());

@@ -13,7 +13,7 @@ constexpr int kDefaultFontSize = 14;
 struct wxTerminalTheme {
   // Default foreground/background
   wxColour fg{0xC0, 0xC0, 0xC0};
-  wxColour bg{0x00, 0x00, 0x00};
+  wxColour bg{0x28, 0x2C, 0x34};
 
   // Base font used by the terminal view
   wxFont font{MakeDefaultFont()};
@@ -46,6 +46,7 @@ struct wxTerminalTheme {
 
   // Cursor
   wxColour cursorColour{255, 255, 255};
+  wxColour linkColour{"#33BBFF"};
 
   bool isMonospaced{true};
 
@@ -60,7 +61,7 @@ struct wxTerminalTheme {
                   wxFONTWEIGHT_NORMAL, false, "Menlo");
 #elif defined(__WXMSW__)
     return wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
-                  wxFONTWEIGHT_NORMAL, false, "JetBrains Mono");
+                  wxFONTWEIGHT_NORMAL, false, "Consolas");
 #else
     return wxFont(wxFontInfo(kDefaultFontSize).Family(wxFONTFAMILY_TELETYPE));
 #endif
@@ -107,6 +108,7 @@ struct wxTerminalTheme {
     t.brightMagenta = t.magenta.ChangeLightness(120);
     t.brightRed = t.red.ChangeLightness(120);
     t.brightCyan = t.cyan.ChangeLightness(120);
+    t.linkColour = wxColour("#33BBFF");
     return t;
   }
 
@@ -136,6 +138,7 @@ struct wxTerminalTheme {
     t.highlightBg = wxColour(255, 200, 50);
     t.highlightFg = wxColour(0x00, 0x00, 0x00);
     t.cursorColour = wxColour(0, 0, 0);
+    t.linkColour = wxColour("#531FFF");
     return t;
   }
 };

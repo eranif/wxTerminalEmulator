@@ -1011,7 +1011,14 @@ void TerminalCore::SetClickedRange(const wxRect &absRect) {
   DoSetClickedRange(true);
 }
 
-void TerminalCore::ClearClickedRange() { SetClickedRange({}); }
+bool TerminalCore::ClearClickedRange() {
+  if (m_clickedRect.IsEmpty()) {
+    return false;
+  }
+  SetClickedRange({});
+  return true;
+}
+
 wxString TerminalCore::GetClickedText() const {
   if (m_clickedRect.IsEmpty()) {
     return wxEmptyString;
