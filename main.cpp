@@ -182,6 +182,7 @@ public:
     UpdateSafeDrawingMenuCheck();
     page->Bind(wxEVT_TERMINAL_TITLE_CHANGED, &MyFrame::OnTitleChanged, this);
     page->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
+    page->Bind(wxEVT_TERMINAL_TEXT_LINK, &MyFrame::OnTerminalLink, this);
     return page;
   }
 
@@ -451,6 +452,11 @@ public:
     }
     SetTitle(event.GetTitle());
   }
+
+  void OnTerminalLink(wxTerminalEvent &event) {
+    wxMessageBox(event.GetClickedText());
+  }
+
   void Terminate() { Close(true); }
 
   void PersistSettings() {

@@ -1602,13 +1602,19 @@ void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event) {
   wxRect selected_rect = res.value();
   selected_rect.y = m_core.AbsRow(selected_rect.y);
 
-  // Mark all cells as
-  // Send an event
+  // Remember the selected rect and fire an event.
   m_core.SetClickedRange(selected_rect);
+  wxString clicked_text = m_core.GetClickedText();
+  clicked_text.Trim().Trim(false);
+
+  if (clicked_text.empty()) {
+    m_core.ClearClickedRange();
+    return;
+  }
   SetCursor(wxCURSOR_HAND);
 
   wxTerminalEvent click_event{wxEVT_TERMINAL_TEXT_LINK};
-  click_event.SetClickedText(m_core.GetClickedText());
+  click_event.SetClickedText(clicked_text);
   click_event.SetEventObject(this);
   AddPendingEvent(click_event);
 }
