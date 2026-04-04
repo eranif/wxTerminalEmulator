@@ -382,7 +382,8 @@ void wxTerminalViewCtrl::SendCtrlL() {
   if (IsCmdOrPowerShell()) {
     // Windows style "Ctrl-L" for CMD / PS
     TLOG_DEBUG() << "Sending Windows 'cls' command" << std::endl;
-    SendInput("cls\r");
+    SendCtrlC();
+    SendCommand("cls");
     return;
   }
   SendInput("\x0c");
@@ -391,6 +392,7 @@ void wxTerminalViewCtrl::SendCtrlL() {
 void wxTerminalViewCtrl::SendCtrlD() {
   if (IsCmdOrPowerShell()) {
     TLOG_DEBUG() << "Logout using 'exit'" << std::endl;
+    SendCtrlC();
     SendCommand("exit");
     return;
   }
@@ -420,7 +422,7 @@ void wxTerminalViewCtrl::SendCtrlA() {
   if (IsCmdOrPowerShell()) {
     // Windows shells often interpret Ctrl-A as Select All rather than
     // beginning-of-line editing.
-    SendInput("^a");
+    SendHome();
     return;
   }
   SendInput("\x01");
@@ -429,7 +431,7 @@ void wxTerminalViewCtrl::SendCtrlA() {
 void wxTerminalViewCtrl::SendCtrlE() {
   if (IsCmdOrPowerShell()) {
     // No special Windows equivalent; fall back to the raw control code.
-    SendInput("\x05");
+    SendEnd();
     return;
   }
   SendInput("\x05");
@@ -1378,8 +1380,7 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
       return;
     }
 
-    // Handle Ctrl+U - Clear current line
-    // (Unix-style line kill)
+    // Handle common Ctrl+<CHAR> combinations
     if (key == 'U' || key == 'u') {
       SendCtrlU();
       return;
@@ -1392,6 +1393,21 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
 
     if (key == 'D' || key == 'd') {
       SendCtrlD();
+      return;
+    }
+
+    if (key == 'E' || key == 'e') {
+      SendCtrlE();
+      return;
+    }
+
+    if (key == 'A' || key == 'a') {
+      SendCtrlA();
+      return;
+    }
+
+    if (key == 'W' || key == 'w') {
+      SendCtrlW();
       return;
     }
 
@@ -1458,13 +1474,7 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
 
 bool wxTerminalViewCtrl::HandleSpecialKeys(wxKeyEvent &key_event) {
   auto key = key_event.GetKeyCode();
-#ifdef __WXMSW__
-  if (key == WXK_BACK && key_event.GetModifiers() == wxMOD_RAW_CONTROL) {
-    SendCtrlW();
-    return true;
-  } else
-#endif
-      if (key == WXK_UP || key == WXK_DOWN) {
+  if (key == WXK_UP || key == WXK_DOWN) {
     key == WXK_UP ? SendArrowUp() : SendArrowDown();
     return true;
   } else if (key == WXK_RIGHT) {
