@@ -24,7 +24,11 @@ public:
   virtual void Resize(int cols, int rows) = 0;
   virtual void SendBreak() = 0; // Ctrl-C
   virtual void Stop() = 0;
-  virtual wxArrayString GetDirectChildren() const = 0;
+  /**
+   * @brief Returns the image names of the PTY process and its direct children.
+   * newest processes are placed first.
+   */
+  virtual wxArrayString GetChildren() const = 0;
   static std::unique_ptr<PtyBackend> Create(wxEvtHandler *handler);
 
 protected:

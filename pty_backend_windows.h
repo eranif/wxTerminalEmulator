@@ -5,9 +5,9 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <vector>
-#include <optional>
 
 #include <windows.h>
 
@@ -25,11 +25,21 @@ public:
   void Resize(int cols, int rows) override;
   void SendBreak() override;
   void Stop() override;
-  wxArrayString GetDirectChildren() const override;
 
-  struct ChildProcessInfo {
+  wxArrayString GetChildren() const override;
+
+  /**
+   * @brief Metadata for a process collected from the Windows process snapshot.
+   */
+  struct ProcessInfo {
+    /** @brief Process identifier. */
     DWORD pid{0};
+
+    /** @brief Executable name or image name. */
     std::wstring imageName;
+
+    /** @brief Creation timestamp used for sorting by age. */
+    FILETIME creation_time;
   };
 
 private:

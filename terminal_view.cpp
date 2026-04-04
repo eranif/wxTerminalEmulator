@@ -261,7 +261,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     wxTerminalEvent event{wxEVT_TERMINAL_TITLE_CHANGED};
     event.SetTitle(wxString::FromUTF8(title));
     event.SetEventObject(this);
-    AddPendingEvent(event);
+    GetEventHandler()->AddPendingEvent(event);
   });
   CallAfter(&wxTerminalViewCtrl::SetFocus);
 }
@@ -1607,57 +1607,83 @@ void wxTerminalViewCtrl::ClearAll() {
   m_needsRepaint = true;
 }
 
-bool wxTerminalViewCtrl::IsCmdShell() const {
-#ifdef __WXMSW__
-  if (m_backend) {
-    auto children = m_backend->GetDirectChildren();
-    TLOG_DEBUG() << "Checking children: " << children << std::endl;
-    for (const auto &child : children) {
-      if (child == "cmd.exe") {
-        return true;
-      }
+static bool IsCommonShell(const wxString &name) {
+  static std::vector<wxString> common_shells{
+      "wsl.exe", "ssh.exe", "git-bash.exe",   "bash.exe",
+      "zsh.exe", "cmd.exe", "powershell.exe",
+  }; // we include ssh here
+  for (const auto &shell : common_shells) {
+    if (name.Contains(shell)) {
+      return true;
     }
   }
-  // assume CMD.exe
+  return false;
+}
+
+bool wxTerminalViewCtrl::IsShell(const wxString &shell_name,
+                                 const wxArrayString &children) const {
+  if (children.empty()) {
+    return false;
+  }
+  for (const auto &image_name : children) {
+    // Check the first process that is a know shell
+    if (!IsCommonShell(image_name)) {
+      continue;
+    }
+    return image_name.Contains(shell_name);
+  }
+  return false;
+}
+
+bool wxTerminalViewCtrl::IsCmdShell() const {
+#ifndef __WXMSW__
   return false;
 #else
-  return false;
+  if (!m_backend) {
+    return false;
+  }
+  bool is_cmd = IsShell("cmd.exe", m_backend->GetChildren());
+  if (is_cmd) {
+    TLOG_DEBUG() << "Current shell is CMD. Checked the list: "
+                 << m_backend->GetChildren() << std::endl;
+  }
+  return is_cmd;
 #endif
 }
 
 bool wxTerminalViewCtrl::IsPowerShell() const {
-#ifdef __WXMSW__
-  if (m_backend) {
-    auto children = m_backend->GetDirectChildren();
-    for (const auto &child : children) {
-      if (child == "powershell.exe") {
-        return true;
-      }
-    }
-  }
-  // assume CMD.exe
+#ifndef __WXMSW__
   return false;
 #else
-  return false;
+  if (!m_backend) {
+    return false;
+  }
+  bool is_ps = IsShell("powershell.exe", m_backend->GetChildren());
+  if (is_ps) {
+    TLOG_DEBUG() << "Current shell is PowerShell. Checked the list: "
+                 << m_backend->GetChildren() << std::endl;
+  }
+  return is_ps;
 #endif
 }
 
 bool wxTerminalViewCtrl::IsUnixKeyboardMode() const {
-#ifdef __WXMSW__
-  static std::unordered_set<wxString> unix_like_shells{
+#ifndef __WXMSW__
+  return true;
+#else
+  if (!m_backend) {
+    return false;
+  }
+  wxArrayString children = m_backend->GetChildren();
+  static std::vector<wxString> unix_like_shells{
       "wsl.exe", "ssh.exe", "git-bash.exe", "bash.exe", "zsh.exe",
   };
-  if (m_backend) {
-    auto children = m_backend->GetDirectChildren();
-    for (const auto &child : children) {
-      if (unix_like_shells.contains(child)) {
-        return true;
-      }
+  for (const auto &unix_shell : unix_like_shells) {
+    if (IsShell(unix_shell, children)) {
+      return true;
     }
   }
   return false;
-#else
-  return true;
 #endif
 }
 
@@ -1774,7 +1800,7 @@ void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event) {
   wxTerminalEvent click_event{wxEVT_TERMINAL_TEXT_LINK};
   click_event.SetClickedText(clicked_text);
   click_event.SetEventObject(this);
-  AddPendingEvent(click_event);
+  GetEventHandler()->AddPendingEvent(click_event);
 }
 
 wxString wxTerminalViewCtrl::GetRange(std::size_t row, std::size_t col,

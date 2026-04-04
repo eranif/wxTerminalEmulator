@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 #include <unordered_set>
+#include <wx/arrstr.h>
 
 class wxTerminalViewCtrl : public wxPanel {
 public:
@@ -186,6 +187,8 @@ private:
   bool IsUnixKeyboardMode() const;
   bool IsPowerShell() const;
   bool IsCmdShell() const;
+  bool IsShell(const wxString &shell_name, const wxArrayString &children) const;
+
   void Feed(const std::string &data);
   void StartProcess(const wxString &command,
                     const std::optional<EnvironmentList> &environment);

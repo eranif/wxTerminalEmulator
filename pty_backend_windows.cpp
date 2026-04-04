@@ -156,27 +156,139 @@ struct HandleCloser {
 using unique_handle =
     std::unique_ptr<std::remove_pointer_t<HANDLE>, HandleCloser>;
 
-std::vector<WindowsPtyBackend::ChildProcessInfo>
-CollectDirectChildren(DWORD parentPid) {
-  std::vector<WindowsPtyBackend::ChildProcessInfo> children;
+static bool GetProcessCreationTime(DWORD pid, FILETIME *creation_time) {
+  unique_handle process(
+      OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid));
+  if (!process)
+    return false;
+
+  FILETIME exit_time, kernel_time, user_time;
+  return GetProcessTimes(process.get(), creation_time, &exit_time, &kernel_time,
+                         &user_time) != FALSE;
+}
+
+/**
+ * Collects all descendant processes of a given parent process ID on Windows.
+ *
+ * This function snapshots the current process list, builds a parent-to-children
+ * mapping, and then performs a breadth-first traversal starting at the supplied
+ * parent PID to gather all direct and indirect child processes. The resulting
+ * list is sorted by process creation time in descending order so that newer
+ * processes appear first.
+ *
+ * @param parentPid DWORD - The process ID whose descendants should be
+ * collected.
+ *
+ * @return std::vector<WindowsPtyBackend::ProcessInfo> - A vector
+ * containing information about all discovered child and grandchild processes.
+ * If no snapshot can be created, the process list cannot be enumerated, or no
+ *         descendants are found, an empty vector is returned.
+ */
+std::vector<WindowsPtyBackend::ProcessInfo> CollectChildren(DWORD pty_pid) {
+  std::vector<WindowsPtyBackend::ProcessInfo> result;
 
   unique_handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
-  if (!snapshot || snapshot.get() == INVALID_HANDLE_VALUE)
-    return children;
+  if (!snapshot || snapshot.get() == INVALID_HANDLE_VALUE) {
+    return result;
+  }
+
+  // Step 1: build a map mapping PPID -> Vec<PID>
+  std::unordered_map<DWORD, std::vector<DWORD>> parent_children_map;
+  // Pid -> ProcessInfo
+  std::unordered_map<DWORD, WindowsPtyBackend::ProcessInfo> process_info_map;
 
   PROCESSENTRY32W entry{};
   entry.dwSize = sizeof(entry);
 
-  if (!Process32FirstW(snapshot.get(), &entry))
-    return children;
+  if (!Process32FirstW(snapshot.get(), &entry)) {
+    return result;
+  }
 
   do {
-    if (entry.th32ParentProcessID == parentPid) {
-      children.push_back({entry.th32ProcessID, entry.szExeFile});
+    // Collect all the children.
+
+    FILETIME creation_time{};
+    if (GetProcessCreationTime(entry.th32ProcessID, &creation_time)) {
+      auto proc_info = WindowsPtyBackend::ProcessInfo{
+          .pid = entry.th32ProcessID,
+          .imageName = entry.szExeFile,
+          .creation_time = creation_time,
+      };
+      if (proc_info.pid == pty_pid) {
+        TLOG_TRACE() << "Found the PTY process entry: PID: "
+                     << entry.th32ProcessID
+                     << ". PPID: " << entry.th32ParentProcessID << std::endl;
+      }
+      process_info_map[entry.th32ProcessID] = proc_info;
+      parent_children_map[entry.th32ParentProcessID].push_back(
+          entry.th32ProcessID);
     }
+
   } while (Process32NextW(snapshot.get(), &entry));
 
-  return children;
+  // Step 2: starting from PTY process, collect all the children and their
+  // children etc
+  std::deque<DWORD> pids;      // Queue of PIDs to collect
+  std::unordered_set<DWORD> V; // Visited
+  pids.push_back(pty_pid);
+
+  TLOG_TRACE() << "Building process tree for process: " << pty_pid << std::endl;
+  while (!pids.empty()) {
+    auto pid = pids.front();
+    pids.pop_front();
+
+    if (V.contains(pid)) {
+      // Already visited this PID, should never happen
+      continue;
+    }
+
+    V.insert(pid);
+
+    // Check if this PID exists in our process info map
+    auto entry_iter = process_info_map.find(pid);
+    if (entry_iter == process_info_map.end()) {
+      TLOG_WARN() << "Process PID: " << pid
+                  << " not found in snapshot (may have exited)" << std::endl;
+      continue;
+    }
+
+    const auto &entry = entry_iter->second;
+    wxString msg;
+    if (pid == pty_pid) {
+      msg << " (Root PID)";
+    }
+    TLOG_TRACE() << "Adding " << wxString{entry.imageName} << msg << ":"
+                 << entry.pid << " to the result " << std::endl;
+    result.push_back(entry);
+
+    // Check the process children.
+    auto iter = parent_children_map.find(pid);
+    if (iter == parent_children_map.end()) {
+      TLOG_TRACE() << "Process PID: " << entry.pid << ", "
+                   << wxString{entry.imageName} << " has no children"
+                   << std::endl;
+      continue;
+    }
+
+    const auto &children = iter->second;
+    TLOG_TRACE() << "Process PID: " << entry.pid << ", "
+                 << wxString{entry.imageName} << " has " << children.size()
+                 << " children" << std::endl;
+    for (const auto &child_pid : children) {
+      if (!V.contains(child_pid)) {
+        // New PID, allow scanning it
+        TLOG_TRACE() << "  -> Queuing child PID: " << child_pid << std::endl;
+        pids.push_back(child_pid);
+      }
+    }
+  }
+
+  std::sort(result.begin(), result.end(),
+            [](const WindowsPtyBackend::ProcessInfo &a,
+               const WindowsPtyBackend::ProcessInfo &b) {
+              return CompareFileTime(&a.creation_time, &b.creation_time) > 0;
+            });
+  return result;
 }
 
 } // namespace
@@ -690,12 +802,12 @@ void WindowsPtyBackend::InterruptIo() {
     CancelIoEx(m_hOutputRead, nullptr);
 }
 
-wxArrayString terminal::WindowsPtyBackend::GetDirectChildren() const {
+wxArrayString terminal::WindowsPtyBackend::GetChildren() const {
   if (m_processPid == -1) {
     return {};
   }
 
-  auto children = CollectDirectChildren(m_processPid);
+  auto children = CollectChildren(m_processPid);
   if (children.empty()) {
     return {};
   }
@@ -706,4 +818,5 @@ wxArrayString terminal::WindowsPtyBackend::GetDirectChildren() const {
   }
   return result;
 }
+
 } // namespace terminal

@@ -23,7 +23,7 @@ public:
   void Resize(int cols, int rows) override;
   void SendBreak() override;
   void Stop() override;
-  wxArrayString GetDirectChildren() const override;
+  wxArrayString GetChildren() const override;
 
 private:
   void ReaderThread();

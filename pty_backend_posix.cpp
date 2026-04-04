@@ -249,5 +249,5 @@ void PosixPtyBackend::WriterThread() {
     }
   }
 }
-wxArrayString PosixPtyBackend::GetDirectChildren() const { return {}; }
+wxArrayString PosixPtyBackend::GetChildren() const { return {}; }
 } // namespace terminal
