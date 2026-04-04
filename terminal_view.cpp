@@ -205,7 +205,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     : wxPanel(parent, wxID_ANY) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   UpdateFontCache();
-  SetSelectionDelimChars(" \t<>{}[]()$%");
+  SetSelectionDelimChars(" \t<>{}[]()$,;*!@^\"'");
 
   // Use thread to trigger paint events (if needed).
   // This is more accurate then using wxTimer.
@@ -1765,15 +1765,8 @@ void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event) {
   ClearMouseSelection();
   m_core.ClearClickedRange();
 
-  wxString file_delims =
-      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890-:/\\._";
-  std::unordered_set<wxChar> delims;
-  for (const auto &delim : file_delims) {
-    delims.insert(delim);
-  }
-
-  auto is_valid_char = [&delims](const wxUniChar &ch) -> bool {
-    return delims.contains(ch);
+  auto is_valid_char = [this](const wxUniChar &ch) -> bool {
+    return !m_selectionDelimChars.contains(ch);
   };
 
   auto res = SelectionRectFromMousePoint(event.GetPosition(),
