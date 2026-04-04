@@ -690,27 +690,20 @@ void WindowsPtyBackend::InterruptIo() {
     CancelIoEx(m_hOutputRead, nullptr);
 }
 
-bool terminal::WindowsPtyBackend::IsBash() {
+wxArrayString terminal::WindowsPtyBackend::GetDirectChildren() const {
   if (m_processPid == -1) {
-    return false;
+    return {};
   }
-
-  static std::unordered_set<wxString> shells{
-      "wsl.exe", "ssh.exe", "cmd.exe", "powershell.exe", "git-bash.exe",
-  };
 
   auto children = CollectDirectChildren(m_processPid);
-  for (const auto &child : children) {
-    wxString image_name = child.imageName;
-    image_name.MakeLower();
-    TLOG_DEBUG() << "Checking child process: " << image_name << std::endl;
-    if (shells.contains(image_name)) {
-      TLOG_DEBUG() << "Process is:" << image_name << " is considered BASH"
-                   << std::endl;
-      return true;
-    }
+  if (children.empty()) {
+    return {};
   }
-  TLOG_DEBUG() << "Process is NOT a bash or ssh" << std::endl;
-  return false;
+  wxArrayString result;
+  result.reserve(children.size());
+  for (const auto &child : children) {
+    result.push_back(wxString{child.imageName});
+  }
+  return result;
 }
 } // namespace terminal

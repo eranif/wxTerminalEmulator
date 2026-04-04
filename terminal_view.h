@@ -183,7 +183,9 @@ private:
                                       int char_height);
   };
 
-  bool IsCmdOrPowerShell() const;
+  bool IsUnixKeyboardMode() const;
+  bool IsPowerShell() const;
+  bool IsCmdShell() const;
   void Feed(const std::string &data);
   void StartProcess(const wxString &command,
                     const std::optional<EnvironmentList> &environment);

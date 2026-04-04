@@ -2,9 +2,9 @@
 
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
+#include <wx/arrstr.h>
 #include <wx/event.h>
 
 namespace terminal {
@@ -23,7 +23,7 @@ public:
   virtual void Resize(int cols, int rows) = 0;
   virtual void SendBreak() = 0; // Ctrl-C
   virtual void Stop() = 0;
-  virtual bool IsBash() = 0;
+  virtual wxArrayString GetDirectChildren() const = 0;
   static std::unique_ptr<PtyBackend> Create(wxEvtHandler *handler);
 
 protected:

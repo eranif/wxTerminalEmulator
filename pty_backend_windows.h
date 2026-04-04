@@ -7,6 +7,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <optional>
 
 #include <windows.h>
 
@@ -24,7 +25,7 @@ public:
   void Resize(int cols, int rows) override;
   void SendBreak() override;
   void Stop() override;
-  bool IsBash() override;
+  wxArrayString GetDirectChildren() const override;
 
   struct ChildProcessInfo {
     DWORD pid{0};

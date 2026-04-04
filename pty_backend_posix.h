@@ -22,7 +22,7 @@ public:
   void Resize(int cols, int rows) override;
   void SendBreak() override;
   void Stop() override;
-  bool IsBash() override { return true; }
+  wxArrayString GetDirectChildren() const override;
 
 private:
   void ReaderThread();

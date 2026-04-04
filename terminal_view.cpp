@@ -364,11 +364,20 @@ void wxTerminalViewCtrl::SendPageUp() { SendInput("\x1b[5~"); }
 
 void wxTerminalViewCtrl::SendPageDown() { SendInput("\x1b[6~"); }
 
-void wxTerminalViewCtrl::SendCtrlR() { SendInput("\x12"); }
+void wxTerminalViewCtrl::SendCtrlR() {
+  if (IsCmdShell()) {
+    // send F8
+    SendInput("\x1B[19~");
+    return;
+  }
+
+  // PowerShell & UNIX like terminals
+  SendInput("\x12");
+}
 
 void wxTerminalViewCtrl::SendCtrlU() {
 
-  if (IsCmdOrPowerShell()) {
+  if (!IsUnixKeyboardMode()) {
     // Windows style "Ctrl-U" for CMD / PS
     SendEscape();
     return;
@@ -379,7 +388,7 @@ void wxTerminalViewCtrl::SendCtrlU() {
 void wxTerminalViewCtrl::SendCtrlL() {
   m_mouseSelectionRect.Clear();
   m_userSelection.Clear();
-  if (IsCmdOrPowerShell()) {
+  if (!IsUnixKeyboardMode()) {
     // Windows style "Ctrl-L" for CMD / PS
     TLOG_DEBUG() << "Sending Windows 'cls' command" << std::endl;
     SendCtrlC();
@@ -390,7 +399,7 @@ void wxTerminalViewCtrl::SendCtrlL() {
 }
 
 void wxTerminalViewCtrl::SendCtrlD() {
-  if (IsCmdOrPowerShell()) {
+  if (!IsUnixKeyboardMode()) {
     TLOG_DEBUG() << "Logout using 'exit'" << std::endl;
     SendCtrlC();
     SendCommand("exit");
@@ -400,7 +409,7 @@ void wxTerminalViewCtrl::SendCtrlD() {
 }
 
 void wxTerminalViewCtrl::SendCtrlW() {
-  if (IsCmdOrPowerShell()) {
+  if (!IsUnixKeyboardMode()) {
     SendInput("\x08"); // Ctrl-BACKSPACE
     return;
   }
@@ -410,7 +419,7 @@ void wxTerminalViewCtrl::SendCtrlW() {
 void wxTerminalViewCtrl::SendCtrlZ() { SendInput("\x1a"); }
 
 void wxTerminalViewCtrl::SendCtrlK() {
-  if (IsCmdOrPowerShell()) {
+  if (!IsUnixKeyboardMode()) {
     // Windows shells typically use a command-line kill behavior via Escape.
     SendEscape();
     return;
@@ -419,7 +428,7 @@ void wxTerminalViewCtrl::SendCtrlK() {
 }
 
 void wxTerminalViewCtrl::SendCtrlA() {
-  if (IsCmdOrPowerShell()) {
+  if (!IsUnixKeyboardMode()) {
     // Windows shells often interpret Ctrl-A as Select All rather than
     // beginning-of-line editing.
     SendHome();
@@ -429,7 +438,7 @@ void wxTerminalViewCtrl::SendCtrlA() {
 }
 
 void wxTerminalViewCtrl::SendCtrlE() {
-  if (IsCmdOrPowerShell()) {
+  if (!IsUnixKeyboardMode()) {
     // No special Windows equivalent; fall back to the raw control code.
     SendEnd();
     return;
@@ -438,7 +447,7 @@ void wxTerminalViewCtrl::SendCtrlE() {
 }
 
 void wxTerminalViewCtrl::SendAltB() {
-  if (IsCmdOrPowerShell()) {
+  if (!IsUnixKeyboardMode()) {
     // Use a common readline-style escape sequence only when supported.
     SendInput("\x1b"
               "b");
@@ -449,7 +458,7 @@ void wxTerminalViewCtrl::SendAltB() {
 }
 
 void wxTerminalViewCtrl::SendAltF() {
-  if (IsCmdOrPowerShell()) {
+  if (!IsUnixKeyboardMode()) {
     // Use a common readline-style escape sequence only when supported.
     SendInput("\x1b"
               "f");
@@ -1411,6 +1420,11 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
       return;
     }
 
+    if (key == 'R' || key == 'r') {
+      SendCtrlR();
+      return;
+    }
+
     if (key >= 'A' && key <= 'Z') {
       // Ctrl+A through Ctrl+Z
       char ch = key - 'A' + 1;
@@ -1593,14 +1607,57 @@ void wxTerminalViewCtrl::ClearAll() {
   m_needsRepaint = true;
 }
 
-bool wxTerminalViewCtrl::IsCmdOrPowerShell() const {
+bool wxTerminalViewCtrl::IsCmdShell() const {
 #ifdef __WXMSW__
   if (m_backend) {
-    return !m_backend->IsBash();
+    auto children = m_backend->GetDirectChildren();
+    TLOG_DEBUG() << "Checking children: " << children << std::endl;
+    for (const auto &child : children) {
+      if (child == "cmd.exe") {
+        return true;
+      }
+    }
   }
-  return true;
+  // assume CMD.exe
+  return false;
 #else
   return false;
+#endif
+}
+
+bool wxTerminalViewCtrl::IsPowerShell() const {
+#ifdef __WXMSW__
+  if (m_backend) {
+    auto children = m_backend->GetDirectChildren();
+    for (const auto &child : children) {
+      if (child == "powershell.exe") {
+        return true;
+      }
+    }
+  }
+  // assume CMD.exe
+  return false;
+#else
+  return false;
+#endif
+}
+
+bool wxTerminalViewCtrl::IsUnixKeyboardMode() const {
+#ifdef __WXMSW__
+  static std::unordered_set<wxString> unix_like_shells{
+      "wsl.exe", "ssh.exe", "git-bash.exe", "bash.exe", "zsh.exe",
+  };
+  if (m_backend) {
+    auto children = m_backend->GetDirectChildren();
+    for (const auto &child : children) {
+      if (unix_like_shells.contains(child)) {
+        return true;
+      }
+    }
+  }
+  return false;
+#else
+  return true;
 #endif
 }
 
