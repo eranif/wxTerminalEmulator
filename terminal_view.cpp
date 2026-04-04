@@ -267,13 +267,12 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
 }
 
 wxTerminalViewCtrl::~wxTerminalViewCtrl() {
-  if (m_backend) {
-    m_backend->Stop();
-  }
-
   m_shutdownFlag.store(true);
   if (m_drawingTimerThread.joinable()) {
     m_drawingTimerThread.join();
+  }
+  if (m_backend) {
+    m_backend->Stop();
   }
   m_shutdownFlag.store(false);
 }
@@ -389,8 +388,23 @@ void wxTerminalViewCtrl::SendCtrlL() {
   SendInput("\x0c");
 }
 
-void wxTerminalViewCtrl::SendCtrlD() { SendInput("\x04"); }
-void wxTerminalViewCtrl::SendCtrlW() { SendInput("\x17"); }
+void wxTerminalViewCtrl::SendCtrlD() {
+  if (IsCmdOrPowerShell()) {
+    TLOG_DEBUG() << "Logout using 'exit'" << std::endl;
+    SendCommand("exit");
+    return;
+  }
+  SendInput("\x04");
+}
+
+void wxTerminalViewCtrl::SendCtrlW() {
+  if (IsCmdOrPowerShell()) {
+    SendInput("\x08"); // Ctrl-BACKSPACE
+    return;
+  }
+  SendInput("\x17");
+}
+
 void wxTerminalViewCtrl::SendCtrlZ() { SendInput("\x1a"); }
 
 void wxTerminalViewCtrl::SendCtrlK() {
@@ -1376,6 +1390,11 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
       return;
     }
 
+    if (key == 'D' || key == 'd') {
+      SendCtrlD();
+      return;
+    }
+
     if (key >= 'A' && key <= 'Z') {
       // Ctrl+A through Ctrl+Z
       char ch = key - 'A' + 1;
@@ -1433,15 +1452,19 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
 
   if (key >= 32 && key < 127) {
     SendInput(std::string(1, static_cast<char>(key)));
-#ifdef _WIN32
-#endif
     return;
   }
 }
 
 bool wxTerminalViewCtrl::HandleSpecialKeys(wxKeyEvent &key_event) {
   auto key = key_event.GetKeyCode();
-  if (key == WXK_UP || key == WXK_DOWN) {
+#ifdef __WXMSW__
+  if (key == WXK_BACK && key_event.GetModifiers() == wxMOD_RAW_CONTROL) {
+    SendCtrlW();
+    return true;
+  } else
+#endif
+      if (key == WXK_UP || key == WXK_DOWN) {
     key == WXK_UP ? SendArrowUp() : SendArrowDown();
     return true;
   } else if (key == WXK_RIGHT) {

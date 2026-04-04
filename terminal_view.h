@@ -130,6 +130,19 @@ public:
    * @return wxPoint The corresponding cell coordinate (col, row).
    */
   std::optional<wxPoint> PointToCell(const wxPoint &pt) const;
+
+  /**
+   * @brief Sends a command string as input and submits it.
+   *
+   * @details This helper forwards the provided command to the input stream
+   * using UTF-8 conversion, then simulates pressing Enter to execute or confirm
+   * the command. It is intended for use in the enclosing class or component
+   * that handles command entry.
+   *
+   * @param command const wxString& The command text to send.
+   *
+   * @return void This function does not return a value.
+   */
   void SendCommand(const wxString &command) {
     SendInput(command.ToStdString(wxConvUTF8));
     SendEnter();
