@@ -23,7 +23,7 @@ public:
   virtual void Resize(int cols, int rows) = 0;
   virtual void SendBreak() = 0; // Ctrl-C
   virtual void Stop() = 0;
-
+  virtual bool IsBash() = 0;
   static std::unique_ptr<PtyBackend> Create(wxEvtHandler *handler);
 
 protected:

@@ -24,6 +24,12 @@ public:
   void Resize(int cols, int rows) override;
   void SendBreak() override;
   void Stop() override;
+  bool IsBash() override;
+
+  struct ChildProcessInfo {
+    DWORD pid{0};
+    std::wstring imageName;
+  };
 
 private:
   void ReaderThread();
@@ -44,6 +50,7 @@ private:
   HANDLE m_hInputWrite{nullptr};
   HANDLE m_hOutputRead{nullptr};
   HANDLE m_hProcess{nullptr};
+  long m_processPid{-1};
   HANDLE m_hThread{nullptr};
   HPCON m_hPC{nullptr};
 };

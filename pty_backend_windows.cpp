@@ -10,7 +10,10 @@
 #include <cstdio>
 #include <memory>
 #include <mutex>
+#include <psapi.h>
 #include <string>
+#include <tlhelp32.h>
+#include <unordered_set>
 #include <vector>
 
 namespace terminal {
@@ -152,6 +155,29 @@ struct HandleCloser {
 
 using unique_handle =
     std::unique_ptr<std::remove_pointer_t<HANDLE>, HandleCloser>;
+
+std::vector<WindowsPtyBackend::ChildProcessInfo>
+CollectDirectChildren(DWORD parentPid) {
+  std::vector<WindowsPtyBackend::ChildProcessInfo> children;
+
+  unique_handle snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
+  if (!snapshot || snapshot.get() == INVALID_HANDLE_VALUE)
+    return children;
+
+  PROCESSENTRY32W entry{};
+  entry.dwSize = sizeof(entry);
+
+  if (!Process32FirstW(snapshot.get(), &entry))
+    return children;
+
+  do {
+    if (entry.th32ParentProcessID == parentPid) {
+      children.push_back({entry.th32ProcessID, entry.szExeFile});
+    }
+  } while (Process32NextW(snapshot.get(), &entry));
+
+  return children;
+}
 
 } // namespace
 
@@ -502,6 +528,7 @@ bool WindowsPtyBackend::CreateConPty(
   m_hInputWrite = inWrite;
   m_hOutputRead = outRead;
   m_hProcess = pi.hProcess;
+  m_processPid = pi.dwProcessId;
   m_hThread = pi.hThread;
   m_hPC = hPC;
 
@@ -521,6 +548,7 @@ void WindowsPtyBackend::DestroyConPty() {
 
     CloseHandle(m_hProcess);
     m_hProcess = nullptr;
+    m_processPid = -1;
   }
 
   if (m_hThread) {
@@ -662,4 +690,27 @@ void WindowsPtyBackend::InterruptIo() {
     CancelIoEx(m_hOutputRead, nullptr);
 }
 
+bool terminal::WindowsPtyBackend::IsBash() {
+  if (m_processPid == -1) {
+    return false;
+  }
+
+  static std::unordered_set<wxString> shells{
+      "wsl.exe", "ssh.exe", "cmd.exe", "powershell.exe", "git-bash.exe",
+  };
+
+  auto children = CollectDirectChildren(m_processPid);
+  for (const auto &child : children) {
+    wxString image_name = child.imageName;
+    image_name.MakeLower();
+    TLOG_DEBUG() << "Checking child process: " << image_name << std::endl;
+    if (shells.contains(image_name)) {
+      TLOG_DEBUG() << "Process is:" << image_name << " is considered BASH"
+                   << std::endl;
+      return true;
+    }
+  }
+  TLOG_DEBUG() << "Process is NOT a bash or ssh" << std::endl;
+  return false;
+}
 } // namespace terminal

@@ -22,6 +22,7 @@ public:
   void Resize(int cols, int rows) override;
   void SendBreak() override;
   void Stop() override;
+  bool IsBash() override { return true; }
 
 private:
   void ReaderThread();

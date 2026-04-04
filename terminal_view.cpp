@@ -1562,13 +1562,10 @@ void wxTerminalViewCtrl::ClearAll() {
 
 bool wxTerminalViewCtrl::IsCmdOrPowerShell() const {
 #ifdef __WXMSW__
-  if (m_shell_command.empty()) {
-    return true;
+  if (m_backend) {
+    return !m_backend->IsBash();
   }
-
-  wxString lower_case_shell = m_shell_command.Lower();
-  return (lower_case_shell.Contains("cmd") ||
-          lower_case_shell.Contains("powershell"));
+  return true;
 #else
   return false;
 #endif
