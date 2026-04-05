@@ -15,6 +15,12 @@
 #include <unordered_set>
 #include <wx/arrstr.h>
 
+#if defined(__WXGTK__) || defined(__WXMAC__)
+#define USE_TIMER_REFRESH 0
+#else
+#define USE_TIMER_REFRESH 1
+#endif
+
 class wxTerminalViewCtrl : public wxPanel {
 public:
   using EnvironmentList = terminal::PtyBackend::EnvironmentList;
@@ -386,11 +392,10 @@ void MACRenderRow(wxDC &dc, int y, int rowIdx,
   wxString m_shell_command;
   std::optional<EnvironmentList> m_environment{std::nullopt};
   bool m_safeDrawing{false};
-#ifndef __WXMAC__
+#if USE_TIMER_REFRESH
   std::atomic_bool m_needsRepaint{true};
 #endif
   std::atomic_bool m_shutdownFlag{false};
   std::unique_ptr<std::thread> m_drawingTimerThread{nullptr};
   std::unordered_set<wxChar> m_selectionDelimChars;
 };
-;

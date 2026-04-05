@@ -207,7 +207,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   UpdateFontCache();
   SetSelectionDelimChars(" \t<>{}[]()$,;*!@^\"'");
 
-#ifndef __WXMAC__
+#if USE_TIMER_REFRESH
   // Use thread to trigger paint events (if needed).
   // This is more accurate then using wxTimer.
   m_drawingTimerThread = std::make_unique<std::thread>([this]() {
@@ -1799,15 +1799,15 @@ wxString wxTerminalViewCtrl::GetRange(std::size_t row, std::size_t col,
 }
 
 void wxTerminalViewCtrl::RefreshView(bool now) {
-#if defined(__WXMAC__)
-  wxUnusedVar(now);
-  Refresh();
-#else
+#if USE_TIMER_REFRESH
   if (now) {
     m_needsRepaint = false;
     Refresh();
     return;
   }
   m_needsRepaint = true;
+#else
+  wxUnusedVar(now);
+  Refresh();
 #endif
 }
