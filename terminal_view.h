@@ -183,7 +183,7 @@ private:
     static SelectionRect FromViewRect(const wxRect &rect, int char_width,
                                       int char_height);
   };
-
+  void RefreshView(bool now = false);
   bool IsUnixKeyboardMode() const;
   bool IsPowerShell() const;
   bool IsCmdShell() const;
@@ -220,8 +220,8 @@ private:
   void RenderRowPosix(wxDC &dc, int y, int rowIdx,
                       const std::vector<terminal::Cell> &row,
                       const wxRect &selected_cells, PaintCounters &counters);
-#ifdef __WXOSX__
-  void MACRenderRow(wxDC &dc, int y, int rowIdx,
+#if 0
+void MACRenderRow(wxDC &dc, int y, int rowIdx,
                     const std::vector<terminal::Cell> &row,
                     const wxRect &selected_cells, PaintCounters &counters);
 #endif
@@ -386,8 +386,11 @@ private:
   wxString m_shell_command;
   std::optional<EnvironmentList> m_environment{std::nullopt};
   bool m_safeDrawing{false};
+#ifndef __WXMAC__
   std::atomic_bool m_needsRepaint{true};
+#endif
   std::atomic_bool m_shutdownFlag{false};
-  std::thread m_drawingTimerThread;
+  std::unique_ptr<std::thread> m_drawingTimerThread{nullptr};
   std::unordered_set<wxChar> m_selectionDelimChars;
 };
+;

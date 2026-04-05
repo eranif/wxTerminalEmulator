@@ -207,9 +207,10 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   UpdateFontCache();
   SetSelectionDelimChars(" \t<>{}[]()$,;*!@^\"'");
 
+#ifndef __WXMAC__
   // Use thread to trigger paint events (if needed).
   // This is more accurate then using wxTimer.
-  m_drawingTimerThread = std::thread([this]() {
+  m_drawingTimerThread = std::make_unique<std::thread>([this]() {
     while (!m_shutdownFlag.load()) {
       // Check for paint event every 10ms, as best this will render the screen
       // at a 100HZ rate.
@@ -220,6 +221,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
       }
     }
   });
+#endif
 
   // Bind events using modern API
   Bind(wxEVT_PAINT, &wxTerminalViewCtrl::OnPaint, this);
@@ -268,8 +270,8 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
 
 wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   m_shutdownFlag.store(true);
-  if (m_drawingTimerThread.joinable()) {
-    m_drawingTimerThread.join();
+  if (m_drawingTimerThread && m_drawingTimerThread->joinable()) {
+    m_drawingTimerThread->join();
   }
   if (m_backend) {
     m_backend->Stop();
@@ -280,7 +282,7 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
 void wxTerminalViewCtrl::Feed(const std::string &data) {
   m_core.PutData(data);
   m_core.SetViewStart(m_core.ShellStart());
-  m_needsRepaint = true;
+  RefreshView();
 }
 
 void wxTerminalViewCtrl::SetTerminalSizeFromClient() {
@@ -484,7 +486,7 @@ const wxTerminalTheme &wxTerminalViewCtrl::GetTheme() const {
 
 void wxTerminalViewCtrl::ScrollToLastLine() {
   m_core.SetViewStart(m_core.ShellStart());
-  m_needsRepaint = true;
+  RefreshView();
 }
 
 std::size_t wxTerminalViewCtrl::GetLineCount() const {
@@ -503,7 +505,7 @@ void wxTerminalViewCtrl::CenterLine(std::size_t line) {
   std::size_t half = m_core.Rows() / 2;
   std::size_t vs = (line > half) ? line - half : 0;
   m_core.SetViewStart(vs);
-  m_needsRepaint = true;
+  RefreshView();
 }
 
 wxString wxTerminalViewCtrl::GetViewLine(std::size_t line) const {
@@ -534,19 +536,19 @@ void wxTerminalViewCtrl::SetUserSelection(std::size_t row, std::size_t col,
       .endCol = endCol,
       .active = true,
   };
-  m_needsRepaint = true;
+  RefreshView();
 }
 
 void wxTerminalViewCtrl::ClearUserSelection() {
   m_userSelection.Clear();
-  m_needsRepaint = true;
+  RefreshView();
   TLOG_IF_DEBUG { TLOG_DEBUG() << "User selection is cleared" << std::endl; }
 }
 
 void wxTerminalViewCtrl::ClearMouseSelection() {
   m_mouseSelectionRect.Clear();
   m_isDragging = false;
-  m_needsRepaint = true;
+  RefreshView();
 }
 
 std::optional<wxPoint>
@@ -914,7 +916,7 @@ void wxTerminalViewCtrl::RenderRowPosix(wxDC &dc, int y, int rowIdx,
   }
 }
 
-#if defined(__WXMAC__)
+#if 0
 void wxTerminalViewCtrl::MACRenderRow(wxDC &dc, int y, int rowIdx,
                                       const std::vector<terminal::Cell> &row,
                                       const wxRect &selected_cells,
@@ -978,10 +980,7 @@ void wxTerminalViewCtrl::MACRenderRow(wxDC &dc, int y, int rowIdx,
     std::vector<CGPoint> positions;
 
     size_t j = i;
-    while (j < cells.size() &&
-           cells[j].attrs.fgColor == firstCell.attrs.fgColor &&
-           cells[j].attrs.bold == firstCell.attrs.bold &&
-           cells[j].attrs.underline == firstCell.attrs.underline) {
+    while (j < cells.size() && cells[j].attrs == firstCell.attrs) {
       UniChar ch = static_cast<UniChar>(cells[j].ch);
       CGGlyph glyph = 0;
       if (CTFontGetGlyphsForCharacters(ctFont, &ch, &glyph, 1) && glyph) {
@@ -1024,7 +1023,8 @@ void wxTerminalViewCtrl::RenderRow(wxDC &dc, int y, int rowIdx,
 #if defined(__WXMSW__)
   RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
 #elif defined(__WXMAC__)
-  RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
+  // Best drawing for macOS.
+  RenderRowPosix(dc, y, rowIdx, row, selected_cells, counters);
 #else
   RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
 #endif
@@ -1147,8 +1147,7 @@ void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
   TLOG_DEBUG() << "OnSize: " << GetClientSize().GetWidth() << "x"
                << GetClientSize().GetHeight() << std::endl;
   SetTerminalSizeFromClient();
-  m_needsRepaint = false;
-  Refresh();
+  RefreshView(true);
   evt.Skip();
 }
 
@@ -1173,9 +1172,8 @@ void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
 
   m_mouseSelectionRect.SetAnchor(wxPoint{evt.GetX(), evt.GetY()});
   m_isDragging = true;
-  m_needsRepaint = false;
+  RefreshView(true);
   CaptureMouse();
-  Refresh();
 }
 
 void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
@@ -1185,7 +1183,7 @@ void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
     // Clear any clicked range
     if (m_core.ClearClickedRange()) {
       // We cleared a previously clicked range, refresh is needed.
-      m_needsRepaint = true;
+      RefreshView();
       // Restore the cursor
       SetCursor(wxCURSOR_IBEAM);
     }
@@ -1197,7 +1195,7 @@ void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
 
   wxPoint pt2{evt.GetX(), evt.GetY()};
   m_mouseSelectionRect.UpdateCurrent(pt2);
-  m_needsRepaint = true;
+  RefreshView();
 }
 
 void wxTerminalViewCtrl::OnMouseUp(wxMouseEvent &evt) {
@@ -1215,8 +1213,7 @@ void wxTerminalViewCtrl::OnMouseUp(wxMouseEvent &evt) {
 
   // Adjust the selection rect into cell rect.
   m_mouseSelectionRect.SnapToCellGrid(m_charW, m_charH);
-  m_needsRepaint = false;
-  Refresh();
+  RefreshView(true);
 }
 
 void wxTerminalViewCtrl::OnMouseWheel(wxMouseEvent &evt) {
@@ -1236,7 +1233,7 @@ void wxTerminalViewCtrl::OnMouseWheel(wxMouseEvent &evt) {
   else
     m_core.SetViewStart(vs + static_cast<std::size_t>(-lines));
   m_mouseSelectionRect.Clear();
-  m_needsRepaint = true;
+  RefreshView();
 }
 
 void wxTerminalViewCtrl::OnContextMenu(wxContextMenuEvent &evt) {
@@ -1581,7 +1578,7 @@ void wxTerminalViewCtrl::Copy() {
     wxTheClipboard->Close();
   }
   ClearMouseSelection();
-  m_needsRepaint = true;
+  RefreshView();
 }
 
 void wxTerminalViewCtrl::Paste() {
@@ -1604,7 +1601,7 @@ void wxTerminalViewCtrl::ClearAll() {
   Feed("\033[2J\033[3J");
   m_userSelection.Clear();
   m_mouseSelectionRect.Clear();
-  m_needsRepaint = true;
+  RefreshView();
 }
 
 static bool IsCommonShell(const wxString &name) {
@@ -1758,7 +1755,7 @@ void wxTerminalViewCtrl::OnMouseLeftDoubleClick(wxMouseEvent &evt) {
 
   m_mouseSelectionRect =
       SelectionRect::FromViewRect(res.value(), m_charW, m_charH);
-  m_needsRepaint = true;
+  RefreshView();
 }
 
 void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event) {
@@ -1799,4 +1796,18 @@ void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event) {
 wxString wxTerminalViewCtrl::GetRange(std::size_t row, std::size_t col,
                                       std::size_t count) {
   return m_core.GetTextRange(row, col, count);
+}
+
+void wxTerminalViewCtrl::RefreshView(bool now) {
+#if defined(__WXMAC__)
+  wxUnusedVar(now);
+  Refresh();
+#else
+  if (now) {
+    m_needsRepaint = false;
+    Refresh();
+    return;
+  }
+  m_needsRepaint = true;
+#endif
 }
