@@ -1,8 +1,16 @@
 #pragma once
 
+#if defined(__WXGTK__) || defined(__WXMAC__)
+#define USE_TIMER_REFRESH 0
+#else
+#define USE_TIMER_REFRESH 0
+#endif
+
 #include "pty_backend.h"
 #include "terminal_core.h"
+#if USE_TIMER_REFRESH
 #include <thread>
+#endif
 #include <wx/dcbuffer.h>
 #include <wx/dcgraph.h>
 #include <wx/panel.h>
@@ -14,12 +22,6 @@
 #include <optional>
 #include <unordered_set>
 #include <wx/arrstr.h>
-
-#if defined(__WXGTK__) || defined(__WXMAC__)
-#define USE_TIMER_REFRESH 0
-#else
-#define USE_TIMER_REFRESH 1
-#endif
 
 class wxTerminalViewCtrl : public wxPanel {
 public:
@@ -394,8 +396,8 @@ void MACRenderRow(wxDC &dc, int y, int rowIdx,
   bool m_safeDrawing{false};
 #if USE_TIMER_REFRESH
   std::atomic_bool m_needsRepaint{true};
-#endif
-  std::atomic_bool m_shutdownFlag{false};
   std::unique_ptr<std::thread> m_drawingTimerThread{nullptr};
+  std::atomic_bool m_shutdownFlag{false};
+#endif
   std::unordered_set<wxChar> m_selectionDelimChars;
 };

@@ -269,14 +269,16 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
 }
 
 wxTerminalViewCtrl::~wxTerminalViewCtrl() {
+#if USE_TIMER_REFRESH
   m_shutdownFlag.store(true);
   if (m_drawingTimerThread && m_drawingTimerThread->joinable()) {
     m_drawingTimerThread->join();
   }
+  m_shutdownFlag.store(false);
+#endif
   if (m_backend) {
     m_backend->Stop();
   }
-  m_shutdownFlag.store(false);
 }
 
 void wxTerminalViewCtrl::Feed(const std::string &data) {
@@ -1297,18 +1299,29 @@ void wxTerminalViewCtrl::DrawFocusBorder(wxDC &dc) const {
     return;
   }
 
-  const wxColour bg = GetBackgroundColour();
-  const int bgLuminance =
-      (bg.Red() * 299 + bg.Green() * 587 + bg.Blue() * 114) / 1000;
-  const wxColour focusRectColour =
-      bgLuminance >= 128 ? bg.ChangeLightness(50) : bg.ChangeLightness(150);
-
-  wxPen pen(focusRectColour, 1);
+#ifdef __WXMSW__
+  constexpr int kFocusPenWidth = 1;
+  wxColour focusRectColour("#5E9ED6");
+  wxPen pen(focusRectColour, kFocusPenWidth);
   pen.SetCap(wxCAP_BUTT);
   pen.SetJoin(wxJOIN_MITER);
+#elif defined(__WXMAC__)
+  constexpr int kFocusPenWidth = 2;
+  wxColour focusRectColour("#5E9ED6");
+  wxPen pen(focusRectColour, kFocusPenWidth);
+  pen.SetCap(wxCAP_ROUND);
+  pen.SetJoin(wxJOIN_ROUND);
+#else
+  constexpr int kFocusPenWidth = 1;
+  wxColour focusRectColour("#3DAEE9");
+  wxPen pen(focusRectColour, kFocusPenWidth);
+  pen.SetCap(wxCAP_BUTT);
+  pen.SetJoin(wxJOIN_MITER);
+#endif
+
   dc.SetPen(pen);
   dc.SetBrush(*wxTRANSPARENT_BRUSH);
-  dc.DrawRectangle(r.GetX(), r.GetY(), r.GetWidth() - 1, r.GetHeight() - 1);
+  dc.DrawRectangle(GetClientRect());
 }
 
 void wxTerminalViewCtrl::OnCharHook(wxKeyEvent &evt) {
