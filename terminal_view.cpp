@@ -588,11 +588,15 @@ void wxTerminalViewCtrl::UpdateFontCache() {
   m_defaultFontBoldUnderlined.MakeUnderlined();
 }
 
-void wxTerminalViewCtrl::DebugDumpViewArea() {
-  TLOG_IF_TRACE {
+void wxTerminalViewCtrl::DebugDumpViewArea(TerminalLogLevel log_level,
+                                           int viewLine) {
+  TLOG_IF(log_level) {
     auto viewArea = m_core.GetViewArea();
     size_t row_num{0};
     for (const auto &row : viewArea) {
+      if (viewLine != -1 && viewLine != static_cast<int>(row_num)) {
+        continue;
+      }
       std::string line;
       line.reserve(row->size());
       for (const auto &cell : *row) {
@@ -603,8 +607,8 @@ void wxTerminalViewCtrl::DebugDumpViewArea() {
         }
       }
       wxString line_utf8 = wxString::FromUTF8(line);
-      TLOG_TRACE() << wxString::Format("%03d", row_num) << line_utf8
-                   << std::endl;
+      TLOG(log_level) << wxString::Format("%03d", row_num) << line_utf8
+                      << std::endl;
       row_num++;
     }
   }
@@ -629,18 +633,23 @@ wxTerminalViewCtrl::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
   return foreground ? theme.fg : theme.bg;
 }
 
-std::vector<wxTerminalViewCtrl::CellInfo>
+wxTerminalViewCtrl::PrepareRowForDrawingResult
 wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
                                          int rowIdx,
                                          const wxRect &selected_cells) {
   const auto &theme = m_core.GetTheme();
   // Build a list of cells with their attributes, skipping truly empty ones
-  std::vector<CellInfo> cells;
+  wxTerminalViewCtrl::PrepareRowForDrawingResult result;
+  std::vector<CellInfo> &cells = result.cells;
   cells.reserve(row.size());
 
   // Collect drawable cells
   for (int colIdx = 0; colIdx < static_cast<int>(row.size()); ++colIdx) {
     const auto &cell = row[colIdx];
+
+    if (result.is_ascii_safe) {
+      result.is_ascii_safe = IsUnicodeSingleCellSafe(cell.ch);
+    }
 
     // Check if cell is selected
     bool isApiSelected = false;
@@ -690,22 +699,7 @@ wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
     info.attrs.isApiSelected = isApiSelected;
     cells.push_back(info);
   }
-  return cells;
-}
-
-bool wxTerminalViewCtrl::IsAsciiSafeTextRun(
-    const std::vector<wxTerminalViewCtrl::CellInfo> &cells) const {
-  if (cells.empty()) {
-    return false;
-  }
-
-  for (const auto &cell : cells) {
-    if (!IsUnicodeSingleCellSafe(cell.ch)) {
-      return false;
-    }
-  }
-
-  return true;
+  return result;
 }
 
 bool wxTerminalViewCtrl::IsUnicodeSingleCellSafe(wxChar ch) const {
@@ -789,25 +783,91 @@ void wxTerminalViewCtrl::PrepareDcForTextDrawing(
 void wxTerminalViewCtrl::RenderRowWithGrouping(
     wxDC &dc, int y, int rowIdx, const std::vector<terminal::Cell> &row,
     const wxRect &selected_cells, PaintCounters &counters) {
-  std::vector<CellInfo> cells =
-      PrepareRowForDrawing(row, rowIdx, selected_cells);
 
+  auto result = PrepareRowForDrawing(row, rowIdx, selected_cells);
+  auto &cells = result.cells;
   if (cells.empty()) {
     return;
   }
 
-  if (!IsAsciiSafeTextRun(cells)) {
+  bool isCursorLine = m_core.Cursor().y == rowIdx;
+  if (isCursorLine // never group the cursor line
+      || !result.is_ascii_safe) {
+    TLOG_IF_TRACE {
+      if (isCursorLine) {
+        TLOG_TRACE() << "Calling RenderRowNoGrouping for the cursor line"
+                     << std::endl;
+        TLOG_TRACE() << "Line: " << GetLine(m_core.AbsRow(rowIdx)) << std::endl;
+      } else {
+        TLOG_TRACE() << "Calling RenderRowNoGrouping for non ASCII safe line"
+                     << std::endl;
+        TLOG_TRACE() << "Line: " << GetLine(m_core.AbsRow(rowIdx)) << std::endl;
+      }
+    }
     return RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, counters);
   }
+
+  // Fast path: Check if all cells have identical attributes
+  // This is common for blank lines, homogeneous backgrounds, etc.
+  if (cells.size() > 1) {
+    bool all_same_attrs = true;
+    const CellAttributes &first_attrs = cells[0].attrs;
+
+    for (size_t i = 1; i < cells.size(); ++i) {
+      if (!cells[i].HasSameAttributes(cells[0])) {
+        all_same_attrs = false;
+        break;
+      }
+    }
+
+    if (all_same_attrs) {
+      // Fast path
+      wxString text;
+      int expected_length = cells.back().colIdx - cells.front().colIdx + 1;
+      text.reserve(expected_length);
+
+      // Build text, filling gaps with spaces
+      int current_col = cells.front().colIdx;
+      for (const auto &cell : cells) {
+        // Fill any gaps before this cell with spaces
+        while (current_col < cell.colIdx) {
+          text.Append(' ');
+          current_col++;
+        }
+        // Add the actual cell character
+        text.Append(cell.ch);
+        current_col++;
+      }
+
+      // Calculate bounding rectangle for entire row of cells
+      int x_start = cells.front().colIdx * m_charW;
+      int x_end = (cells.back().colIdx + 1) * m_charW;
+      int width = x_end - x_start;
+
+      // Set DC state once for entire row
+      PrepareDcForTextDrawing(dc, cells[0]);
+      dc.DrawRectangle(x_start, y, width, m_charH);
+      counters.draw_rectangle_++;
+
+      dc.DrawText(text, x_start, y);
+      counters.draw_text_++;
+      counters.grouped_rows_++;
+      counters.full_row_draws_++;
+      return; // Early exit - we're done with this row
+    }
+  }
+
+  // Standard path: Group cells with same attributes
   counters.grouped_rows_++;
   for (size_t i = 0; i < cells.size();) {
     const auto &firstCell = cells[i];
     wxString text;
+    text.reserve(cells.size()); // Max size
     text.Append(firstCell.ch);
 
     size_t j = i + 1;
     const CellInfo *current_cell = &firstCell;
-    if (!firstCell.CanBeGrouped()) {
+    if (!firstCell.IsSelected()) {
       while (true) {
         if (j >= cells.size()) {
           break;
@@ -832,7 +892,6 @@ void wxTerminalViewCtrl::RenderRowWithGrouping(
     dc.DrawRectangle(x, y, width, m_charH);
     counters.draw_rectangle_++;
 
-    PrepareDcForTextDrawing(dc, firstCell);
     dc.DrawText(text, x, y);
     counters.draw_text_++;
 
@@ -844,8 +903,8 @@ void wxTerminalViewCtrl::RenderRowNoGrouping(
     wxDC &dc, int y, int rowIdx, const std::vector<terminal::Cell> &row,
     const wxRect &selected_cells, PaintCounters &counters) {
   // Build a list of cells with their attributes, skipping truly empty ones
-  std::vector<CellInfo> cells =
-      PrepareRowForDrawing(row, rowIdx, selected_cells);
+  auto result = PrepareRowForDrawing(row, rowIdx, selected_cells);
+  auto &cells = result.cells;
 
   // Now group and render consecutive cells with the same attributes
   if (cells.empty()) {
@@ -884,8 +943,8 @@ void wxTerminalViewCtrl::RenderRowPosix(wxDC &dc, int y, int rowIdx,
                                         const std::vector<terminal::Cell> &row,
                                         const wxRect &selected_cells,
                                         PaintCounters &counters) {
-  std::vector<CellInfo> cells =
-      PrepareRowForDrawing(row, rowIdx, selected_cells);
+  auto result = PrepareRowForDrawing(row, rowIdx, selected_cells);
+  auto &cells = result.cells;
 
   if (cells.empty()) {
     return;
@@ -937,8 +996,8 @@ void wxTerminalViewCtrl::MACRenderRow(wxDC &dc, int y, int rowIdx,
                                       const std::vector<terminal::Cell> &row,
                                       const wxRect &selected_cells,
                                       PaintCounters &counters) {
-  std::vector<CellInfo> cells =
-      PrepareRowForDrawing(row, rowIdx, selected_cells);
+  auto result = PrepareRowForDrawing(row, rowIdx, selected_cells);
+  auto &cells = result.cells;
 
   if (cells.empty()) {
     return;
@@ -1054,6 +1113,7 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
       function_logger.AddCounter("DrawText calls"),
       function_logger.AddCounter("DrawRectangle calls"),
       function_logger.AddCounter("GroupedRows calls"),
+      function_logger.AddCounter("FullRow Grouped"),
   };
 
   wxAutoBufferedPaintDC dc{this};

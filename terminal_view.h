@@ -1,5 +1,6 @@
 #pragma once
 
+#include "terminal_logger.h"
 #if defined(__WXGTK__) || defined(__WXMAC__)
 #define USE_TIMER_REFRESH 0
 #else
@@ -207,12 +208,13 @@ private:
   void OnPaint(wxPaintEvent &evt);
   struct PaintCounters {
     PaintCounters(size_t &draw_text, size_t &draw_rectangle,
-                  size_t &grouped_rows)
+                  size_t &grouped_rows, size_t &full_row_draws)
         : draw_text_{draw_text}, draw_rectangle_{draw_rectangle},
-          grouped_rows_{grouped_rows} {}
+          full_row_draws_{full_row_draws}, grouped_rows_{grouped_rows} {}
     size_t &draw_text_;
     size_t &draw_rectangle_;
     size_t &grouped_rows_;
+    size_t &full_row_draws_;
   };
 
   void RenderRow(wxDC &dc, int y, int rowIdx,
@@ -250,7 +252,7 @@ void MACRenderRow(wxDC &dc, int y, int rowIdx,
   void OnPaste(wxCommandEvent &evt);
   void OnClearBuffer(wxCommandEvent &evt);
   void DrawFocusBorder(wxDC &dc) const;
-  void DebugDumpViewArea();
+  void DebugDumpViewArea(TerminalLogLevel log_level, int viewLine = -1);
   void UpdateFontCache();
   const wxFont &GetCachedFont(bool bold, bool underlined) const;
   /**
@@ -342,27 +344,13 @@ void MACRenderRow(wxDC &dc, int y, int rowIdx,
     inline bool IsRightTo(const CellInfo &other) const {
       return colIdx == other.colIdx + 1;
     }
-    inline bool CanBeGrouped() const {
+    inline bool IsSelected() const {
       return attrs.isMouseSelected || attrs.isApiSelected;
     }
   };
 
   void PrepareDcForTextDrawing(wxDC &dc,
                                const wxTerminalViewCtrl::CellInfo &cell);
-
-  /**
-   * @brief Checks whether a range of cells contains only printable ASCII text.
-   *
-   * @param cells const std::vector<TerminalView::CellInfo>& The cell buffer to
-   * inspect.
-   *
-   * @return bool True if the specified range is non-empty and every cell
-   * contains a printable ASCII character; otherwise false.
-   */
-  bool IsAsciiSafeTextRun(
-      const std::vector<wxTerminalViewCtrl::CellInfo> &cells) const;
-
-  bool m_hasFocusBorder{false};
 
   /**
    * @brief Checks whether a cell can be safely grouped with neighboring cells
@@ -374,7 +362,11 @@ void MACRenderRow(wxDC &dc, int y, int rowIdx,
    */
   bool IsUnicodeSingleCellSafe(wxChar ch) const;
 
-  std::vector<wxTerminalViewCtrl::CellInfo>
+  struct PrepareRowForDrawingResult {
+    std::vector<wxTerminalViewCtrl::CellInfo> cells;
+    bool is_ascii_safe{true};
+  };
+  PrepareRowForDrawingResult
   PrepareRowForDrawing(const std::vector<terminal::Cell> &row, int rowIdx,
                        const wxRect &selected_cells);
   terminal::TerminalCore m_core;
@@ -401,4 +393,5 @@ void MACRenderRow(wxDC &dc, int y, int rowIdx,
   std::atomic_bool m_shutdownFlag{false};
 #endif
   std::unordered_set<wxChar> m_selectionDelimChars;
+  bool m_hasFocusBorder{false};
 };

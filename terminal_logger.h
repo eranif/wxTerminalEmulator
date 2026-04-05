@@ -86,10 +86,9 @@ private:
 #define TLOG_TRACE() TLOG(TerminalLogLevel::kTrace)
 #define TLOG_INFO() TLOG(TerminalLogLevel::kInfo)
 
-#define TLOG_IF_TRACE                                                          \
-  if (TerminalLogger::Get().GetLevel() <= TerminalLogLevel::kTrace)
-#define TLOG_IF_DEBUG                                                          \
-  if (TerminalLogger::Get().GetLevel() <= TerminalLogLevel::kDebug)
+#define TLOG_IF(lvl) if (TerminalLogger::Get().GetLevel() <= lvl)
+#define TLOG_IF_TRACE TLOG_IF(TerminalLogLevel::kTrace)
+#define TLOG_IF_DEBUG TLOG_IF(TerminalLogLevel::kDebug)
 
 struct LogFunction {
   wxString function_name;
