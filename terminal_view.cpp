@@ -403,8 +403,8 @@ void wxTerminalViewCtrl::SendCtrlL() {
     TLOG_DEBUG() << "Sending Windows 'cls' command" << std::endl;
     SendCtrlC();
     if (IsCmdShell()) {
-      // Fix the terminal from any unwanted state it was left
-      SendCommand("color");
+      // Fix the terminal from any unwanted state it was left by sending a RESET
+      SendInput("\x1b[0m");
     }
     SendCommand("cls");
     return;
