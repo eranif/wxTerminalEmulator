@@ -1170,7 +1170,9 @@ void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
 void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
   evt.Skip();
 
-  if (evt.GetModifiers() == wxMOD_RAW_CONTROL) {
+  // Check if Control/CMD is down (we use CMD on macOS, since Ctrl+CLICK will
+  // show the context menu)
+  if (evt.GetModifiers() == wxMOD_CONTROL) {
     // Control down
     DoClickable(evt);
     return;
