@@ -335,6 +335,12 @@ void wxTerminalViewCtrl::SendInput(const std::string &text) {
 
 // Helper methods for sending special characters
 void wxTerminalViewCtrl::SendCtrlC() {
+#if defined(__WXGTK__) || defined(__WXMSW__)
+  if (HasActiveSelection()) {
+    Copy();
+    return;
+  }
+#endif
   if (m_backend) {
     m_backend->SendBreak();
   }
@@ -396,6 +402,10 @@ void wxTerminalViewCtrl::SendCtrlL() {
     // Windows style "Ctrl-L" for CMD / PS
     TLOG_DEBUG() << "Sending Windows 'cls' command" << std::endl;
     SendCtrlC();
+    if (IsCmdShell()) {
+      // Fix the terminal from any unwanted state it was left
+      SendCommand("color");
+    }
     SendCommand("cls");
     return;
   }
@@ -551,6 +561,10 @@ void wxTerminalViewCtrl::ClearMouseSelection() {
   m_mouseSelectionRect.Clear();
   m_isDragging = false;
   RefreshView();
+}
+
+bool wxTerminalViewCtrl::HasActiveSelection() const {
+  return m_mouseSelectionRect.IsSelectionRectHasMinSize();
 }
 
 std::optional<wxPoint>

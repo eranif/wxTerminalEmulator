@@ -125,6 +125,7 @@ public:
            std::size_t count = std::numeric_limits<std::size_t>::max());
   void ClearUserSelection();
   void ClearMouseSelection();
+  bool HasActiveSelection() const;
   void SetSelectionDelimChars(const wxString &delims);
 
   /**
