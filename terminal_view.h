@@ -213,8 +213,8 @@ private:
           full_row_draws_{full_row_draws}, grouped_rows_{grouped_rows} {}
     size_t &draw_text_;
     size_t &draw_rectangle_;
-    size_t &grouped_rows_;
     size_t &full_row_draws_;
+    size_t &grouped_rows_;
   };
 
   void RenderRow(wxDC &dc, int y, int rowIdx,
