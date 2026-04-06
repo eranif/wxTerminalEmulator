@@ -1088,7 +1088,7 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
       // Sometimes drawing block of text shows a different char width overall.
       // So use an avg.
       int char_width = m_charW;
-      m_charW = std::ceilf(
+      m_charW = std::ceil(
           static_cast<float>(dc.GetTextExtent(kTextSample).GetWidth()) /
           static_cast<float>(kTextSample.length()));
 
