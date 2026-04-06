@@ -171,6 +171,7 @@ private:
   struct SelectionRect {
     wxRect m_rect; // in pixels
     wxPoint m_selectionAnchor;
+    size_t m_viewStart{UINT64_MAX};
 
     SelectionRect() = default;
     inline SelectionRect &operator=(const wxRect &rect) {

@@ -97,6 +97,7 @@ inline wxRect MakeRect(const wxPoint &p1, const wxPoint &p2) {
 void wxTerminalViewCtrl::SelectionRect::Clear() {
   m_rect = {};
   m_selectionAnchor = {};
+  m_viewStart = UINT64_MAX;
 }
 
 wxRect wxTerminalViewCtrl::SelectionRect::PixelsRectToViewCellRect(
@@ -1059,6 +1060,10 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
   dc.Clear();
   dc.SetFont(m_defaultFont);
 
+  if (m_mouseSelectionRect.m_viewStart != m_core.ViewStart()) {
+    m_mouseSelectionRect.Clear();
+  }
+
   if (m_charH == 0 && m_charW == 0) {
     dc.SetFont(m_defaultFontBold);
 
@@ -1193,6 +1198,8 @@ void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
   }
 
   m_mouseSelectionRect.SetAnchor(wxPoint{evt.GetX(), evt.GetY()});
+  m_mouseSelectionRect.m_viewStart =
+      m_core.ViewStart(); // Remember the view start position.
   m_isDragging = true;
   RefreshView(true);
   CaptureMouse();
