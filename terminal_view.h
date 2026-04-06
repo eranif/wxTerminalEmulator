@@ -323,8 +323,8 @@ private:
   };
 
   struct CellInfo {
-    int colIdx;
-    wxChar ch;
+    int colIdx{wxNOT_FOUND};
+    wxChar ch{' '};
     CellAttributes attrs;
     inline bool IsUnicode() const { return ch >= 0x80; }
     inline bool HasSameAttributes(const CellInfo &other) const {
@@ -342,6 +342,7 @@ private:
     inline bool IsSelected() const {
       return attrs.isMouseSelected || attrs.isApiSelected;
     }
+    inline bool IsOk() const { return colIdx != wxNOT_FOUND; }
   };
 
   void PrepareDcForTextDrawing(wxDC &dc,

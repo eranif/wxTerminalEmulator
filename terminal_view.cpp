@@ -3,7 +3,10 @@
 #include "terminal_event.h"
 #include "terminal_logger.h"
 #include <algorithm>
+#if USE_TIMER_REFRESH
 #include <chrono>
+#endif
+#include <cmath>
 #include <cstdio>
 #include <unordered_map>
 #include <unordered_set>
@@ -778,11 +781,20 @@ bool wxTerminalViewCtrl::IsUnicodeSingleCellSafe(wxChar ch) const {
 
 void wxTerminalViewCtrl::PrepareDcForTextDrawing(
     wxDC &dc, const wxTerminalViewCtrl::CellInfo &cell) {
-  dc.SetPen(*wxTRANSPARENT_PEN);
-  dc.SetBrush(wxBrush(cell.attrs.bgColor));
-  dc.SetFont(GetCachedFont(cell.attrs.bold,
-                           cell.attrs.underline || cell.attrs.isClicked));
-  dc.SetTextForeground(cell.attrs.fgColor);
+  if (cell.IsOk()) {
+    dc.SetPen(*wxTRANSPARENT_PEN);
+    dc.SetBrush(wxBrush(cell.attrs.bgColor));
+    dc.SetFont(GetCachedFont(cell.attrs.bold,
+                             cell.attrs.underline || cell.attrs.isClicked));
+    dc.SetTextForeground(cell.attrs.fgColor);
+  } else {
+    // Use theme colours
+    const auto &theme = m_core.GetTheme();
+    dc.SetPen(*wxTRANSPARENT_PEN);
+    dc.SetBrush(theme.bg);
+    dc.SetFont(m_defaultFont);
+    dc.SetTextForeground(theme.fg);
+  }
 }
 
 void wxTerminalViewCtrl::RenderMonotonicRow(
@@ -836,8 +848,9 @@ void wxTerminalViewCtrl::RenderRowWithGrouping(
   }
 
   bool isCursorLine = m_core.Cursor().y == rowIdx;
-  if (isCursorLine                // Never group the cursor line
-//      || !result.is_ascii_safe    // Found at least 1 cell with non safe ascii
+  if (isCursorLine // Never group the cursor line
+                   //      || !result.is_ascii_safe    // Found at least 1 cell
+                   //      with non safe ascii
       || result.row_has_selection // Found at least 1 cell which is "selected"
   ) {
     return RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, counters);
@@ -865,44 +878,55 @@ void wxTerminalViewCtrl::RenderRowWithGrouping(
 
   // Standard path: Group cells with same attributes
   counters.grouped_rows_++;
+  std::vector<CellInfo> complete_list;
+  complete_list.reserve(cells.back().colIdx + 1);
+  complete_list.resize(cells.back().colIdx + 1);
 
-  for (size_t i = 0; i < cells.size();) {
-    const auto &firstCell = cells[i];
-    wxString text;
-    text.reserve(cells.size()); // Max size
-    text.Append(firstCell.ch);
+  for (const auto &c : cells) {
+    complete_list[c.colIdx] = c;
+  }
 
-    size_t j = i + 1;
-    const CellInfo *current_cell = &firstCell;
-    if (!firstCell.IsSelected()) {
-      while (true) {
-        if (j >= cells.size()) {
-          break;
-        }
-        const auto &next_cell = cells[j];
-        if (current_cell->HasSameAttributes(next_cell) &&
-            current_cell->IsAdjacent(next_cell)) {
-          text.Append(next_cell.ch);
-          current_cell = &next_cell;
-          j++;
-          continue;
-        }
-        break;
-      }
-    }
-
-    int x = firstCell.colIdx * m_charW;
-    int num_of_cells = cells[j - 1].colIdx - firstCell.colIdx + 1;
-    int width = num_of_cells * m_charW;
-
-    PrepareDcForTextDrawing(dc, firstCell);
-    dc.DrawRectangle(x, y, width, m_charH);
+  auto DrawChunk = [this](wxDC &dc, int y, const wxString &text,
+                          const CellInfo &cell, int xx,
+                          PaintCounters &counters) -> int {
+    // Draw the content.
+    PrepareDcForTextDrawing(dc, cell);
+    int width = dc.GetTextExtent(text).GetWidth();
+    dc.DrawRectangle(xx, y, width, m_charH);
     counters.draw_rectangle_++;
 
-    dc.DrawText(text, x, y);
+    dc.DrawText(text, xx, y);
     counters.draw_text_++;
+    return width;
+  };
 
-    i = j;
+  int xx = 0;
+  wxString text;
+  text.reserve(cells.size()); // Max size
+  const CellInfo *chunk_first_cell{nullptr};
+  for (const auto &c : complete_list) {
+    if (chunk_first_cell == nullptr || chunk_first_cell->HasSameAttributes(c)) {
+      // Either drawing the first cell or the prev cell and the current one
+      // are matching - keep collecting.
+      text.Append(c.ch);
+      if (chunk_first_cell == nullptr) {
+        chunk_first_cell = &c;
+      }
+      continue;
+    }
+
+    // Draw the content.
+    xx += DrawChunk(dc, y, text, *chunk_first_cell, xx, counters);
+    chunk_first_cell = &c;
+
+    // Keep batching new group
+    text.Clear();
+    text.Append(c.ch);
+  }
+
+  if (!text.empty() && chunk_first_cell) {
+    xx += DrawChunk(dc, y, text, *chunk_first_cell, xx, counters);
+    text.Clear();
   }
 }
 
@@ -1039,7 +1063,8 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
   dc.SetFont(m_defaultFont);
 
   if (m_charH == 0 && m_charW == 0) {
-    wxDCFontChanger font_changer{dc, GetCachedFont(true, false)};
+    dc.SetFont(m_defaultFontBold);
+
     // first time — measure font, set size, then start the shell
     int i_width = dc.GetTextExtent("i").GetWidth();
     m_charW = dc.GetTextExtent("W").GetWidth();
@@ -1057,15 +1082,22 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
         int tmp_width = dc.GetTextExtent(t).GetWidth();
         m_charW = std::max(tmp_width, m_charW);
       }
+    } else {
+      // Monospaced font.
+      static const wxString kTextSample = "codelite/.build-release";
+      // Sometimes drawing block of text shows a different char width overall.
+      // So use an avg.
+      int char_width = m_charW;
+      m_charW = std::ceilf(
+          static_cast<float>(dc.GetTextExtent(kTextSample).GetWidth()) /
+          static_cast<float>(kTextSample.length()));
+
+      TLOG_IF_DEBUG {
+        TLOG_DEBUG() << "m_charW=" << m_charW << ", m_charH=" << m_charH
+                     << ". Single char width is=" << char_width << std::endl;
+      }
     }
 
-    const wxString sample_text = "Administrator";
-    int group_width =
-        dc.GetTextExtent(sample_text).GetWidth() / sample_text.length();
-    TLOG_IF_TRACE {
-      TLOG_TRACE() << "m_charW=" << m_charW << ", m_charH=" << m_charH
-                   << ", group_width=" << group_width << std::endl;
-    }
     SetTerminalSizeFromClient();
     if (m_backend == nullptr) {
       CallAfter(&wxTerminalViewCtrl::StartProcess, m_shell_command,
