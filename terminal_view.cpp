@@ -827,7 +827,9 @@ void wxTerminalViewCtrl::RenderRowWithGrouping(
       text.reserve(expected_length);
 
       // Build text, filling gaps with spaces
-      int current_col = cells.front().colIdx;
+      int current_col =
+          0; // since we draw the entire line, we should start from 0. Column 0
+             // can be missed from the "cells" array.
       for (const auto &cell : cells) {
         // Fill any gaps before this cell with spaces
         while (current_col < cell.colIdx) {
