@@ -231,11 +231,6 @@ private:
   void RenderRowPosix(wxDC &dc, int y, int rowIdx,
                       const std::vector<terminal::Cell> &row,
                       const wxRect &selected_cells, PaintCounters &counters);
-#if 0
-void MACRenderRow(wxDC &dc, int y, int rowIdx,
-                    const std::vector<terminal::Cell> &row,
-                    const wxRect &selected_cells, PaintCounters &counters);
-#endif
 
   void OnSize(wxSizeEvent &evt);
   void OnCharHook(wxKeyEvent &evt);
@@ -369,6 +364,12 @@ void MACRenderRow(wxDC &dc, int y, int rowIdx,
   PrepareRowForDrawingResult
   PrepareRowForDrawing(const std::vector<terminal::Cell> &row, int rowIdx,
                        const wxRect &selected_cells);
+  /// Draw a row where all of its cells share the same attributes
+  void
+  RenderMonotonicRow(wxDC &dc, int y, int rowIdx,
+                     const std::vector<wxTerminalViewCtrl::CellInfo> &cells,
+                     PaintCounters &counters);
+
   terminal::TerminalCore m_core;
   std::unique_ptr<terminal::PtyBackend> m_backend;
   SelectionRect m_mouseSelectionRect{};

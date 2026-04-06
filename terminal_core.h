@@ -104,14 +104,6 @@ struct Cell {
     return IsFlagSet(flags, CellFlags::kClicked);
   }
   inline bool IsEmpty() const { return ch == U' ' && !colours.has_value(); }
-  inline void SetColours(const wxTerminalTheme &theme) {
-    SetColours(theme.bg, theme.fg);
-  }
-
-  inline void SetColours(const wxColour &bg, const wxColour &fg) {
-    colours = CellColours{};
-  }
-
   inline void SetFgColour(ColourSpec c) {
     if (IsEmpty()) {
       colours = CellColours{};
@@ -139,10 +131,9 @@ struct Cell {
    *
    * @return Cell The newly created and fully initialized Cell.
    */
-  inline static Cell New(const wxTerminalTheme &theme, char32_t c = U' ') {
+  inline static Cell New(char32_t c = U' ') {
     Cell cell;
     cell.ch = c;
-    cell.SetColours(theme);
     return cell;
   }
 };

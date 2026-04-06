@@ -148,7 +148,7 @@ wxRect wxTerminalViewCtrl::SelectionRect::ViewCellToPixelsRect(
 }
 
 bool wxTerminalViewCtrl::SelectionRect::IsSelectionRectHasMinSize() const {
-  static constexpr int kMinRectSize = 2;
+  static constexpr int kMinRectSize = 1;
   return !m_rect.IsEmpty() && (m_rect.GetSize().GetWidth() >= kMinRectSize ||
                                m_rect.GetSize().GetHeight() >= kMinRectSize);
 }
@@ -622,7 +622,7 @@ wxTerminalViewCtrl::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
     return foreground ? theme.fg : theme.bg;
   switch (spec->kind) {
   case ColourSpec::Kind::Ansi:
-    return theme.GetAnsiColor(spec->ansi.index, spec->ansi.bright);
+    return terminal::ToColour(theme.GetAnsiColor(spec->ansi.index, spec->ansi.bright));
   case ColourSpec::Kind::Palette256:
     return terminal::ToColour(theme.Get256Color(spec->paletteIndex));
   case ColourSpec::Kind::TrueColor:
@@ -780,6 +780,46 @@ void wxTerminalViewCtrl::PrepareDcForTextDrawing(
   dc.SetTextForeground(cell.attrs.fgColor);
 }
 
+void wxTerminalViewCtrl::RenderMonotonicRow(
+    wxDC &dc, int y, int rowIdx,
+    const std::vector<wxTerminalViewCtrl::CellInfo> &cells,
+    PaintCounters &counters) {
+  if (cells.empty()) {
+    return;
+  }
+  wxString text;
+  int expected_length = cells.back().colIdx - cells.front().colIdx + 1;
+  text.reserve(expected_length);
+
+  // Build text, filling gaps with spaces
+  int current_col = cells[0].colIdx;
+  for (const auto &cell : cells) {
+    // Fill any gaps before this cell with spaces
+    while (current_col < cell.colIdx) {
+      text.Append(' ');
+      current_col++;
+    }
+    // Add the actual cell character
+    text.Append(cell.ch);
+    current_col++;
+  }
+
+  // Calculate bounding rectangle for entire row of cells
+  int x_start = cells.front().colIdx * m_charW;
+  int x_end = (cells.back().colIdx + 1) * m_charW;
+  int width = x_end - x_start;
+
+  // Set DC state once for entire row
+  PrepareDcForTextDrawing(dc, cells[0]);
+  dc.DrawRectangle(x_start, y, width, m_charH);
+  counters.draw_rectangle_++;
+
+  dc.DrawText(text, x_start, y);
+  counters.draw_text_++;
+  counters.grouped_rows_++;
+  counters.full_row_draws_++;
+}
+
 void wxTerminalViewCtrl::RenderRowWithGrouping(
     wxDC &dc, int y, int rowIdx, const std::vector<terminal::Cell> &row,
     const wxRect &selected_cells, PaintCounters &counters) {
@@ -793,17 +833,6 @@ void wxTerminalViewCtrl::RenderRowWithGrouping(
   bool isCursorLine = m_core.Cursor().y == rowIdx;
   if (isCursorLine // never group the cursor line
       || !result.is_ascii_safe) {
-    TLOG_IF_TRACE {
-      if (isCursorLine) {
-        TLOG_TRACE() << "Calling RenderRowNoGrouping for the cursor line"
-                     << std::endl;
-        TLOG_TRACE() << "Line: " << GetLine(m_core.AbsRow(rowIdx)) << std::endl;
-      } else {
-        TLOG_TRACE() << "Calling RenderRowNoGrouping for non ASCII safe line"
-                     << std::endl;
-        TLOG_TRACE() << "Line: " << GetLine(m_core.AbsRow(rowIdx)) << std::endl;
-      }
-    }
     return RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, counters);
   }
 
@@ -822,45 +851,14 @@ void wxTerminalViewCtrl::RenderRowWithGrouping(
 
     if (all_same_attrs) {
       // Fast path
-      wxString text;
-      int expected_length = cells.back().colIdx - cells.front().colIdx + 1;
-      text.reserve(expected_length);
-
-      // Build text, filling gaps with spaces
-      int current_col =
-          0; // since we draw the entire line, we should start from 0. Column 0
-             // can be missed from the "cells" array.
-      for (const auto &cell : cells) {
-        // Fill any gaps before this cell with spaces
-        while (current_col < cell.colIdx) {
-          text.Append(' ');
-          current_col++;
-        }
-        // Add the actual cell character
-        text.Append(cell.ch);
-        current_col++;
-      }
-
-      // Calculate bounding rectangle for entire row of cells
-      int x_start = cells.front().colIdx * m_charW;
-      int x_end = (cells.back().colIdx + 1) * m_charW;
-      int width = x_end - x_start;
-
-      // Set DC state once for entire row
-      PrepareDcForTextDrawing(dc, cells[0]);
-      dc.DrawRectangle(x_start, y, width, m_charH);
-      counters.draw_rectangle_++;
-
-      dc.DrawText(text, x_start, y);
-      counters.draw_text_++;
-      counters.grouped_rows_++;
-      counters.full_row_draws_++;
-      return; // Early exit - we're done with this row
+      RenderMonotonicRow(dc, y, rowIdx, cells, counters);
+      return;
     }
   }
 
   // Standard path: Group cells with same attributes
   counters.grouped_rows_++;
+
   for (size_t i = 0; i < cells.size();) {
     const auto &firstCell = cells[i];
     wxString text;
@@ -992,98 +990,6 @@ void wxTerminalViewCtrl::RenderRowPosix(wxDC &dc, int y, int rowIdx,
     i = j;
   }
 }
-
-#if 0
-void wxTerminalViewCtrl::MACRenderRow(wxDC &dc, int y, int rowIdx,
-                                      const std::vector<terminal::Cell> &row,
-                                      const wxRect &selected_cells,
-                                      PaintCounters &counters) {
-  auto result = PrepareRowForDrawing(row, rowIdx, selected_cells);
-  auto &cells = result.cells;
-
-  if (cells.empty()) {
-    return;
-  }
-
-  // Pass 1: draw background rectangles, grouped by bg color
-  dc.SetPen(*wxTRANSPARENT_PEN);
-  for (size_t i = 0; i < cells.size();) {
-    const auto &firstCell = cells[i];
-    size_t j = i + 1;
-    while (j < cells.size() &&
-           cells[j].attrs.bgColor == firstCell.attrs.bgColor &&
-           cells[j].colIdx == cells[j - 1].colIdx + 1) {
-      ++j;
-    }
-    int x = firstCell.colIdx * m_charW;
-    int width = (cells[j - 1].colIdx - firstCell.colIdx + 1) * m_charW;
-    dc.SetBrush(wxBrush(firstCell.attrs.bgColor));
-    dc.DrawRectangle(x, y, width, m_charH);
-    counters.draw_rectangle_++;
-    i = j;
-  }
-
-  // Pass 2: draw glyphs at exact grid positions via CTFontDrawGlyphs
-  wxGraphicsContext *gc = dc.GetGraphicsContext();
-  CGContextRef ctx =
-      gc ? static_cast<CGContextRef>(gc->GetNativeContext()) : nullptr;
-
-  if (!ctx) {
-    RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, counters);
-    return;
-  }
-
-  int dcHeight = dc.GetSize().GetHeight();
-
-  // The DC's CGContext is flipped (Y-down). CTFontDrawGlyphs needs
-  // unflipped coordinates. Save state, undo the flip, draw, restore.
-  CGContextSaveGState(ctx);
-  CGContextScaleCTM(ctx, 1.0, -1.0);
-  CGContextTranslateCTM(ctx, 0, -dcHeight);
-
-  for (size_t i = 0; i < cells.size();) {
-    const auto &firstCell = cells[i];
-    const wxFont &font =
-        GetCachedFont(firstCell.attrs.bold, firstCell.attrs.underline);
-    CTFontRef ctFont = font.OSXGetCTFont();
-    if (!ctFont) {
-      ++i;
-      continue;
-    }
-
-    CGFloat descent = CTFontGetDescent(ctFont);
-
-    std::vector<CGGlyph> glyphs;
-    std::vector<CGPoint> positions;
-
-    size_t j = i;
-    while (j < cells.size() && cells[j].attrs == firstCell.attrs) {
-      UniChar ch = static_cast<UniChar>(cells[j].ch);
-      CGGlyph glyph = 0;
-      if (CTFontGetGlyphsForCharacters(ctFont, &ch, &glyph, 1) && glyph) {
-        glyphs.push_back(glyph);
-        // Now in unflipped CG coords: origin bottom-left, Y goes up
-        CGFloat cgX = static_cast<CGFloat>(cells[j].colIdx * m_charW);
-        CGFloat cgY = static_cast<CGFloat>(dcHeight - y) - m_charH + descent;
-        positions.push_back(CGPointMake(cgX, cgY));
-      }
-      ++j;
-    }
-
-    if (!glyphs.empty()) {
-      const wxColour &fg = firstCell.attrs.fgColor;
-      CGContextSetRGBFillColor(ctx, fg.Red() / 255.0, fg.Green() / 255.0,
-                               fg.Blue() / 255.0, fg.Alpha() / 255.0);
-      CTFontDrawGlyphs(ctFont, glyphs.data(), positions.data(), glyphs.size(),
-                       ctx);
-      counters.draw_text_++;
-    }
-    i = j;
-  }
-
-  CGContextRestoreGState(ctx);
-}
-#endif
 
 void wxTerminalViewCtrl::RenderRow(wxDC &dc, int y, int rowIdx,
                                    const std::vector<terminal::Cell> &row,

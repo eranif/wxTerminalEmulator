@@ -28,14 +28,10 @@ static std::string OscRgbResponse(const wxColour &c, int oscId) {
 TerminalCore::TerminalCore(std::size_t rows, std::size_t cols,
                            std::size_t maxLines)
     : m_rows(rows), m_cols(cols), m_maxLines(maxLines) {
-  m_attr.SetColours(m_theme);
   Reset();
 }
 
-void TerminalCore::SetTheme(const wxTerminalTheme &theme) {
-  m_theme = theme;
-  m_attr.SetColours(m_theme);
-}
+void TerminalCore::SetTheme(const wxTerminalTheme &theme) { m_theme = theme; }
 
 static ColourIndex MakeColourIndex(int index, bool bright = false) {
   return ColourIndex{index, bright};
@@ -842,7 +838,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
 
 void TerminalCore::ApplySgr(const std::string &params) {
   if (params.empty()) {
-    m_attr = Cell::New(m_theme);
+    m_attr = Cell::New();
     return;
   }
 
@@ -871,7 +867,7 @@ void TerminalCore::ApplySgr(const std::string &params) {
     int code = codes[i];
     switch (code) {
     case 0:
-      m_attr = Cell::New(m_theme);
+      m_attr = Cell::New();
       break;
     case 1:
       m_attr.SetBold(true);
