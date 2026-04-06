@@ -360,7 +360,9 @@ private:
   struct PrepareRowForDrawingResult {
     std::vector<wxTerminalViewCtrl::CellInfo> cells;
     bool is_ascii_safe{true};
+    bool row_has_selection{false};
   };
+
   PrepareRowForDrawingResult
   PrepareRowForDrawing(const std::vector<terminal::Cell> &row, int rowIdx,
                        const wxRect &selected_cells);

@@ -148,7 +148,7 @@ wxRect wxTerminalViewCtrl::SelectionRect::ViewCellToPixelsRect(
 }
 
 bool wxTerminalViewCtrl::SelectionRect::IsSelectionRectHasMinSize() const {
-  static constexpr int kMinRectSize = 1;
+  static constexpr int kMinRectSize = 2;
   return !m_rect.IsEmpty() && (m_rect.GetSize().GetWidth() >= kMinRectSize ||
                                m_rect.GetSize().GetHeight() >= kMinRectSize);
 }
@@ -622,7 +622,8 @@ wxTerminalViewCtrl::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
     return foreground ? theme.fg : theme.bg;
   switch (spec->kind) {
   case ColourSpec::Kind::Ansi:
-    return terminal::ToColour(theme.GetAnsiColor(spec->ansi.index, spec->ansi.bright));
+    return terminal::ToColour(
+        theme.GetAnsiColor(spec->ansi.index, spec->ansi.bright));
   case ColourSpec::Kind::Palette256:
     return terminal::ToColour(theme.Get256Color(spec->paletteIndex));
   case ColourSpec::Kind::TrueColor:
@@ -663,6 +664,10 @@ wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
 
     wxPoint current_pos(colIdx, rowIdx);
     bool isMouseSelected = selected_cells.Contains(current_pos);
+
+    if (!result.row_has_selection) {
+      result.row_has_selection = isMouseSelected || isApiSelected;
+    }
 
     // Skip empty cells unless they are selected
     if (cell.IsEmpty() && !isApiSelected && !isMouseSelected) {
@@ -831,8 +836,10 @@ void wxTerminalViewCtrl::RenderRowWithGrouping(
   }
 
   bool isCursorLine = m_core.Cursor().y == rowIdx;
-  if (isCursorLine // never group the cursor line
-      || !result.is_ascii_safe) {
+  if (isCursorLine                // Never group the cursor line
+//      || !result.is_ascii_safe    // Found at least 1 cell with non safe ascii
+      || result.row_has_selection // Found at least 1 cell which is "selected"
+  ) {
     return RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, counters);
   }
 
