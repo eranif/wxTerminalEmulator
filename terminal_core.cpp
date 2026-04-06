@@ -206,7 +206,7 @@ void TerminalCore::PutData(const std::string &data) {
 
       // Safety: if escape buffer grows too large, it's stuck — dump and reset
       if (m_escape.size() > 256) {
-        TLOG_WARN() << "Escape buffer overflow, reseting" << std::endl;
+        TLOG_WARN() << "Escape buffer overflow, resetting" << std::endl;
         m_escape.clear();
         m_inEscape = false;
         continue;
@@ -290,7 +290,8 @@ void TerminalCore::PutData(const std::string &data) {
 
 void TerminalCore::PutChar(char c) {
   unsigned char uc = static_cast<unsigned char>(c);
-  if (uc < 0x20 && c != '\n' && c != '\r' && c != '\b' && c != '\t')
+  if (uc < 0x20 && c != '\n' && c != '\r' && c != '\b' && c != '\t' &&
+      c != '\x07')
     return;
   switch (c) {
   case '\n':
@@ -304,6 +305,12 @@ void TerminalCore::PutChar(char c) {
     break;
   case '\t':
     Tab();
+    break;
+  case '\x07':
+    TLOG_IF_TRACE { TLOG_TRACE() << "Captured BELL" << std::endl; }
+    if (m_bellCallback) {
+      m_bellCallback();
+    }
     break;
   default:
     PutPrintable(c);

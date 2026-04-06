@@ -161,6 +161,7 @@ public:
   void SetTitleCallback(std::function<void(const std::string &)> callback) {
     m_titleCallback = callback;
   }
+  void SetBellCallback(std::function<void()> callback) { m_bellCallback = callback; }
 
   std::size_t Rows() const { return m_rows; }
   std::size_t Cols() const { return m_cols; }
@@ -288,6 +289,7 @@ private:
   wxTerminalTheme m_theme;
   std::function<void(const std::string &)> m_responseCallback;
   std::function<void(const std::string &)> m_titleCallback;
+  std::function<void()> m_bellCallback;
   std::string m_utf8Buf;
   wxRect m_clickedRect;
 };

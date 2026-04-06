@@ -268,6 +268,11 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     event.SetEventObject(this);
     GetEventHandler()->AddPendingEvent(event);
   });
+  m_core.SetBellCallback([this]() {
+    wxTerminalEvent event{wxEVT_TERMINAL_BELL};
+    event.SetEventObject(this);
+    GetEventHandler()->AddPendingEvent(event);
+  });
   CallAfter(&wxTerminalViewCtrl::SetFocus);
 }
 

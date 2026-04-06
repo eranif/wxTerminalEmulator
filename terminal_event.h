@@ -30,3 +30,5 @@ wxDECLARE_EVENT(wxEVT_TERMINAL_TITLE_CHANGED, wxTerminalEvent);
 wxDECLARE_EVENT(wxEVT_TERMINAL_TERMINATED, wxTerminalEvent);
 /// User used Ctrl+CLICK on a text in the terminal.
 wxDECLARE_EVENT(wxEVT_TERMINAL_TEXT_LINK, wxTerminalEvent);
+/// Terminal BELL sound
+wxDECLARE_EVENT(wxEVT_TERMINAL_BELL, wxTerminalEvent);

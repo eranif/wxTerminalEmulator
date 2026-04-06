@@ -44,6 +44,9 @@ public:
       : wxFrame(nullptr, wxID_ANY, "wxTerminalEmulator") {
     wxString shellCommand;
     parser.Found("shell", &shellCommand);
+    m_timer.SetOwner(this);
+    Bind(wxEVT_TIMER, &MyFrame::OnTimer, this, m_timer.GetId());
+    m_timer.StartOnce(1000);
 
     // Get the primary display size
     wxDisplay display(wxDisplay::GetFromWindow(this));
@@ -183,6 +186,7 @@ public:
     page->Bind(wxEVT_TERMINAL_TITLE_CHANGED, &MyFrame::OnTitleChanged, this);
     page->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
     page->Bind(wxEVT_TERMINAL_TEXT_LINK, &MyFrame::OnTerminalLink, this);
+    page->Bind(wxEVT_TERMINAL_BELL, &MyFrame::OnBell, this);
     return page;
   }
 
@@ -442,11 +446,9 @@ public:
     if (auto *view =
             dynamic_cast<wxTerminalViewCtrl *>(event.GetEventObject())) {
       if (m_notebook) {
-        for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
-          if (m_notebook->GetPage(i) == view) {
-            m_notebook->SetPageText(i, event.GetTitle());
-            break;
-          }
+        int sel = m_notebook->FindPage(view);
+        if (sel != wxNOT_FOUND) {
+          m_notebook->SetPageText(sel, event.GetTitle());
         }
       }
     }
@@ -455,6 +457,41 @@ public:
 
   void OnTerminalLink(wxTerminalEvent &event) {
     wxMessageBox(event.GetClickedText());
+  }
+
+  void OnBell(wxTerminalEvent &event) {
+    auto view = dynamic_cast<wxTerminalViewCtrl *>(event.GetEventObject());
+    if (!view) {
+      return;
+    }
+    if (!m_notebook) {
+      return;
+    }
+    int sel = m_notebook->FindPage(view);
+    if (sel != wxNOT_FOUND) {
+      return;
+    }
+
+    wxString page_title = m_notebook->GetPageText(sel);
+    m_notebook->SetPageText(sel, page_title + wxT(" 🚨 "));
+
+    auto restore_title = [view, page_title, this]() {
+      int where = m_notebook->FindPage(view);
+      if (where == wxNOT_FOUND) {
+        return;
+      }
+      m_notebook->SetPageText(where, page_title);
+    };
+    m_timerCallbacks.push_back(std::move(restore_title));
+  }
+
+  void OnTimer(wxTimerEvent &event) {
+    while (!m_timerCallbacks.empty()) {
+      auto cb = std::move(m_timerCallbacks.front());
+      m_timerCallbacks.pop_front();
+      cb();
+    }
+    m_timer.StartOnce(1000);
   }
 
   void Terminate() { Close(true); }
@@ -492,6 +529,8 @@ private:
   bool m_themeIsDark{true};
   wxFont m_persistedFont;
   bool m_safeDrawingEnabled{false};
+  wxTimer m_timer;
+  std::deque<std::function<void()>> m_timerCallbacks;
 };
 
 class MyApp : public wxApp {
