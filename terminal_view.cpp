@@ -1033,15 +1033,7 @@ void wxTerminalViewCtrl::RenderRow(wxDC &dc, int y, int rowIdx,
     RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, counters);
     return;
   }
-
-#if defined(__WXMSW__)
   RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
-#elif defined(__WXMAC__)
-  // Best drawing for macOS.
-  RenderRowPosix(dc, y, rowIdx, row, selected_cells, counters);
-#else
-  RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
-#endif
 }
 
 void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
