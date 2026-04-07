@@ -174,11 +174,13 @@ private:
   struct LinearSelection {
     wxPoint anchor;  // cell where mouse-down occurred
     wxPoint current; // cell where mouse currently is
+    std::size_t viewStart{0}; // viewStart when selection was created
     bool active{false};
 
     void Clear() {
       active = false;
       anchor = current = {};
+      viewStart = 0;
     }
 
     /// Return normalized start/end so start <= end in reading order.

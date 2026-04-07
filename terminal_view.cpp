@@ -1010,6 +1010,12 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
   m_charW = dc.GetTextExtent("X").GetWidth();
   m_charH = dc.GetTextExtent("X").GetHeight();
 
+  // Invalidate selection if the view has scrolled since it was created
+  if (m_mouseSelection.HasSelection() &&
+      m_mouseSelection.viewStart != m_core.ViewStart()) {
+    m_mouseSelection.Clear();
+  }
+
   int y = 0;
   auto viewArea = m_core.GetViewArea();
   for (int rowIdx = 0; rowIdx < static_cast<int>(viewArea.size()); ++rowIdx) {
@@ -1093,6 +1099,7 @@ void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
 
   m_mouseSelection.anchor = anchorCell.value();
   m_mouseSelection.current = anchorCell.value();
+  m_mouseSelection.viewStart = m_core.ViewStart();
   m_mouseSelection.active = true;
   m_isDragging = true;
   RefreshView(true);
@@ -1700,6 +1707,7 @@ void wxTerminalViewCtrl::OnMouseLeftDoubleClick(wxMouseEvent &evt) {
   wxRect r = res.value();
   m_mouseSelection.anchor = {r.GetLeft(), r.GetTop()};
   m_mouseSelection.current = {r.GetRight(), r.GetBottom()};
+  m_mouseSelection.viewStart = m_core.ViewStart();
   m_mouseSelection.active = true;
   RefreshView();
 }
