@@ -961,10 +961,6 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
   dc.Clear();
   dc.SetFont(m_defaultFont);
 
-  if (m_mouseSelectionRect.m_viewStart != m_core.ViewStart()) {
-    m_mouseSelectionRect.Clear();
-  }
-
   if (m_charH == 0 && m_charW == 0) {
     dc.SetFont(m_defaultFontBold);
 
