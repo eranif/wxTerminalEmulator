@@ -172,8 +172,8 @@ private:
   /// coordinates. Cells between anchor and current in reading order
   /// (left-to-right, top-to-bottom) are considered selected.
   struct LinearSelection {
-    wxPoint anchor;  // cell where mouse-down occurred
-    wxPoint current; // cell where mouse currently is
+    wxPoint anchor;           // cell where mouse-down occurred
+    wxPoint current;          // cell where mouse currently is
     std::size_t viewStart{0}; // viewStart when selection was created
     bool active{false};
 
@@ -307,7 +307,7 @@ private:
    */
   bool HandleSpecialKeys(wxKeyEvent &key_event);
 
-  void DoClickable(wxMouseEvent &event);
+  void DoClickable(wxMouseEvent &event, bool fire_event);
 
   struct ApiSelection {
     std::size_t row{0}, col{0}, endCol{0};

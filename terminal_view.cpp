@@ -1079,8 +1079,9 @@ void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
   // Check if Control/CMD is down (we use CMD on macOS, since Ctrl+CLICK will
   // show the context menu)
   if (evt.GetModifiers() == wxMOD_CONTROL) {
-    // Control down
-    DoClickable(evt);
+    m_isDragging = false;
+    DoClickable(evt, false);
+    RefreshView(true);
     return;
   }
 
@@ -1136,6 +1137,14 @@ void wxTerminalViewCtrl::OnMouseUp(wxMouseEvent &evt) {
   if (HasCapture()) {
     // Release the moouse
     ReleaseMouse();
+  }
+
+  // Check if Control/CMD is down (we use CMD on macOS, since Ctrl+CLICK will
+  // show the context menu)
+  if (evt.GetModifiers() == wxMOD_CONTROL) {
+    // Control down
+    DoClickable(evt, true);
+    return;
   }
 
   if (!m_mouseSelection.HasSelection()) {
@@ -1712,7 +1721,7 @@ void wxTerminalViewCtrl::OnMouseLeftDoubleClick(wxMouseEvent &evt) {
   RefreshView();
 }
 
-void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event) {
+void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event, bool fire_event) {
   ClearMouseSelection();
   m_core.ClearClickedRange();
 
@@ -1741,10 +1750,12 @@ void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event) {
   }
   SetCursor(wxCURSOR_HAND);
 
-  wxTerminalEvent click_event{wxEVT_TERMINAL_TEXT_LINK};
-  click_event.SetClickedText(clicked_text);
-  click_event.SetEventObject(this);
-  GetEventHandler()->AddPendingEvent(click_event);
+  if (fire_event) {
+    wxTerminalEvent click_event{wxEVT_TERMINAL_TEXT_LINK};
+    click_event.SetClickedText(clicked_text);
+    click_event.SetEventObject(this);
+    GetEventHandler()->AddPendingEvent(click_event);
+  }
 }
 
 wxString wxTerminalViewCtrl::GetRange(std::size_t row, std::size_t col,
