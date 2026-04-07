@@ -85,97 +85,7 @@ EnvMap BuildEnvMap() {
   return env_map;
 }
 
-inline wxRect MakeRect(const wxPoint &p1, const wxPoint &p2) {
-  const int x = std::min(p1.x, p2.x);
-  const int y = std::min(p1.y, p2.y);
-  const int w = std::abs(p2.x - p1.x);
-  const int h = std::abs(p2.y - p1.y);
-  return wxRect{x, y, w, h};
-}
 } // namespace
-
-void wxTerminalViewCtrl::SelectionRect::Clear() {
-  m_rect = {};
-  m_selectionAnchor = {};
-  m_viewStart = UINT64_MAX;
-}
-
-wxRect wxTerminalViewCtrl::SelectionRect::PixelsRectToViewCellRect(
-    int char_width, int char_height) const {
-  return PixelsRectToViewCellRect(m_rect, char_width, char_height);
-}
-
-wxRect wxTerminalViewCtrl::SelectionRect::PixelsRectToViewCellRect(
-    const wxRect &pixels_rect, int char_width, int char_height) {
-  if (char_width == 0 || char_height == 0 || pixels_rect.IsEmpty()) {
-    return {};
-  }
-
-  int cell_x = std::max(pixels_rect.GetX() / char_width, 0);
-  int cell_y = std::max(pixels_rect.GetY() / char_height, 0);
-  int pixel_right = std::max(pixels_rect.GetRight(), 0);
-  int pixel_bottom = std::max(pixels_rect.GetBottom(), 0);
-  int cell_right = (pixel_right + char_width - 1) / char_width - 1;
-  int cell_bottom = (pixel_bottom + char_height - 1) / char_height - 1;
-  cell_right = std::max(cell_right, 0);
-  cell_bottom = std::max(cell_bottom, 0);
-
-  int cell_width = cell_right - cell_x + 1;
-  int cell_height = cell_bottom - cell_y + 1;
-
-  cell_right = std::max(cell_width, 0);
-  cell_bottom = std::max(cell_height, 0);
-
-  return wxRect(cell_x, cell_y, cell_width, cell_height);
-}
-
-void wxTerminalViewCtrl::SelectionRect::SnapToCellGrid(int char_width,
-                                                       int char_height) {
-  if (char_width == 0 || char_height == 0 || m_rect.IsEmpty()) {
-    return;
-  }
-
-  m_rect =
-      ViewCellToPixelsRect(PixelsRectToViewCellRect(char_width, char_height),
-                           char_width, char_height);
-}
-
-wxRect wxTerminalViewCtrl::SelectionRect::ViewCellToPixelsRect(
-    const wxRect &viewrect, int char_width, int char_height) const {
-  if (char_width == 0 || char_height == 0 || viewrect.IsEmpty()) {
-    return {};
-  }
-
-  return wxRect(viewrect.GetX() * char_width, viewrect.GetY() * char_height,
-                viewrect.GetWidth() * char_width,
-                viewrect.GetHeight() * char_height);
-}
-
-bool wxTerminalViewCtrl::SelectionRect::IsSelectionRectHasMinSize() const {
-  static constexpr int kMinRectSize = 2;
-  return !m_rect.IsEmpty() && (m_rect.GetSize().GetWidth() >= kMinRectSize ||
-                               m_rect.GetSize().GetHeight() >= kMinRectSize);
-}
-
-void wxTerminalViewCtrl::SelectionRect::SetAnchor(const wxPoint &anchor) {
-  m_selectionAnchor = anchor;
-  m_rect = wxRect(anchor, wxSize{1, 1});
-}
-
-void wxTerminalViewCtrl::SelectionRect::UpdateCurrent(const wxPoint &current) {
-  m_rect = MakeRect(m_selectionAnchor, current);
-}
-
-wxTerminalViewCtrl::SelectionRect
-wxTerminalViewCtrl::SelectionRect::FromViewRect(const wxRect &rect,
-                                                int char_width,
-                                                int char_height) {
-  wxTerminalViewCtrl::SelectionRect selection_rect;
-  selection_rect.m_rect =
-      selection_rect.ViewCellToPixelsRect(rect, char_width, char_height);
-  selection_rect.m_selectionAnchor = selection_rect.m_rect.GetTopLeft();
-  return selection_rect;
-}
 
 // Map of character key codes to their shifted values
 static const std::unordered_map<int, int> shiftMap = {
@@ -405,7 +315,7 @@ void wxTerminalViewCtrl::SendCtrlU() {
 }
 
 void wxTerminalViewCtrl::SendCtrlL() {
-  m_mouseSelectionRect.Clear();
+  m_mouseSelection.Clear();
   m_userSelection.Clear();
   if (!IsUnixKeyboardMode()) {
     // Windows style "Ctrl-L" for CMD / PS
@@ -567,13 +477,13 @@ void wxTerminalViewCtrl::ClearUserSelection() {
 }
 
 void wxTerminalViewCtrl::ClearMouseSelection() {
-  m_mouseSelectionRect.Clear();
+  m_mouseSelection.Clear();
   m_isDragging = false;
   RefreshView();
 }
 
 bool wxTerminalViewCtrl::HasActiveSelection() const {
-  return m_mouseSelectionRect.IsSelectionRectHasMinSize();
+  return m_mouseSelection.HasSelection();
 }
 
 std::optional<wxPoint>
@@ -645,8 +555,7 @@ wxTerminalViewCtrl::GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
 
 wxTerminalViewCtrl::PrepareRowForDrawingResult
 wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
-                                         int rowIdx,
-                                         const wxRect &selected_cells) {
+                                         int rowIdx) {
   const auto &theme = m_core.GetTheme();
   // Build a list of cells with their attributes, skipping truly empty ones
   wxTerminalViewCtrl::PrepareRowForDrawingResult result;
@@ -671,8 +580,7 @@ wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
            static_cast<std::size_t>(colIdx) < m_userSelection.endCol);
     }
 
-    wxPoint current_pos(colIdx, rowIdx);
-    bool isMouseSelected = selected_cells.Contains(current_pos);
+    bool isMouseSelected = m_mouseSelection.Contains(colIdx, rowIdx);
 
     if (!result.row_has_selection) {
       result.row_has_selection = isMouseSelected || isApiSelected;
@@ -845,9 +753,9 @@ void wxTerminalViewCtrl::RenderMonotonicRow(
 
 void wxTerminalViewCtrl::RenderRowWithGrouping(
     wxDC &dc, int y, int rowIdx, const std::vector<terminal::Cell> &row,
-    const wxRect &selected_cells, PaintCounters &counters) {
+    PaintCounters &counters) {
 
-  auto result = PrepareRowForDrawing(row, rowIdx, selected_cells);
+  auto result = PrepareRowForDrawing(row, rowIdx);
   auto &cells = result.cells;
   if (cells.empty()) {
     return;
@@ -859,7 +767,7 @@ void wxTerminalViewCtrl::RenderRowWithGrouping(
                    //      with non safe ascii
       || result.row_has_selection // Found at least 1 cell which is "selected"
   ) {
-    return RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, counters);
+    return RenderRowNoGrouping(dc, y, rowIdx, row, counters);
   }
 
   // Fast path: Check if all cells have identical attributes
@@ -938,9 +846,9 @@ void wxTerminalViewCtrl::RenderRowWithGrouping(
 
 void wxTerminalViewCtrl::RenderRowNoGrouping(
     wxDC &dc, int y, int rowIdx, const std::vector<terminal::Cell> &row,
-    const wxRect &selected_cells, PaintCounters &counters) {
+    PaintCounters &counters) {
   // Build a list of cells with their attributes, skipping truly empty ones
-  auto result = PrepareRowForDrawing(row, rowIdx, selected_cells);
+  auto result = PrepareRowForDrawing(row, rowIdx);
   auto &cells = result.cells;
 
   // Now group and render consecutive cells with the same attributes
@@ -978,9 +886,8 @@ void wxTerminalViewCtrl::RenderRowNoGrouping(
 
 void wxTerminalViewCtrl::RenderRowPosix(wxDC &dc, int y, int rowIdx,
                                         const std::vector<terminal::Cell> &row,
-                                        const wxRect &selected_cells,
                                         PaintCounters &counters) {
-  auto result = PrepareRowForDrawing(row, rowIdx, selected_cells);
+  auto result = PrepareRowForDrawing(row, rowIdx);
   auto &cells = result.cells;
 
   if (cells.empty()) {
@@ -1030,16 +937,15 @@ void wxTerminalViewCtrl::RenderRowPosix(wxDC &dc, int y, int rowIdx,
 
 void wxTerminalViewCtrl::RenderRow(wxDC &dc, int y, int rowIdx,
                                    const std::vector<terminal::Cell> &row,
-                                   const wxRect &selected_cells,
                                    PaintCounters &counters) {
   if (IsSafeDrawing()) {
     // When enabled, we draw cell by cell, it is slower
     // but it can handle unicode and other non aligned grids with
     // accuracy and avoid drawing glitches.
-    RenderRowNoGrouping(dc, y, rowIdx, row, selected_cells, counters);
+    RenderRowNoGrouping(dc, y, rowIdx, row, counters);
     return;
   }
-  RenderRowWithGrouping(dc, y, rowIdx, row, selected_cells, counters);
+  RenderRowWithGrouping(dc, y, rowIdx, row, counters);
 }
 
 void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
@@ -1113,17 +1019,11 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
   m_charW = dc.GetTextExtent("X").GetWidth();
   m_charH = dc.GetTextExtent("X").GetHeight();
 
-  wxRect selected_cells = {};
-  if (m_mouseSelectionRect.IsSelectionRectHasMinSize()) {
-    selected_cells =
-        m_mouseSelectionRect.PixelsRectToViewCellRect(m_charW, m_charH);
-  }
-
   int y = 0;
   auto viewArea = m_core.GetViewArea();
   for (int rowIdx = 0; rowIdx < static_cast<int>(viewArea.size()); ++rowIdx) {
     const auto &row = *viewArea[rowIdx];
-    RenderRow(dc, y, rowIdx, row, selected_cells, paint_counters);
+    RenderRow(dc, y, rowIdx, row, paint_counters);
     y += m_charH;
   }
 
@@ -1192,14 +1092,17 @@ void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
     return;
   }
 
-  if (!m_mouseSelectionRect.IsEmpty()) {
-    // Clear and start a new selection.
-    m_mouseSelectionRect.Clear();
+  m_mouseSelection.Clear();
+
+  // Convert pixel position to cell coordinates for the anchor
+  auto anchorCell = PointToCell(wxPoint{evt.GetX(), evt.GetY()});
+  if (!anchorCell.has_value()) {
+    return;
   }
 
-  m_mouseSelectionRect.SetAnchor(wxPoint{evt.GetX(), evt.GetY()});
-  m_mouseSelectionRect.m_viewStart =
-      m_core.ViewStart(); // Remember the view start position.
+  m_mouseSelection.anchor = anchorCell.value();
+  m_mouseSelection.current = anchorCell.value();
+  m_mouseSelection.active = true;
   m_isDragging = true;
   RefreshView(true);
   CaptureMouse();
@@ -1222,8 +1125,10 @@ void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
     return;
   }
 
-  wxPoint pt2{evt.GetX(), evt.GetY()};
-  m_mouseSelectionRect.UpdateCurrent(pt2);
+  auto cell = PointToCell(wxPoint{evt.GetX(), evt.GetY()});
+  if (cell.has_value()) {
+    m_mouseSelection.current = cell.value();
+  }
   RefreshView();
 }
 
@@ -1235,13 +1140,11 @@ void wxTerminalViewCtrl::OnMouseUp(wxMouseEvent &evt) {
     ReleaseMouse();
   }
 
-  if (!m_mouseSelectionRect.IsSelectionRectHasMinSize()) {
-    m_mouseSelectionRect.Clear();
+  if (!m_mouseSelection.HasSelection()) {
+    m_mouseSelection.Clear();
     return;
   }
 
-  // Adjust the selection rect into cell rect.
-  m_mouseSelectionRect.SnapToCellGrid(m_charW, m_charH);
   RefreshView(true);
 }
 
@@ -1261,14 +1164,14 @@ void wxTerminalViewCtrl::OnMouseWheel(wxMouseEvent &evt) {
     m_core.SetViewStart(0);
   else
     m_core.SetViewStart(vs + static_cast<std::size_t>(-lines));
-  m_mouseSelectionRect.Clear();
+  m_mouseSelection.Clear();
   RefreshView();
 }
 
 void wxTerminalViewCtrl::OnContextMenu(wxContextMenuEvent &evt) {
   wxMenu menu;
 
-  if (m_mouseSelectionRect.IsSelectionRectHasMinSize()) {
+  if (m_mouseSelection.HasSelection()) {
     menu.Append(wxID_COPY, _("Copy"));
   }
   menu.Append(wxID_PASTE, _("Paste"));
@@ -1369,7 +1272,7 @@ void wxTerminalViewCtrl::OnCharHook(wxKeyEvent &evt) {
     SendTab();
     return;
   } else if (key == WXK_ESCAPE) {
-    if (m_mouseSelectionRect.IsSelectionRectHasMinSize()) {
+    if (m_mouseSelection.HasSelection()) {
       ClearMouseSelection();
       return;
     }
@@ -1403,7 +1306,7 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
   // On macOS, Cmd+C/V for copy/paste
   // (ControlDown() = Cmd key)
   if (evt.ControlDown() && !evt.AltDown()) {
-    if (m_mouseSelectionRect.IsSelectionRectHasMinSize() &&
+    if (m_mouseSelection.HasSelection() &&
         (key == 'C' || key == 'c')) {
       wxCommandEvent copyEvt(wxEVT_MENU, wxID_COPY);
       OnCopy(copyEvt);
@@ -1582,31 +1485,35 @@ const wxFont &wxTerminalViewCtrl::GetCachedFont(bool bold,
 
 void wxTerminalViewCtrl::Copy() {
   TLOG_DEBUG() << "Copy is called!" << std::endl;
-  if (!m_mouseSelectionRect.IsSelectionRectHasMinSize()) {
+  if (!m_mouseSelection.HasSelection()) {
     TLOG_DEBUG() << "No selection is active - will "
                     "do nothing"
                  << std::endl;
     return;
   }
 
-  // Get the selected text
+  // Get the selected text using linear (reading-order) selection
   wxString selection;
-  wxRect rect = m_mouseSelectionRect.PixelsRectToViewCellRect(m_charW, m_charH);
-  TLOG_DEBUG() << "Copying content: " << rect << std::endl;
+  wxPoint s, e;
+  m_mouseSelection.GetNormalized(s, e);
+  TLOG_DEBUG() << "Copying content: (" << s.x << "," << s.y << ")-(" << e.x
+               << "," << e.y << ")" << std::endl;
   auto viewArea = m_core.GetViewArea();
-  for (int y = rect.GetTopLeft().y;
-       y <= rect.GetBottomLeft().y && y < static_cast<int>(viewArea.size());
-       ++y) {
+  int cols = static_cast<int>(m_core.Cols());
+  for (int y = s.y; y <= e.y && y < static_cast<int>(viewArea.size()); ++y) {
     const auto &row = *viewArea[y];
-    for (int x = rect.GetTopLeft().x;
-         x <= rect.GetTopRight().x && x < static_cast<int>(row.size()); ++x) {
+    int startCol = (y == s.y) ? s.x : 0;
+    int endCol = (y == e.y) ? e.x : cols - 1;
+    for (int x = startCol; x <= endCol && x < static_cast<int>(row.size());
+         ++x) {
       selection += wxUniChar(row[x].ch);
     }
-    selection += "\n"; // Add newline between rows
-  }
-
-  if (!selection.empty()) {
-    selection.RemoveLast();
+    // Trim trailing spaces on fully-selected middle/first rows, then add
+    // newline
+    if (y != e.y) {
+      selection.Trim();
+      selection += "\n";
+    }
   }
 
   TLOG_DEBUG() << "Copying:" << selection.size() << " chars. Content:\n"
@@ -1640,7 +1547,7 @@ void wxTerminalViewCtrl::Paste() {
 void wxTerminalViewCtrl::ClearAll() {
   Feed("\033[2J\033[3J");
   m_userSelection.Clear();
-  m_mouseSelectionRect.Clear();
+  m_mouseSelection.Clear();
   RefreshView();
 }
 
@@ -1793,8 +1700,12 @@ void wxTerminalViewCtrl::OnMouseLeftDoubleClick(wxMouseEvent &evt) {
     return;
   }
 
-  m_mouseSelectionRect =
-      SelectionRect::FromViewRect(res.value(), m_charW, m_charH);
+  // SelectionRectFromMousePoint returns a wxRect in view cell coords:
+  // x=startCol, y=row, width=count, height=1
+  wxRect r = res.value();
+  m_mouseSelection.anchor = {r.GetLeft(), r.GetTop()};
+  m_mouseSelection.current = {r.GetRight(), r.GetBottom()};
+  m_mouseSelection.active = true;
   RefreshView();
 }
 

@@ -168,31 +168,48 @@ public:
   wxBorder GetDefaultBorder() const override { return wxBORDER_NONE; }
 
 private:
-  struct SelectionRect {
-    wxRect m_rect; // in pixels
-    wxPoint m_selectionAnchor;
-    size_t m_viewStart{UINT64_MAX};
+  /// Linear selection defined by anchor and current cell in viewport
+  /// coordinates. Cells between anchor and current in reading order
+  /// (left-to-right, top-to-bottom) are considered selected.
+  struct LinearSelection {
+    wxPoint anchor;  // cell where mouse-down occurred
+    wxPoint current; // cell where mouse currently is
+    bool active{false};
 
-    SelectionRect() = default;
-    inline SelectionRect &operator=(const wxRect &rect) {
-      m_rect = rect;
-      m_selectionAnchor = rect.GetTopLeft();
-      return *this;
+    void Clear() {
+      active = false;
+      anchor = current = {};
     }
 
-    void Clear();
-    static wxRect PixelsRectToViewCellRect(const wxRect &pixels_rect,
-                                           int char_width, int char_height);
-    wxRect PixelsRectToViewCellRect(int char_width, int char_height) const;
-    wxRect ViewCellToPixelsRect(const wxRect &viewrect, int char_width,
-                                int char_height) const;
-    bool IsSelectionRectHasMinSize() const;
-    void SetAnchor(const wxPoint &anchor);
-    void UpdateCurrent(const wxPoint &current);
-    void SnapToCellGrid(int char_width, int char_height);
-    inline bool IsEmpty() const { return m_rect.IsEmpty(); }
-    static SelectionRect FromViewRect(const wxRect &rect, int char_width,
-                                      int char_height);
+    /// Return normalized start/end so start <= end in reading order.
+    void GetNormalized(wxPoint &s, wxPoint &e) const {
+      s = anchor;
+      e = current;
+      if (s.y > e.y || (s.y == e.y && s.x > e.x))
+        std::swap(s, e);
+    }
+
+    bool Contains(int col, int row) const {
+      if (!active)
+        return false;
+      wxPoint s, e;
+      GetNormalized(s, e);
+      if (row < s.y || row > e.y)
+        return false;
+      if (row == s.y && row == e.y)
+        return col >= s.x && col <= e.x;
+      if (row == s.y)
+        return col >= s.x;
+      if (row == e.y)
+        return col <= e.x;
+      return true; // middle row — fully selected
+    }
+
+    bool HasSelection() const {
+      if (!active)
+        return false;
+      return anchor != current;
+    }
   };
   void RefreshView(bool now = false);
   bool IsUnixKeyboardMode() const;
@@ -220,18 +237,16 @@ private:
 
   void RenderRow(wxDC &dc, int y, int rowIdx,
                  const std::vector<terminal::Cell> &row,
-                 const wxRect &selected_cells, PaintCounters &counters);
+                 PaintCounters &counters);
   void RenderRowNoGrouping(wxDC &dc, int y, int rowIdx,
                            const std::vector<terminal::Cell> &row,
-                           const wxRect &selected_cells,
                            PaintCounters &counters);
   void RenderRowWithGrouping(wxDC &dc, int y, int rowIdx,
                              const std::vector<terminal::Cell> &row,
-                             const wxRect &selected_cells,
                              PaintCounters &counters);
   void RenderRowPosix(wxDC &dc, int y, int rowIdx,
                       const std::vector<terminal::Cell> &row,
-                      const wxRect &selected_cells, PaintCounters &counters);
+                      PaintCounters &counters);
 
   void OnSize(wxSizeEvent &evt);
   void OnCharHook(wxKeyEvent &evt);
@@ -366,8 +381,7 @@ private:
   };
 
   PrepareRowForDrawingResult
-  PrepareRowForDrawing(const std::vector<terminal::Cell> &row, int rowIdx,
-                       const wxRect &selected_cells);
+  PrepareRowForDrawing(const std::vector<terminal::Cell> &row, int rowIdx);
   /// Draw a row where all of its cells share the same attributes
   void
   RenderMonotonicRow(wxDC &dc, int y, int rowIdx,
@@ -376,7 +390,7 @@ private:
 
   terminal::TerminalCore m_core;
   std::unique_ptr<terminal::PtyBackend> m_backend;
-  SelectionRect m_mouseSelectionRect{};
+  LinearSelection m_mouseSelection{};
   ApiSelection m_userSelection;
   bool m_isDragging{false};
   int m_scrollOffset{0}; // 0 = at bottom, >0 = scrolled back
