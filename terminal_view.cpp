@@ -22,11 +22,6 @@
 #include <wx/settings.h>
 #include <wx/window.h>
 
-#ifdef __WXOSX__
-#include <CoreGraphics/CoreGraphics.h>
-#include <CoreText/CoreText.h>
-#endif
-
 using terminal::ColourSpec;
 
 #ifndef __WXMSW__
@@ -1306,8 +1301,7 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
   // On macOS, Cmd+C/V for copy/paste
   // (ControlDown() = Cmd key)
   if (evt.ControlDown() && !evt.AltDown()) {
-    if (m_mouseSelection.HasSelection() &&
-        (key == 'C' || key == 'c')) {
+    if (m_mouseSelection.HasSelection() && (key == 'C' || key == 'c')) {
       wxCommandEvent copyEvt(wxEVT_MENU, wxID_COPY);
       OnCopy(copyEvt);
       return;
@@ -1508,11 +1502,16 @@ void wxTerminalViewCtrl::Copy() {
          ++x) {
       selection += wxUniChar(row[x].ch);
     }
-    // Trim trailing spaces on fully-selected middle/first rows, then add
-    // newline
+    // Only insert newline between rows if the next row is NOT a soft-wrap
+    // continuation of this row
     if (y != e.y) {
-      selection.Trim();
-      selection += "\n";
+      bool nextIsWrapped = m_core.IsViewRowWrapped(y + 1);
+      if (!nextIsWrapped) {
+        selection.Trim();
+      }
+      if (!nextIsWrapped) {
+        selection += "\n";
+      }
     }
   }
 

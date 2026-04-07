@@ -138,6 +138,44 @@ struct Cell {
   }
 };
 
+/// Synchronized container for terminal rows and their wrap flags.
+struct Lines {
+  using Row = std::vector<Cell>;
+
+  std::size_t size() const { return m_rows.size(); }
+
+  void clear() {
+    m_rows.clear();
+    m_wrapped.clear();
+  }
+
+  void push_back(Row row, bool wrapped = false) {
+    m_rows.push_back(std::move(row));
+    m_wrapped.push_back(wrapped);
+  }
+
+  void pop_front() {
+    m_rows.pop_front();
+    m_wrapped.pop_front();
+  }
+
+  Row &operator[](std::size_t i) { return m_rows[i]; }
+  const Row &operator[](std::size_t i) const { return m_rows[i]; }
+
+  bool IsWrapped(std::size_t i) const {
+    return i < m_wrapped.size() && m_wrapped[i];
+  }
+
+  void SetWrapped(std::size_t i, bool v) {
+    if (i < m_wrapped.size())
+      m_wrapped[i] = v;
+  }
+
+private:
+  std::deque<Row> m_rows;
+  std::deque<bool> m_wrapped;
+};
+
 class TerminalCore {
 public:
   TerminalCore(std::size_t rows = 24, std::size_t cols = 80,
@@ -185,6 +223,9 @@ public:
 
   // Returns the visible rows (view area) as a vector of pointers to rows
   std::vector<const std::vector<Cell> *> GetViewArea() const;
+
+  /// Returns true if the given viewport row was created by a soft line wrap.
+  bool IsViewRowWrapped(std::size_t viewRow) const;
 
   wxString Flatten() const;
 
@@ -256,7 +297,7 @@ private:
   std::size_t m_cols{80};
   std::size_t m_maxLines{1000};
 
-  std::deque<std::vector<Cell>> m_buffer;
+  Lines m_buffer;
   std::size_t m_viewStart{0};
   std::size_t m_shellStart{0};
   wxPoint m_cursor{};
@@ -273,7 +314,7 @@ private:
 
   // Alternate screen buffer
   struct ScreenState {
-    std::deque<std::vector<Cell>> buffer;
+    Lines buffer;
     std::size_t viewStart{0};
     std::size_t shellStart{0};
     wxPoint cursor{};

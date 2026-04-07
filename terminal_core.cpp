@@ -110,6 +110,11 @@ std::vector<const std::vector<Cell> *> TerminalCore::GetViewArea() const {
   return view;
 }
 
+bool TerminalCore::IsViewRowWrapped(std::size_t viewRow) const {
+  std::size_t abs = m_viewStart + viewRow;
+  return m_buffer.IsWrapped(abs);
+}
+
 void TerminalCore::SetViewStart(std::size_t vs) {
   std::size_t maxVs = m_buffer.size() > m_rows ? m_buffer.size() - m_rows : 0;
   m_viewStart = std::min(vs, maxVs);
@@ -124,15 +129,16 @@ void TerminalCore::Resize(std::size_t rows, std::size_t cols) {
 
   // If cols changed, resize all existing rows
   if (newCols != m_cols) {
-    for (auto &row : m_buffer) {
-      row.resize(newCols);
+    for (std::size_t i = 0; i < m_buffer.size(); ++i) {
+      m_buffer[i].resize(newCols);
     }
   }
 
   // If viewport grew taller, ensure we have enough rows in the buffer
   if (newRows > m_rows) {
-    while (m_buffer.size() < m_viewStart + newRows)
+    while (m_buffer.size() < m_viewStart + newRows) {
       m_buffer.push_back(std::vector<Cell>(newCols));
+    }
   }
 
   m_rows = newRows;
@@ -184,8 +190,9 @@ void TerminalCore::MoveCursor(std::size_t row, std::size_t col) {
 
 void TerminalCore::Reset() {
   m_buffer.clear();
-  for (std::size_t r = 0; r < m_rows; ++r)
+  for (std::size_t r = 0; r < m_rows; ++r) {
     m_buffer.push_back(std::vector<Cell>(m_cols));
+  }
   m_viewStart = 0;
   m_shellStart = 0;
   m_cursor = {};
@@ -330,6 +337,9 @@ void TerminalCore::PutCell(char32_t cp) {
   if (m_cursor.x >= m_cols) {
     m_cursor.x = 0;
     NewLine();
+    // Mark the new row as a soft-wrap continuation
+    std::size_t abs = AbsRow(m_cursor.y);
+    m_buffer.SetWrapped(abs, true);
     CarriageReturn();
   }
 
@@ -388,9 +398,12 @@ void TerminalCore::ScrollRegionUp() {
   std::size_t bot = AbsRow(m_scrollBottom);
   if (top >= m_buffer.size() || bot >= m_buffer.size())
     return;
-  for (std::size_t r = top; r < bot; ++r)
+  for (std::size_t r = top; r < bot; ++r) {
     m_buffer[r] = m_buffer[r + 1];
+    m_buffer.SetWrapped(r, m_buffer.IsWrapped(r + 1));
+  }
   m_buffer[bot] = std::vector<Cell>(m_cols);
+  m_buffer.SetWrapped(bot, false);
 }
 
 void TerminalCore::ScrollRegionDown() {
@@ -399,9 +412,12 @@ void TerminalCore::ScrollRegionDown() {
   std::size_t bot = AbsRow(m_scrollBottom);
   if (top >= m_buffer.size() || bot >= m_buffer.size())
     return;
-  for (std::size_t r = bot; r > top; --r)
+  for (std::size_t r = bot; r > top; --r) {
     m_buffer[r] = m_buffer[r - 1];
+    m_buffer.SetWrapped(r, m_buffer.IsWrapped(r - 1));
+  }
   m_buffer[top] = std::vector<Cell>(m_cols);
+  m_buffer.SetWrapped(top, false);
 }
 
 void TerminalCore::ParseEscape(const std::string &seq) {
@@ -526,8 +542,9 @@ void TerminalCore::ParseEscape(const std::string &seq) {
           m_altScreenActive = true;
           // Clear alt screen
           m_buffer.clear();
-          for (std::size_t r = 0; r < m_rows; ++r)
+          for (std::size_t r = 0; r < m_rows; ++r) {
             m_buffer.push_back(std::vector<Cell>(m_cols));
+          }
           m_viewStart = 0;
           m_shellStart = 0;
           m_cursor = {};
@@ -536,12 +553,25 @@ void TerminalCore::ParseEscape(const std::string &seq) {
         } else if (!setMode && m_altScreenActive) {
           // Restore main screen
           m_buffer = m_savedScreen.buffer;
-          m_viewStart = m_savedScreen.viewStart;
-          m_shellStart = m_savedScreen.shellStart;
           m_cursor = m_savedScreen.cursor;
           m_scrollTop = m_savedScreen.scrollTop;
           m_scrollBottom = m_savedScreen.scrollBottom;
           m_altScreenActive = false;
+
+          // Recalculate view/shell start from restored buffer size
+          // (dimensions may have changed while alt screen was active)
+          if (m_buffer.size() > m_rows) {
+            m_shellStart = m_buffer.size() - m_rows;
+          } else {
+            m_shellStart = 0;
+          }
+          m_viewStart = m_shellStart;
+
+          // Clamp cursor to current dimensions
+          if (m_cursor.y >= m_rows)
+            m_cursor.y = m_rows - 1;
+          if (m_cursor.x >= m_cols)
+            m_cursor.x = m_cols - 1;
         }
         break;
       case 25: // Show/hide cursor — acknowledged, rendering handles this
@@ -669,8 +699,9 @@ void TerminalCore::ParseEscape(const std::string &seq) {
       ClearScreen();
     } else if (mode == 3) {
       ClearScreen();
-      while (m_buffer.size() > m_rows)
+      while (m_buffer.size() > m_rows) {
         m_buffer.pop_front();
+      }
       m_viewStart = 0;
       m_shellStart = 0;
       m_cursor = {0, 0};
@@ -755,9 +786,12 @@ void TerminalCore::ParseEscape(const std::string &seq) {
       std::size_t bot = AbsRow(m_scrollBottom);
       std::size_t cur = AbsRow(m_cursor.y);
       if (cur < m_buffer.size() && bot < m_buffer.size()) {
-        for (std::size_t r = bot; r > cur; --r)
+        for (std::size_t r = bot; r > cur; --r) {
           m_buffer[r] = m_buffer[r - 1];
+          m_buffer.SetWrapped(r, m_buffer.IsWrapped(r - 1));
+        }
         m_buffer[cur] = std::vector<Cell>(m_cols);
+        m_buffer.SetWrapped(cur, false);
       }
     }
     break;
@@ -771,9 +805,12 @@ void TerminalCore::ParseEscape(const std::string &seq) {
       std::size_t bot = AbsRow(m_scrollBottom);
       std::size_t cur = AbsRow(m_cursor.y);
       if (cur < m_buffer.size() && bot < m_buffer.size()) {
-        for (std::size_t r = cur; r < bot; ++r)
+        for (std::size_t r = cur; r < bot; ++r) {
           m_buffer[r] = m_buffer[r + 1];
+          m_buffer.SetWrapped(r, m_buffer.IsWrapped(r + 1));
+        }
         m_buffer[bot] = std::vector<Cell>(m_cols);
+        m_buffer.SetWrapped(bot, false);
       }
     }
     break;
