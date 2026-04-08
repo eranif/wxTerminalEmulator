@@ -1144,6 +1144,8 @@ void wxTerminalViewCtrl::OnMouseUp(wxMouseEvent &evt) {
   if (evt.GetModifiers() == wxMOD_CONTROL) {
     // Control down
     DoClickable(evt, true);
+    m_core.ClearClickedRange();
+    RefreshView(true);
     return;
   }
 
@@ -1754,7 +1756,7 @@ void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event, bool fire_event) {
     wxTerminalEvent click_event{wxEVT_TERMINAL_TEXT_LINK};
     click_event.SetClickedText(clicked_text);
     click_event.SetEventObject(this);
-    GetEventHandler()->AddPendingEvent(click_event);
+    GetEventHandler()->ProcessEvent(click_event);
   }
 }
 
