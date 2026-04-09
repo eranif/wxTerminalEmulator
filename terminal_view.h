@@ -306,6 +306,7 @@ private:
    * was sent; returns false if the key is not handled by this method.
    */
   bool HandleSpecialKeys(wxKeyEvent &key_event);
+  void ExtendKeyboardSelection(int newCol, int newRow);
 
   void DoClickable(wxMouseEvent &event, bool fire_event);
 

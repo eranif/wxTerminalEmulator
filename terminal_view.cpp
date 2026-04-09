@@ -1102,7 +1102,7 @@ void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
   m_mouseSelection.anchor = anchorCell.value();
   m_mouseSelection.current = anchorCell.value();
   m_mouseSelection.viewStart = m_core.ViewStart();
-  m_mouseSelection.active = true;
+  m_mouseSelection.active = false; // becomes active only when mouse moves to a different cell
   m_isDragging = true;
   RefreshView(true);
   CaptureMouse();
@@ -1127,6 +1127,9 @@ void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
 
   auto cell = PointToCell(wxPoint{evt.GetX(), evt.GetY()});
   if (cell.has_value()) {
+    if (!m_mouseSelection.active && cell.value() != m_mouseSelection.anchor) {
+      m_mouseSelection.active = true;
+    }
     m_mouseSelection.current = cell.value();
   }
   RefreshView();
@@ -1309,6 +1312,14 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
 
   const int key = evt.GetKeyCode();
 
+  // Clear keyboard selection on any non-shift, non-modified keypress
+  if (!evt.ShiftDown() && !evt.ControlDown() && !evt.RawControlDown() &&
+      !evt.AltDown() && m_mouseSelection.HasSelection() &&
+      key != WXK_SHIFT && key != WXK_RAW_CONTROL && key != WXK_ALT &&
+      key != WXK_CONTROL) {
+    ClearMouseSelection();
+  }
+
   // Handle Ctrl combinations
   const bool ctrl = evt.RawControlDown();
 
@@ -1435,8 +1446,97 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
   }
 }
 
+void wxTerminalViewCtrl::ExtendKeyboardSelection(int newCol, int newRow) {
+  int rows = static_cast<int>(m_core.Rows());
+  int cols = static_cast<int>(m_core.Cols());
+
+  // Clamp column
+  newCol = std::clamp(newCol, 0, cols - 1);
+
+  // Auto-scroll and clamp row
+  if (newRow < 0) {
+    std::size_t vs = m_core.ViewStart();
+    if (vs > 0) {
+      m_core.SetViewStart(vs - 1);
+      // Adjust anchor to stay in sync with the shifted viewport
+      m_mouseSelection.anchor.y += 1;
+    }
+    newRow = 0;
+  } else if (newRow >= rows) {
+    std::size_t vs = m_core.ViewStart();
+    std::size_t maxVs =
+        m_core.TotalLines() > static_cast<std::size_t>(rows)
+            ? m_core.TotalLines() - static_cast<std::size_t>(rows)
+            : 0;
+    if (vs < maxVs) {
+      m_core.SetViewStart(vs + 1);
+      m_mouseSelection.anchor.y -= 1;
+    }
+    newRow = rows - 1;
+  }
+
+  m_mouseSelection.current = {newCol, newRow};
+  m_mouseSelection.viewStart = m_core.ViewStart();
+  RefreshView();
+}
+
 bool wxTerminalViewCtrl::HandleSpecialKeys(wxKeyEvent &key_event) {
   auto key = key_event.GetKeyCode();
+  bool shift = key_event.ShiftDown();
+
+  // Shift+navigation: keyboard selection
+  if (shift) {
+    bool isNav = (key == WXK_UP || key == WXK_DOWN || key == WXK_LEFT ||
+                  key == WXK_RIGHT || key == WXK_HOME || key == WXK_END ||
+                  key == WXK_PAGEUP || key == WXK_PAGEDOWN);
+    if (isNav) {
+      // Initialize selection at cursor if not active
+      if (!m_mouseSelection.active) {
+        auto cursor = m_core.Cursor();
+        std::size_t vs = m_core.ViewStart();
+        std::size_t ss = m_core.ShellStart();
+        int screenRow = static_cast<int>(ss - vs) + cursor.y;
+        m_mouseSelection.anchor = {cursor.x, screenRow};
+        m_mouseSelection.current = m_mouseSelection.anchor;
+        m_mouseSelection.viewStart = vs;
+        m_mouseSelection.active = true;
+      }
+
+      int col = m_mouseSelection.current.x;
+      int row = m_mouseSelection.current.y;
+      int cols = static_cast<int>(m_core.Cols());
+      int rows = static_cast<int>(m_core.Rows());
+
+      switch (key) {
+      case WXK_LEFT:
+        ExtendKeyboardSelection(col - 1, row);
+        break;
+      case WXK_RIGHT:
+        ExtendKeyboardSelection(col + 1, row);
+        break;
+      case WXK_UP:
+        ExtendKeyboardSelection(col, row - 1);
+        break;
+      case WXK_DOWN:
+        ExtendKeyboardSelection(col, row + 1);
+        break;
+      case WXK_HOME:
+        ExtendKeyboardSelection(0, row);
+        break;
+      case WXK_END:
+        ExtendKeyboardSelection(cols - 1, row);
+        break;
+      case WXK_PAGEUP:
+        ExtendKeyboardSelection(col, row - rows);
+        break;
+      case WXK_PAGEDOWN:
+        ExtendKeyboardSelection(col, row + rows);
+        break;
+      }
+      return true;
+    }
+  }
+
   if (key == WXK_UP || key == WXK_DOWN) {
     key == WXK_UP ? SendArrowUp() : SendArrowDown();
     return true;
