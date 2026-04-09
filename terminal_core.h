@@ -302,7 +302,10 @@ private:
   std::size_t m_maxLines{1000};
 
   Lines m_buffer;
+  // Where the user is currently looking (changes on scroll wheel).
   std::size_t m_viewStart{0};
+  // Where the shell's viewport begins — the origin for cursor and all I/O.
+  // Equal to m_viewStart when not scrolled; greater when scrolled back.
   std::size_t m_shellStart{0};
   wxPoint m_cursor{};
 

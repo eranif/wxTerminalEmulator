@@ -435,7 +435,7 @@ void wxTerminalViewCtrl::CenterLine(std::size_t line) {
 }
 
 wxString wxTerminalViewCtrl::GetViewLine(std::size_t line) const {
-  auto abs_line = m_core.AbsRow(line);
+  auto abs_line = m_core.ViewStart() + line;
   return GetLine(abs_line);
 }
 
@@ -1740,7 +1740,7 @@ void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event, bool fire_event) {
 
   // rect is in pixels, convert it to cells.
   wxRect selected_rect = res.value();
-  selected_rect.y = m_core.AbsRow(selected_rect.y);
+  selected_rect.y = m_core.ViewStart() + selected_rect.y;
 
   // Remember the selected rect and fire an event.
   m_core.SetClickedRange(selected_rect);

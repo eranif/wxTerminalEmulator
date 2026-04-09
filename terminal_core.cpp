@@ -61,7 +61,7 @@ static ColourSpec MakeTrueColorSpec(std::uint32_t rgb) {
 }
 
 std::size_t TerminalCore::AbsRow(std::size_t viewportRow) const {
-  return m_viewStart + viewportRow;
+  return m_shellStart + viewportRow;
 }
 
 Cell *TerminalCore::GetCell(const wxPoint &absCoords) {
