@@ -1125,12 +1125,31 @@ void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
     return;
   }
 
-  auto cell = PointToCell(wxPoint{evt.GetX(), evt.GetY()});
+  if (m_charH <= 0 || m_charW <= 0) {
+    return;
+  }
+
+  int mouseY = evt.GetY();
+  int rows = static_cast<int>(m_core.Rows());
+  int clientH = rows * m_charH;
+
+  // Auto-scroll when dragging above or below the viewport
+  if (mouseY < 0) {
+    ScrollViewportForSelection(-1);
+  } else if (mouseY >= clientH) {
+    ScrollViewportForSelection(1);
+  }
+
+  // Clamp the cell position to valid viewport range
+  int clampedY = std::clamp(mouseY, 0, clientH - 1);
+  int clampedX = std::max(evt.GetX(), 0);
+  auto cell = PointToCell(wxPoint{clampedX, clampedY});
   if (cell.has_value()) {
     if (!m_mouseSelection.active && cell.value() != m_mouseSelection.anchor) {
       m_mouseSelection.active = true;
     }
     m_mouseSelection.current = cell.value();
+    m_mouseSelection.viewStart = m_core.ViewStart();
   }
   RefreshView();
 }
@@ -1446,38 +1465,25 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
   }
 }
 
-void wxTerminalViewCtrl::ExtendKeyboardSelection(int newCol, int newRow) {
-  int rows = static_cast<int>(m_core.Rows());
-  int cols = static_cast<int>(m_core.Cols());
-
-  // Clamp column
-  newCol = std::clamp(newCol, 0, cols - 1);
-
-  // Auto-scroll and clamp row
-  if (newRow < 0) {
-    std::size_t vs = m_core.ViewStart();
-    if (vs > 0) {
-      m_core.SetViewStart(vs - 1);
-      // Adjust anchor to stay in sync with the shifted viewport
-      m_mouseSelection.anchor.y += 1;
-    }
-    newRow = 0;
-  } else if (newRow >= rows) {
-    std::size_t vs = m_core.ViewStart();
-    std::size_t maxVs =
-        m_core.TotalLines() > static_cast<std::size_t>(rows)
-            ? m_core.TotalLines() - static_cast<std::size_t>(rows)
-            : 0;
+bool wxTerminalViewCtrl::ScrollViewportForSelection(int delta) {
+  std::size_t vs = m_core.ViewStart();
+  if (delta < 0 && vs > 0) {
+    m_core.SetViewStart(vs - 1);
+    m_mouseSelection.AdjustForScroll(-1);
+    return true;
+  }
+  if (delta > 0) {
+    int rows = static_cast<int>(m_core.Rows());
+    std::size_t maxVs = m_core.TotalLines() > static_cast<std::size_t>(rows)
+                            ? m_core.TotalLines() - static_cast<std::size_t>(rows)
+                            : 0;
     if (vs < maxVs) {
       m_core.SetViewStart(vs + 1);
-      m_mouseSelection.anchor.y -= 1;
+      m_mouseSelection.AdjustForScroll(1);
+      return true;
     }
-    newRow = rows - 1;
   }
-
-  m_mouseSelection.current = {newCol, newRow};
-  m_mouseSelection.viewStart = m_core.ViewStart();
-  RefreshView();
+  return false;
 }
 
 bool wxTerminalViewCtrl::HandleSpecialKeys(wxKeyEvent &key_event) {
@@ -1494,8 +1500,15 @@ bool wxTerminalViewCtrl::HandleSpecialKeys(wxKeyEvent &key_event) {
       if (!m_mouseSelection.active) {
         auto cursor = m_core.Cursor();
         std::size_t vs = m_core.ViewStart();
-        std::size_t ss = m_core.ShellStart();
-        int screenRow = static_cast<int>(ss - vs) + cursor.y;
+        auto offset = terminal::CheckedSub(m_core.ShellStart(), vs);
+        if (!offset.has_value()) {
+          return true; // shell is above viewport
+        }
+        int screenRow = static_cast<int>(offset.value()) + cursor.y;
+        int rows = static_cast<int>(m_core.Rows());
+        if (screenRow < 0 || screenRow >= rows) {
+          return true;
+        }
         m_mouseSelection.anchor = {cursor.x, screenRow};
         m_mouseSelection.current = m_mouseSelection.anchor;
         m_mouseSelection.viewStart = vs;
@@ -1508,31 +1521,33 @@ bool wxTerminalViewCtrl::HandleSpecialKeys(wxKeyEvent &key_event) {
       int rows = static_cast<int>(m_core.Rows());
 
       switch (key) {
-      case WXK_LEFT:
-        ExtendKeyboardSelection(col - 1, row);
-        break;
-      case WXK_RIGHT:
-        ExtendKeyboardSelection(col + 1, row);
-        break;
-      case WXK_UP:
-        ExtendKeyboardSelection(col, row - 1);
-        break;
-      case WXK_DOWN:
-        ExtendKeyboardSelection(col, row + 1);
-        break;
-      case WXK_HOME:
-        ExtendKeyboardSelection(0, row);
-        break;
-      case WXK_END:
-        ExtendKeyboardSelection(cols - 1, row);
-        break;
-      case WXK_PAGEUP:
-        ExtendKeyboardSelection(col, row - rows);
-        break;
-      case WXK_PAGEDOWN:
-        ExtendKeyboardSelection(col, row + rows);
-        break;
+      case WXK_LEFT:    col -= 1; break;
+      case WXK_RIGHT:   col += 1; break;
+      case WXK_UP:      row -= 1; break;
+      case WXK_DOWN:    row += 1; break;
+      case WXK_HOME:    col = 0; break;
+      case WXK_END:     col = cols - 1; break;
+      case WXK_PAGEUP:  row -= rows; break;
+      case WXK_PAGEDOWN:row += rows; break;
       }
+
+      // Clamp column
+      col = std::clamp(col, 0, cols - 1);
+
+      // Auto-scroll at viewport edges
+      while (row < 0) {
+        if (!ScrollViewportForSelection(-1)) break;
+        row++;
+      }
+      while (row >= rows) {
+        if (!ScrollViewportForSelection(1)) break;
+        row--;
+      }
+      row = std::clamp(row, 0, rows - 1);
+
+      m_mouseSelection.current = {col, row};
+      m_mouseSelection.viewStart = m_core.ViewStart();
+      RefreshView();
       return true;
     }
   }
@@ -1601,30 +1616,34 @@ void wxTerminalViewCtrl::Copy() {
     return;
   }
 
-  // Get the selected text using linear (reading-order) selection
+  // Get the selected text using absolute buffer coordinates
   wxString selection;
   wxPoint s, e;
-  m_mouseSelection.GetNormalized(s, e);
-  TLOG_DEBUG() << "Copying content: (" << s.x << "," << s.y << ")-(" << e.x
-               << "," << e.y << ")" << std::endl;
-  auto viewArea = m_core.GetViewArea();
+  m_mouseSelection.GetAbsNormalized(s, e);
+  TLOG_DEBUG() << "Copying content (abs): (" << s.x << "," << s.y << ")-("
+               << e.x << "," << e.y << ")" << std::endl;
+  int totalLines = static_cast<int>(m_core.TotalLines());
   int cols = static_cast<int>(m_core.Cols());
-  for (int y = s.y; y <= e.y && y < static_cast<int>(viewArea.size()); ++y) {
-    const auto &row = *viewArea[y];
-    int startCol = (y == s.y) ? s.x : 0;
-    int endCol = (y == e.y) ? e.x : cols - 1;
-    for (int x = startCol; x <= endCol && x < static_cast<int>(row.size());
-         ++x) {
+  for (int absY = s.y; absY <= e.y && absY < totalLines; ++absY) {
+    const auto &row = m_core.BufferRow(absY);
+    int rowSize = static_cast<int>(row.size());
+    if (rowSize == 0) {
+      if (absY != e.y) { selection += "\n"; }
+      continue;
+    }
+    int startCol = std::clamp((absY == s.y) ? s.x : 0, 0, rowSize - 1);
+    int endCol = std::clamp((absY == e.y) ? e.x : cols - 1, 0, rowSize - 1);
+    for (int x = startCol; x <= endCol; ++x) {
       selection += wxUniChar(row[x].ch);
     }
     // Only insert newline between rows if the next row is NOT a soft-wrap
     // continuation of this row
-    if (y != e.y) {
-      bool nextIsWrapped = m_core.IsViewRowWrapped(y + 1);
+    if (absY != e.y) {
+      auto nextViewRow = m_core.ViewPortRow(absY + 1);
+      bool nextIsWrapped =
+          nextViewRow.has_value() && m_core.IsViewRowWrapped(*nextViewRow);
       if (!nextIsWrapped) {
         selection.Trim();
-      }
-      if (!nextIsWrapped) {
         selection += "\n";
       }
     }

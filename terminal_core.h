@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -17,6 +18,19 @@ template <typename EnumName>
 inline bool IsFlagSet(EnumName flags, EnumName flag) {
   using T = std::underlying_type_t<EnumName>;
   return (static_cast<T>(flags) & static_cast<T>(flag)) == static_cast<T>(flag);
+}
+
+/// Checked subtraction: returns std::nullopt if a - b would overflow/underflow.
+template <typename T>
+constexpr std::optional<T> CheckedSub(T a, T b) {
+  if constexpr (std::is_unsigned_v<T>) {
+    return (b > a) ? std::nullopt : std::optional<T>(a - b);
+  } else {
+    // Signed overflow check
+    if (b > 0 && a < std::numeric_limits<T>::min() + b) return std::nullopt;
+    if (b < 0 && a > std::numeric_limits<T>::max() + b) return std::nullopt;
+    return a - b;
+  }
 }
 
 template <typename EnumName>

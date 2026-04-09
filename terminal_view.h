@@ -191,6 +191,14 @@ private:
         std::swap(s, e);
     }
 
+    /// Return normalized start/end as absolute buffer rows.
+    void GetAbsNormalized(wxPoint &s, wxPoint &e) const {
+      GetNormalized(s, e);
+      int vs = static_cast<int>(viewStart);
+      s.y = std::max(s.y + vs, 0);
+      e.y = std::max(e.y + vs, 0);
+    }
+
     bool Contains(int col, int row) const {
       if (!active)
         return false;
@@ -211,6 +219,12 @@ private:
       if (!active)
         return false;
       return anchor != current;
+    }
+
+    /// Scroll the viewport by `delta` lines (negative=up, positive=down)
+    /// and adjust the anchor so the selection stays consistent.
+    void AdjustForScroll(int delta) {
+      anchor.y -= delta;
     }
   };
   void RefreshView(bool now = false);
@@ -306,7 +320,11 @@ private:
    * was sent; returns false if the key is not handled by this method.
    */
   bool HandleSpecialKeys(wxKeyEvent &key_event);
-  void ExtendKeyboardSelection(int newCol, int newRow);
+
+  /// Scroll viewport by `delta` lines (-1=up, +1=down) during selection,
+  /// adjusting the anchor to keep the selection consistent.
+  /// Returns true if scrolling actually occurred.
+  bool ScrollViewportForSelection(int delta);
 
   void DoClickable(wxMouseEvent &event, bool fire_event);
 
