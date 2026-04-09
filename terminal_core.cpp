@@ -333,6 +333,22 @@ void TerminalCore::PutString(const std::string &text) {
 void TerminalCore::PutPrintable(char c) { PutCell(c); }
 void TerminalCore::PutPrintable(char32_t cp) { PutCell(cp); }
 
+Cell TerminalCore::MakeEraseCell() const {
+  Cell cell;                  // space + no colours = truly empty
+  cell.ch = U' ';
+  // Per VT spec, erase operations fill with the current SGR background.
+  // Only propagate the background when one has been explicitly set;
+  // otherwise leave the cell in its default state so IsEmpty() stays true
+  // and the renderer can fast-path it.
+  if (m_attr.colours.has_value() && m_attr.colours->bg.has_value()) {
+    CellColours cc;
+    cc.bg = m_attr.colours->bg;   // keep only the background
+    // fg stays std::nullopt — an erased cell has no foreground colour
+    cell.colours = cc;
+  }
+  return cell;
+}
+
 void TerminalCore::PutCell(char32_t cp) {
   if (m_cursor.x >= m_cols) {
     m_cursor.x = 0;
@@ -673,28 +689,29 @@ void TerminalCore::ParseEscape(const std::string &seq) {
 
   case 'J': {
     int mode = paramList.empty() ? 0 : paramList[0];
+    const Cell eraseCell = MakeEraseCell();
     if (mode == 0) {
       std::size_t abs = cursorAbsRow();
       if (abs < m_buffer.size())
         for (std::size_t c = m_cursor.x; c < m_cols; ++c)
-          m_buffer[abs][c] = Cell{};
+          m_buffer[abs][c] = eraseCell;
       for (std::size_t r = m_cursor.y + 1; r < m_rows; ++r) {
         std::size_t a = AbsRow(r);
         if (a < m_buffer.size())
           for (std::size_t c = 0; c < m_cols; ++c)
-            m_buffer[a][c] = Cell{};
+            m_buffer[a][c] = eraseCell;
       }
     } else if (mode == 1) {
       for (std::size_t r = 0; r < m_cursor.y; ++r) {
         std::size_t a = AbsRow(r);
         if (a < m_buffer.size())
           for (std::size_t c = 0; c < m_cols; ++c)
-            m_buffer[a][c] = Cell{};
+            m_buffer[a][c] = eraseCell;
       }
       std::size_t abs = cursorAbsRow();
       if (abs < m_buffer.size())
         for (std::size_t c = 0; c <= m_cursor.x && c < m_cols; ++c)
-          m_buffer[abs][c] = Cell{};
+          m_buffer[abs][c] = eraseCell;
     } else if (mode == 2) {
       ClearScreen();
     } else if (mode == 3) {
@@ -715,15 +732,16 @@ void TerminalCore::ParseEscape(const std::string &seq) {
     if (abs >= m_buffer.size())
       break;
     auto &row = m_buffer[abs];
+    const Cell eraseCell = MakeEraseCell();
     if (mode == 0) {
       for (std::size_t c = m_cursor.x; c < m_cols; ++c)
-        row[c] = Cell{};
+        row[c] = eraseCell;
     } else if (mode == 1) {
       for (std::size_t c = 0; c <= m_cursor.x && c < m_cols; ++c)
-        row[c] = Cell{};
+        row[c] = eraseCell;
     } else if (mode == 2) {
       for (std::size_t c = 0; c < m_cols; ++c)
-        row[c] = Cell{};
+        row[c] = eraseCell;
     }
     break;
   }
@@ -822,8 +840,9 @@ void TerminalCore::ParseEscape(const std::string &seq) {
                         : static_cast<std::size_t>(std::max(1, paramList[0]));
     std::size_t abs = cursorAbsRow();
     if (abs < m_buffer.size()) {
+      const Cell eraseCell = MakeEraseCell();
       for (std::size_t c = m_cursor.x; c < m_cursor.x + n && c < m_cols; ++c)
-        m_buffer[abs][c] = Cell{};
+        m_buffer[abs][c] = eraseCell;
     }
     break;
   }

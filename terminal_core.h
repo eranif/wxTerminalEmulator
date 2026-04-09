@@ -289,6 +289,10 @@ private:
   void PutCell(char c) { PutCell(static_cast<char32_t>(c)); }
   void PutCell(char32_t cp);
 
+  /// Return a blank (space) Cell that carries the current SGR background
+  /// colour.  Used by erase operations (EL, ED, ECH) per VT spec.
+  Cell MakeEraseCell() const;
+
   // Scroll helpers (respect scroll region)
   void ScrollRegionUp();
   void ScrollRegionDown();
