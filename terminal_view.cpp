@@ -318,7 +318,7 @@ void wxTerminalViewCtrl::SendCtrlL() {
     SendCtrlC();
     if (IsCmdShell()) {
       // Fix the terminal from any unwanted state it was left by sending a RESET
-      SendInput("\x1b[0m");
+      SendInput("\x1b[0m\r");
     }
     SendCommand("cls");
     return;
@@ -509,6 +509,7 @@ void wxTerminalViewCtrl::DebugDumpViewArea(TerminalLogLevel log_level,
     size_t row_num{0};
     for (const auto &row : viewArea) {
       if (viewLine != -1 && viewLine != static_cast<int>(row_num)) {
+        row_num++;
         continue;
       }
       std::string line;

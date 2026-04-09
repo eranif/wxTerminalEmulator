@@ -566,6 +566,8 @@ public:
         level = TerminalLogLevel::kWarn;
       } else if (logLevelStr == "error") {
         level = TerminalLogLevel::kError;
+      } else if (logLevelStr == "info") {
+        level = TerminalLogLevel::kInfo;
       } else {
         wxLogError("Unknown log level: %s", logLevelStr);
         return false;
