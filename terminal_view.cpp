@@ -317,8 +317,9 @@ void wxTerminalViewCtrl::SendCtrlL() {
     TLOG_DEBUG() << "Sending Windows 'cls' command" << std::endl;
     SendCtrlC();
     if (IsCmdShell()) {
-      // Fix the terminal from any unwanted state it was left by sending a RESET
-      SendInput("\x1b[0m\r");
+      // Fix the terminal state from any unwanted state by sending a dummy
+      // command.
+      SendCommand("whoami");
     }
     SendCommand("cls");
     return;
@@ -1102,7 +1103,8 @@ void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
   m_mouseSelection.anchor = anchorCell.value();
   m_mouseSelection.current = anchorCell.value();
   m_mouseSelection.viewStart = m_core.ViewStart();
-  m_mouseSelection.active = false; // becomes active only when mouse moves to a different cell
+  m_mouseSelection.active =
+      false; // becomes active only when mouse moves to a different cell
   m_isDragging = true;
   RefreshView(true);
   CaptureMouse();
@@ -1333,9 +1335,8 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
 
   // Clear keyboard selection on any non-shift, non-modified keypress
   if (!evt.ShiftDown() && !evt.ControlDown() && !evt.RawControlDown() &&
-      !evt.AltDown() && m_mouseSelection.HasSelection() &&
-      key != WXK_SHIFT && key != WXK_RAW_CONTROL && key != WXK_ALT &&
-      key != WXK_CONTROL) {
+      !evt.AltDown() && m_mouseSelection.HasSelection() && key != WXK_SHIFT &&
+      key != WXK_RAW_CONTROL && key != WXK_ALT && key != WXK_CONTROL) {
     ClearMouseSelection();
   }
 
@@ -1474,9 +1475,10 @@ bool wxTerminalViewCtrl::ScrollViewportForSelection(int delta) {
   }
   if (delta > 0) {
     int rows = static_cast<int>(m_core.Rows());
-    std::size_t maxVs = m_core.TotalLines() > static_cast<std::size_t>(rows)
-                            ? m_core.TotalLines() - static_cast<std::size_t>(rows)
-                            : 0;
+    std::size_t maxVs =
+        m_core.TotalLines() > static_cast<std::size_t>(rows)
+            ? m_core.TotalLines() - static_cast<std::size_t>(rows)
+            : 0;
     if (vs < maxVs) {
       m_core.SetViewStart(vs + 1);
       m_mouseSelection.AdjustForScroll(1);
@@ -1521,14 +1523,30 @@ bool wxTerminalViewCtrl::HandleSpecialKeys(wxKeyEvent &key_event) {
       int rows = static_cast<int>(m_core.Rows());
 
       switch (key) {
-      case WXK_LEFT:    col -= 1; break;
-      case WXK_RIGHT:   col += 1; break;
-      case WXK_UP:      row -= 1; break;
-      case WXK_DOWN:    row += 1; break;
-      case WXK_HOME:    col = 0; break;
-      case WXK_END:     col = cols - 1; break;
-      case WXK_PAGEUP:  row -= rows; break;
-      case WXK_PAGEDOWN:row += rows; break;
+      case WXK_LEFT:
+        col -= 1;
+        break;
+      case WXK_RIGHT:
+        col += 1;
+        break;
+      case WXK_UP:
+        row -= 1;
+        break;
+      case WXK_DOWN:
+        row += 1;
+        break;
+      case WXK_HOME:
+        col = 0;
+        break;
+      case WXK_END:
+        col = cols - 1;
+        break;
+      case WXK_PAGEUP:
+        row -= rows;
+        break;
+      case WXK_PAGEDOWN:
+        row += rows;
+        break;
       }
 
       // Clamp column
@@ -1536,11 +1554,13 @@ bool wxTerminalViewCtrl::HandleSpecialKeys(wxKeyEvent &key_event) {
 
       // Auto-scroll at viewport edges
       while (row < 0) {
-        if (!ScrollViewportForSelection(-1)) break;
+        if (!ScrollViewportForSelection(-1))
+          break;
         row++;
       }
       while (row >= rows) {
-        if (!ScrollViewportForSelection(1)) break;
+        if (!ScrollViewportForSelection(1))
+          break;
         row--;
       }
       row = std::clamp(row, 0, rows - 1);
@@ -1628,7 +1648,9 @@ void wxTerminalViewCtrl::Copy() {
     const auto &row = m_core.BufferRow(absY);
     int rowSize = static_cast<int>(row.size());
     if (rowSize == 0) {
-      if (absY != e.y) { selection += "\n"; }
+      if (absY != e.y) {
+        selection += "\n";
+      }
       continue;
     }
     int startCol = std::clamp((absY == s.y) ? s.x : 0, 0, rowSize - 1);
