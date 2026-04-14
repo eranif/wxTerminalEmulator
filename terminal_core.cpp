@@ -127,6 +127,9 @@ void TerminalCore::Resize(std::size_t rows, std::size_t cols) {
   if (newRows == m_rows && newCols == m_cols)
     return;
 
+  // Remember the absolute row the cursor is on so we can preserve it.
+  std::size_t cursorAbs = m_shellStart + m_cursor.y;
+
   // If cols changed, resize all existing rows
   if (newCols != m_cols) {
     for (std::size_t i = 0; i < m_buffer.size(); ++i) {
@@ -144,14 +147,25 @@ void TerminalCore::Resize(std::size_t rows, std::size_t cols) {
   m_rows = newRows;
   m_cols = newCols;
 
-  // Ensure viewStart is valid
-  if (m_buffer.size() > m_rows) {
-    m_shellStart = m_buffer.size() - m_rows;
-    m_viewStart = m_shellStart;
+  // Recompute shellStart so the cursor stays on the same absolute row.
+  // The cursor must remain within [0, m_rows), so shellStart is anchored
+  // relative to cursorAbs.
+  if (cursorAbs >= m_rows) {
+    // Place shellStart so that the cursor row fits inside the viewport.
+    // Prefer keeping the cursor at the same viewport-relative position,
+    // but clamp so shellStart + m_rows doesn't exceed the buffer.
+    std::size_t maxShellStart =
+        m_buffer.size() > m_rows ? m_buffer.size() - m_rows : 0;
+    std::size_t idealShellStart =
+        cursorAbs >= m_rows - 1 ? cursorAbs - (m_rows - 1) : 0;
+    m_shellStart = std::min(idealShellStart, maxShellStart);
   } else {
     m_shellStart = 0;
-    m_viewStart = 0;
   }
+  m_viewStart = m_shellStart;
+
+  // Recompute cursor.y from the preserved absolute row.
+  m_cursor.y = static_cast<int>(cursorAbs - m_shellStart);
 
   // Clamp cursor
   if (m_cursor.y >= m_rows)
