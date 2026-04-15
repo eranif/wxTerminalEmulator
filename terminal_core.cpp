@@ -130,6 +130,9 @@ void TerminalCore::Resize(std::size_t rows, std::size_t cols) {
   // Remember the absolute row the cursor is on so we can preserve it.
   std::size_t cursorAbs = m_shellStart + m_cursor.y;
 
+  // Remember whether the user was scrolled to the bottom (following output).
+  bool wasAtBottom = (m_viewStart >= m_shellStart);
+
   // If cols changed, resize all existing rows
   if (newCols != m_cols) {
     for (std::size_t i = 0; i < m_buffer.size(); ++i) {
@@ -137,9 +140,16 @@ void TerminalCore::Resize(std::size_t rows, std::size_t cols) {
     }
   }
 
-  // If viewport grew taller, ensure we have enough rows in the buffer
+  // If viewport grew taller, pull scrollback into view before adding blanks.
   if (newRows > m_rows) {
-    while (m_buffer.size() < m_viewStart + newRows) {
+    std::size_t extraRows = newRows - m_rows;
+    // Try to reclaim scrollback lines above shellStart instead of appending
+    // blank rows. This keeps existing history visible.
+    std::size_t reclaimable = std::min(extraRows, m_shellStart);
+    m_shellStart -= reclaimable;
+
+    // If we still need more rows, append blank lines at the end.
+    while (m_buffer.size() < m_shellStart + newRows) {
       m_buffer.push_back(std::vector<Cell>(newCols));
     }
   }
@@ -150,19 +160,27 @@ void TerminalCore::Resize(std::size_t rows, std::size_t cols) {
   // Recompute shellStart so the cursor stays on the same absolute row.
   // The cursor must remain within [0, m_rows), so shellStart is anchored
   // relative to cursorAbs.
-  if (cursorAbs >= m_rows) {
-    // Place shellStart so that the cursor row fits inside the viewport.
-    // Prefer keeping the cursor at the same viewport-relative position,
-    // but clamp so shellStart + m_rows doesn't exceed the buffer.
+  if (cursorAbs >= m_shellStart + m_rows) {
     std::size_t maxShellStart =
         m_buffer.size() > m_rows ? m_buffer.size() - m_rows : 0;
-    std::size_t idealShellStart =
-        cursorAbs >= m_rows - 1 ? cursorAbs - (m_rows - 1) : 0;
+    std::size_t idealShellStart = cursorAbs - (m_rows - 1);
     m_shellStart = std::min(idealShellStart, maxShellStart);
-  } else {
-    m_shellStart = 0;
   }
-  m_viewStart = m_shellStart;
+
+  // Ensure the buffer covers the shell viewport.
+  while (m_buffer.size() < m_shellStart + m_rows) {
+    m_buffer.push_back(std::vector<Cell>(m_cols));
+  }
+
+  // Preserve the user's scroll position. If they were following output
+  // (at the bottom), keep them there. Otherwise clamp to valid range.
+  if (wasAtBottom) {
+    m_viewStart = m_shellStart;
+  } else {
+    std::size_t maxView =
+        m_buffer.size() > m_rows ? m_buffer.size() - m_rows : 0;
+    m_viewStart = std::min(m_viewStart, maxView);
+  }
 
   // Recompute cursor.y from the preserved absolute row.
   m_cursor.y = static_cast<int>(cursorAbs - m_shellStart);
