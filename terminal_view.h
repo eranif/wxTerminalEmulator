@@ -281,6 +281,8 @@ private:
   void DrawFocusBorder(wxDC &dc) const;
   void DebugDumpViewArea(TerminalLogLevel log_level, int viewLine = -1);
   void UpdateFontCache();
+  void UpdateScrollbar();
+  void OnScroll(wxScrollWinEvent &evt);
   const wxFont &GetCachedFont(bool bold, bool underlined) const;
   /**
    * @brief Computes the selection rectangle from mouse position.

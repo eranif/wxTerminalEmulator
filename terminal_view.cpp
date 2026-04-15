@@ -111,7 +111,8 @@ static const std::unordered_map<int, int> shiftMap = {
 wxTerminalViewCtrl::wxTerminalViewCtrl(
     wxWindow *parent, const wxString &shellCommand,
     const std::optional<EnvironmentList> &environment)
-    : wxPanel(parent, wxID_ANY) {
+    : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+             wxTAB_TRAVERSAL | wxVSCROLL) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   UpdateFontCache();
   SetSelectionDelimChars(" \t<>{}[]()$,;*!@^\"'");
@@ -145,6 +146,14 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   Bind(wxEVT_MOUSEWHEEL, &wxTerminalViewCtrl::OnMouseWheel, this);
   Bind(wxEVT_SET_FOCUS, &wxTerminalViewCtrl::OnFocus, this);
   Bind(wxEVT_KILL_FOCUS, &wxTerminalViewCtrl::OnLostFocus, this);
+  Bind(wxEVT_SCROLLWIN_TOP, &wxTerminalViewCtrl::OnScroll, this);
+  Bind(wxEVT_SCROLLWIN_BOTTOM, &wxTerminalViewCtrl::OnScroll, this);
+  Bind(wxEVT_SCROLLWIN_LINEUP, &wxTerminalViewCtrl::OnScroll, this);
+  Bind(wxEVT_SCROLLWIN_LINEDOWN, &wxTerminalViewCtrl::OnScroll, this);
+  Bind(wxEVT_SCROLLWIN_PAGEUP, &wxTerminalViewCtrl::OnScroll, this);
+  Bind(wxEVT_SCROLLWIN_PAGEDOWN, &wxTerminalViewCtrl::OnScroll, this);
+  Bind(wxEVT_SCROLLWIN_THUMBTRACK, &wxTerminalViewCtrl::OnScroll, this);
+  Bind(wxEVT_SCROLLWIN_THUMBRELEASE, &wxTerminalViewCtrl::OnScroll, this);
   Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent &e) { e.Skip(); });
   Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent &) {});
 
@@ -1908,6 +1917,7 @@ wxString wxTerminalViewCtrl::GetRange(std::size_t row, std::size_t col,
 }
 
 void wxTerminalViewCtrl::RefreshView(bool now) {
+  UpdateScrollbar();
 #if USE_TIMER_REFRESH
   if (now) {
     m_needsRepaint = false;
@@ -1919,4 +1929,37 @@ void wxTerminalViewCtrl::RefreshView(bool now) {
   wxUnusedVar(now);
   Refresh();
 #endif
+}
+
+void wxTerminalViewCtrl::UpdateScrollbar() {
+  int total = static_cast<int>(m_core.TotalLines());
+  int thumb = static_cast<int>(m_core.Rows());
+  int pos = static_cast<int>(m_core.ViewStart());
+  SetScrollbar(wxVERTICAL, pos, thumb, total);
+}
+
+void wxTerminalViewCtrl::OnScroll(wxScrollWinEvent &evt) {
+  auto type = evt.GetEventType();
+  int pos = static_cast<int>(m_core.ViewStart());
+  int rows = static_cast<int>(m_core.Rows());
+
+  if (type == wxEVT_SCROLLWIN_TOP)
+    pos = 0;
+  else if (type == wxEVT_SCROLLWIN_BOTTOM)
+    pos = static_cast<int>(m_core.TotalLines());
+  else if (type == wxEVT_SCROLLWIN_LINEUP)
+    pos = std::max(0, pos - 1);
+  else if (type == wxEVT_SCROLLWIN_LINEDOWN)
+    pos += 1;
+  else if (type == wxEVT_SCROLLWIN_PAGEUP)
+    pos = std::max(0, pos - rows);
+  else if (type == wxEVT_SCROLLWIN_PAGEDOWN)
+    pos += rows;
+  else if (type == wxEVT_SCROLLWIN_THUMBTRACK ||
+           type == wxEVT_SCROLLWIN_THUMBRELEASE)
+    pos = evt.GetPosition();
+
+  m_core.SetViewStart(static_cast<std::size_t>(pos));
+  m_mouseSelection.Clear();
+  RefreshView();
 }
