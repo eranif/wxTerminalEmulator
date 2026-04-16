@@ -112,7 +112,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     wxWindow *parent, const wxString &shellCommand,
     const std::optional<EnvironmentList> &environment)
     : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-             wxTAB_TRAVERSAL | wxVSCROLL) {
+              wxTAB_TRAVERSAL | wxVSCROLL) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   UpdateFontCache();
   SetSelectionDelimChars(" \t<>{}[]()$,;*!@^\"'");
@@ -1080,6 +1080,7 @@ void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
   TLOG_DEBUG() << "OnSize: " << GetClientSize().GetWidth() << "x"
                << GetClientSize().GetHeight() << std::endl;
   SetTerminalSizeFromClient();
+  UpdateScrollbar();
   RefreshView(true);
   evt.Skip();
 }
@@ -1200,13 +1201,17 @@ void wxTerminalViewCtrl::OnMouseWheel(wxMouseEvent &evt) {
   if (lines == 0)
     return;
 
+  // Maximum view start is shell start - don't scroll beyond the prompt line
+  std::size_t maxPos = m_core.ShellStart();
   std::size_t vs = m_core.ViewStart();
   if (lines > 0 && vs >= static_cast<std::size_t>(lines))
     m_core.SetViewStart(vs - lines);
   else if (lines > 0)
     m_core.SetViewStart(0);
-  else
-    m_core.SetViewStart(vs + static_cast<std::size_t>(-lines));
+  else {
+    std::size_t newPos = vs + static_cast<std::size_t>(-lines);
+    m_core.SetViewStart(std::min(newPos, maxPos));
+  }
   m_mouseSelection.Clear();
   RefreshView();
 }
@@ -1477,17 +1482,14 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
 
 bool wxTerminalViewCtrl::ScrollViewportForSelection(int delta) {
   std::size_t vs = m_core.ViewStart();
+  std::size_t maxVs =
+      m_core.ShellStart(); // Don't scroll beyond the prompt line
   if (delta < 0 && vs > 0) {
     m_core.SetViewStart(vs - 1);
     m_mouseSelection.AdjustForScroll(-1);
     return true;
   }
   if (delta > 0) {
-    int rows = static_cast<int>(m_core.Rows());
-    std::size_t maxVs =
-        m_core.TotalLines() > static_cast<std::size_t>(rows)
-            ? m_core.TotalLines() - static_cast<std::size_t>(rows)
-            : 0;
     if (vs < maxVs) {
       m_core.SetViewStart(vs + 1);
       m_mouseSelection.AdjustForScroll(1);
@@ -1932,13 +1934,17 @@ void wxTerminalViewCtrl::RefreshView(bool now) {
 }
 
 void wxTerminalViewCtrl::UpdateScrollbar() {
-  int total = static_cast<int>(m_core.TotalLines());
+  // Don't allow scrolling beyond the shell start (prompt line)
+  int total = static_cast<int>(m_core.ShellStart() + m_core.Rows());
   int thumb = static_cast<int>(m_core.Rows());
   int pos = static_cast<int>(m_core.ViewStart());
   SetScrollbar(wxVERTICAL, pos, thumb, total);
 }
 
 void wxTerminalViewCtrl::OnScroll(wxScrollWinEvent &evt) {
+  // Maximum view start is shell start - we should never scroll beyond the
+  // prompt line
+  int maxPos = static_cast<int>(m_core.ShellStart());
   auto type = evt.GetEventType();
   int pos = static_cast<int>(m_core.ViewStart());
   int rows = static_cast<int>(m_core.Rows());
@@ -1946,7 +1952,7 @@ void wxTerminalViewCtrl::OnScroll(wxScrollWinEvent &evt) {
   if (type == wxEVT_SCROLLWIN_TOP)
     pos = 0;
   else if (type == wxEVT_SCROLLWIN_BOTTOM)
-    pos = static_cast<int>(m_core.TotalLines());
+    pos = maxPos;
   else if (type == wxEVT_SCROLLWIN_LINEUP)
     pos = std::max(0, pos - 1);
   else if (type == wxEVT_SCROLLWIN_LINEDOWN)
@@ -1958,6 +1964,9 @@ void wxTerminalViewCtrl::OnScroll(wxScrollWinEvent &evt) {
   else if (type == wxEVT_SCROLLWIN_THUMBTRACK ||
            type == wxEVT_SCROLLWIN_THUMBRELEASE)
     pos = evt.GetPosition();
+
+  // Clamp position to valid range [0, maxPos]
+  pos = std::max(0, std::min(pos, maxPos));
 
   m_core.SetViewStart(static_cast<std::size_t>(pos));
   m_mouseSelection.Clear();
