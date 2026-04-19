@@ -155,8 +155,13 @@ public:
    * @return void This function does not return a value.
    */
   void SendCommand(const wxString &command) {
-    SendInput(command.ToStdString(wxConvUTF8));
-    SendEnter();
+    if (m_backendReady) {
+      SendInput(command.ToStdString(wxConvUTF8));
+      SendEnter();
+      return;
+    }
+    // queue these commands until the backend is ready
+    m_pendingCommands.push_back(command);
   }
 
   // Override to indicate this window can receive keyboard focus
@@ -223,9 +228,7 @@ private:
 
     /// Scroll the viewport by `delta` lines (negative=up, positive=down)
     /// and adjust the anchor so the selection stays consistent.
-    void AdjustForScroll(int delta) {
-      anchor.y -= delta;
-    }
+    void AdjustForScroll(int delta) { anchor.y -= delta; }
   };
   void RefreshView(bool now = false);
   bool IsUnixKeyboardMode() const;
@@ -436,4 +439,6 @@ private:
 #endif
   std::unordered_set<wxChar> m_selectionDelimChars;
   bool m_hasFocusBorder{false};
+  std::vector<wxString> m_pendingCommands;
+  bool m_backendReady{false};
 };

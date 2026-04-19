@@ -201,6 +201,7 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
 #endif
   if (m_backend) {
     m_backend->Stop();
+    m_backendReady = false;
   }
 }
 
@@ -248,6 +249,15 @@ void wxTerminalViewCtrl::StartProcess(
     m_backend->Resize(static_cast<int>(m_core.Cols()),
                       static_cast<int>(m_core.Rows()));
   }
+  m_backendReady = true;
+
+  // Process queue
+  CallAfter([this]() {
+    for (const wxString &command : m_pendingCommands) {
+      SendCommand(command);
+    }
+    m_pendingCommands.clear();
+  });
 }
 
 void wxTerminalViewCtrl::SendInput(const std::string &text) {

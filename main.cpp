@@ -180,6 +180,7 @@ public:
     auto *page = new wxTerminalViewCtrl(m_notebook, config.shellCommand,
                                         config.environment);
     m_notebook->AddPage(page, "Terminal", true);
+
     ApplyThemeToTab(page);
     page->EnableSafeDrawing(m_safeDrawingEnabled);
     UpdateSafeDrawingMenuCheck();
