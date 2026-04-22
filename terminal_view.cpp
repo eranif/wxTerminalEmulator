@@ -206,8 +206,13 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
 }
 
 void wxTerminalViewCtrl::Feed(const std::string &data) {
+  // Only clamp to bottom if the user is already at the bottom.
+  // If they scrolled up to view history, preserve their scroll position.
+  bool wasAtBottom = (m_core.ViewStart() == m_core.ShellStart());
   m_core.PutData(data);
-  m_core.SetViewStart(m_core.ShellStart());
+  if (wasAtBottom) {
+    m_core.SetViewStart(m_core.ShellStart());
+  }
   RefreshView();
 }
 

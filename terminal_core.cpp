@@ -428,9 +428,12 @@ void TerminalCore::Tab() {
 }
 
 void TerminalCore::ScrollUp() {
+  // Check if the user was at the bottom before adding the new line.
+  // Only if they were at the bottom should we follow the new content.
+  bool wasAtBottom = (m_viewStart == m_shellStart);
   m_buffer.push_back(std::vector<Cell>(m_cols));
   ++m_shellStart;
-  if (m_viewStart + m_rows >= m_buffer.size() - 1)
+  if (wasAtBottom)
     m_viewStart = m_shellStart;
   if (m_buffer.size() > m_maxLines) {
     m_buffer.pop_front();
