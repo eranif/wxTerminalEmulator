@@ -1303,7 +1303,7 @@ void wxTerminalViewCtrl::OnCharHook(wxKeyEvent &evt) {
   // Let OnKeyDown process this as well.
   // Key not handled here; cancel the scroller so OnKeyDown can manage its
   // own.
-  scroller.reset();
+  scroller->Cancel();
   evt.Skip();
 }
 
@@ -1348,6 +1348,12 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
     // otherwise send SIGINT
     if (key == 'C' || key == 'c') {
       TLOG_DEBUG() << "Sending Ctrl-C" << std::endl;
+#if defined(__WXGTK__) || defined(__WXMSW__)
+      if (HasActiveSelection()) {
+        // Doing copy, dont scroll to bottom.
+        scroller->Cancel();
+      }
+#endif
       SendCtrlC();
       return;
     }
