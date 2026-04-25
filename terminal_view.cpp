@@ -905,57 +905,6 @@ void wxTerminalViewCtrl::RenderRowNoGrouping(
   }
 }
 
-void wxTerminalViewCtrl::RenderRowPosix(wxDC &dc, int y, int rowIdx,
-                                        const std::vector<terminal::Cell> &row,
-                                        PaintCounters &counters) {
-  auto result = PrepareRowForDrawing(row, rowIdx);
-  auto &cells = result.cells;
-
-  if (cells.empty()) {
-    return;
-  }
-
-  // Pass 1: draw background rectangles, grouped by bg color
-  dc.SetPen(*wxTRANSPARENT_PEN);
-  for (size_t i = 0; i < cells.size();) {
-    const auto &firstCell = cells[i];
-    size_t j = i + 1;
-    while (j < cells.size() &&
-           cells[j].attrs.bgColor == firstCell.attrs.bgColor &&
-           cells[j].colIdx == cells[j - 1].colIdx + 1) {
-      ++j;
-    }
-    int x = firstCell.colIdx * m_charW;
-    int width = (cells[j - 1].colIdx - firstCell.colIdx + 1) * m_charW;
-    dc.SetBrush(wxBrush(firstCell.attrs.bgColor));
-    dc.DrawRectangle(x, y, width, m_charH);
-    counters.draw_rectangle_++;
-    i = j;
-  }
-
-  // Pass 2: draw text, grouped by font + fg color (ignoring bg differences)
-  for (size_t i = 0; i < cells.size();) {
-    const auto &firstCell = cells[i];
-    wxString text;
-    text.Append(firstCell.ch);
-
-    size_t j = i + 1;
-    while (j < cells.size() && cells[j].HasSameAttributes(firstCell) &&
-           cells[j].IsAdjacent(cells[j - 1])) {
-      text.Append(cells[j].ch);
-      ++j;
-    }
-
-    int x = firstCell.colIdx * m_charW;
-    dc.SetTextForeground(firstCell.attrs.fgColor);
-    dc.SetFont(GetCachedFont(firstCell.attrs.bold, firstCell.attrs.underline));
-    dc.DrawText(text, x, y);
-    counters.draw_text_++;
-
-    i = j;
-  }
-}
-
 void wxTerminalViewCtrl::RenderRow(wxDC &dc, int y, int rowIdx,
                                    const std::vector<terminal::Cell> &row,
                                    PaintCounters &counters) {

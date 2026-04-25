@@ -263,9 +263,6 @@ private:
   void RenderRowWithGrouping(wxDC &dc, int y, int rowIdx,
                              const std::vector<terminal::Cell> &row,
                              PaintCounters &counters);
-  void RenderRowPosix(wxDC &dc, int y, int rowIdx,
-                      const std::vector<terminal::Cell> &row,
-                      PaintCounters &counters);
 
   void OnSize(wxSizeEvent &evt);
   void OnCharHook(wxKeyEvent &evt);
