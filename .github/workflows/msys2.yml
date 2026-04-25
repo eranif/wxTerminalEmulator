@@ -1,0 +1,82 @@
+name: msys2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '**'
+      - '!.github/**'
+      - '.github/workflows/msys2.yml'
+  pull_request:
+    paths:
+      - '**'
+      - '!.github/**'
+      - '.github/workflows/msys2.yml'
+
+jobs:
+  msys2:
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        wx-version: ['v3.2.8.1'] # <v3.2.7 cannot be compiled with clang-19
+        options: ['', '-DBUILD_WXTERMINAL_DEMO=OFF']
+        
+    steps:
+    - uses: msys2/setup-msys2@v2
+      with:
+        msystem: clang64
+        update: true
+        install: >-
+          mingw-w64-clang-x86_64-cmake
+          mingw-w64-clang-x86_64-make
+          mingw-w64-clang-x86_64-clang
+          mingw-w64-clang-x86_64-clang-tools-extra
+
+    # WxWidgets
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        repository: wxWidgets/wxWidgets
+        ref: ${{matrix.wx-version}}
+        submodules: recursive
+        path: wxWidgets
+
+    - name: build and install wxWidgets
+      shell: msys2 {0}
+      run: |
+        mkdir wxWidgets/build-release
+        cd wxWidgets/build-release
+        cmake .. -G"MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/root" -DwxBUILD_DEBUG_LEVEL=0 -DwxBUILD_MONOLITHIC=1 -DwxBUILD_SAMPLES=SOME -DwxUSE_STL=1
+        mingw32-make -j$(nproc) && PATH="/clang64/bin:$PATH" mingw32-make install
+
+    # wx-config-msys2
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        repository: eranif/wx-config-msys2
+        path: wx-config-msys2
+
+    - name: build and install wx-config-msys2
+      shell: msys2 {0}
+      run: |
+        mkdir wx-config-msys2/build-release
+        cd wx-config-msys2/build-release
+        cmake .. -G"MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/root"
+        mingw32-make -j$(nproc) install
+        #add $HOME/root/bin to PATH
+
+    # wxTerminalEmulator
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: build
+      shell: msys2 {0}
+      run: |
+        mkdir build-release
+        cd build-release
+        PATH="$HOME/root/bin:$PATH" cmake .. -G"MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DWXWIN="$HOME/root" ${{ matrix.options }}
+        PATH="$HOME/root/bin:$PATH" cmake --build . --config Release --parallel $(nproc)

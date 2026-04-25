@@ -1,0 +1,59 @@
+name: macos
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '**'
+      - '!.github/**'
+      - '.github/workflows/macos.yml'
+      - '!**.md'
+  pull_request:
+    paths:
+      - '**'
+      - '!.github/**'
+      - '.github/workflows/macos.yml'
+      - '!**.md'
+
+jobs:
+  macos:
+    runs-on: macos-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        wx-version: ['v3.2.8.1']
+        options: ['', '-DBUILD_WXTERMINAL_DEMO=OFF']
+
+    steps:
+
+    # WxWidgets
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+          repository: wxWidgets/wxWidgets
+          ref: ${{ matrix.wx-version }}
+          submodules: recursive
+          path: wxWidgets
+
+    - name: Build and install wxWidgets
+      run: |
+        mkdir wxWidgets/build-release
+        cd wxWidgets/build-release
+        ../configure --enable-shared --enable-monolithic --with-osx_cocoa CXX='clang++ -std=c++17 -stdlib=libc++ -I../src/tiff/libtiff' CC=clang --disable-debug --disable-mediactrl ${{ matrix.wx-options }}
+        make -j$(sysctl -n hw.physicalcpu)
+        sudo make install
+
+    # wxTerminalEmulator
+    - name: Checkout wxTerminalEmulator
+      uses: actions/checkout@v6
+
+    - name: cmake --version
+      run: cmake --version
+
+    - name: Build
+      run: |
+        mkdir build-release
+        cd build-release
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON ${{ matrix.options }}
+        cmake --build . --config Release --parallel $(nproc)
