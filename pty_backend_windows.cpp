@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <psapi.h>

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "wx/gdicmn.h"
+#include <array>
 #include <iomanip>
 #include <iostream>
 #include <memory>
