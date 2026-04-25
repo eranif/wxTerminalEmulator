@@ -406,6 +406,18 @@ private:
   PrepareRowForDrawingResult
   PrepareRowForDrawing(const std::vector<terminal::Cell> &row, int rowIdx);
   /// Draw a row where all of its cells share the same attributes
+
+  /// RAII helper: scrolls to the last line on destruction unless cancelled.
+  struct EndLineScroller {
+    wxTerminalViewCtrl *m_view{nullptr};
+    explicit EndLineScroller(wxTerminalViewCtrl *view) : m_view(view) {}
+    void Cancel() { m_view = nullptr; }
+    ~EndLineScroller() {
+      if (m_view)
+        m_view->ScrollToLastLine();
+    }
+  };
+
   void
   RenderMonotonicRow(wxDC &dc, int y, int rowIdx,
                      const std::vector<wxTerminalViewCtrl::CellInfo> &cells,

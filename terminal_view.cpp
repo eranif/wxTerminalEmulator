@@ -1271,6 +1271,7 @@ void wxTerminalViewCtrl::OnCharHook(wxKeyEvent &evt) {
     evt.Skip();
     return;
   }
+  auto scroller = std::make_unique<EndLineScroller>(this);
 
   // This event is sent before the key is processed
   // by the default handlers We intercept
@@ -1300,6 +1301,9 @@ void wxTerminalViewCtrl::OnCharHook(wxKeyEvent &evt) {
   }
 #endif
   // Let OnKeyDown process this as well.
+  // Key not handled here; cancel the scroller so OnKeyDown can manage its
+  // own.
+  scroller.reset();
   evt.Skip();
 }
 
@@ -1308,6 +1312,7 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
     evt.Skip();
     return;
   }
+  auto scroller = std::make_unique<EndLineScroller>(this);
 
   const int key = evt.GetKeyCode();
 
@@ -1413,6 +1418,7 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
 
 #ifndef __WXMSW__
   if (HandleSpecialKeys(evt)) {
+    // Special keys (arrows, etc.) sent input; scroll to bottom.
     return;
   }
 #endif
@@ -1442,6 +1448,8 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
     SendInput(std::string(1, static_cast<char>(key)));
     return;
   }
+  // Key did not send input; cancel the scroller.
+  scroller->Cancel();
 }
 
 bool wxTerminalViewCtrl::ScrollViewportForSelection(int delta) {
