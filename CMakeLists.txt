@@ -9,32 +9,37 @@ option(BUILD_WXTERMINAL_DEMO "Build the wxterminal demo application" ON)
 
 # find wxWidgets once
 if(MINGW)
-  if(NOT WXWIN)
-    message(FATAL_ERROR "Missing -DWXWIN=<wxWidgets/root/install/dir>")
-  endif()
+  if(NOT EXISTS "${CMAKE_BINARY_DIR}/wxWidgets.cmake")
+    if(NOT WXWIN)
+      message(FATAL_ERROR "Missing -DWXWIN=<wxWidgets/root/install/dir>")
+    endif()
 
-  if(CMAKE_BUILD_TYPE MATCHES Release)
-    set(WXCFG "clang_x64_dll/mswu")
-  else()
-    set(WXCFG "clang_x64_dll/mswud")
-  endif()
+    if(CMAKE_BUILD_TYPE MATCHES Release)
+      set(WXCFG "clang_x64_dll/mswu")
+    else()
+      set(WXCFG "clang_x64_dll/mswud")
+    endif()
 
-  if(NOT EXISTS "${WXWIN}/lib/${WXCFG}")
+    if(NOT EXISTS "${WXWIN}/lib/${WXCFG}")
+      message(
+        WARNING
+          "Could not find path: ${WXWIN}/lib/${WXCFG}, defaulting to: ${WXWIN}/lib/clang_x64_dll/mswu"
+      )
+      set(WXCFG "clang_x64_dll/mswu")
+    endif()
+
+    message(STATUS "WXWIN is set to ${WXWIN}")
+    message(STATUS "WXCFG is set to ${WXCFG}")
+
     message(
-      WARNING
-        "Could not find path: ${WXWIN}/lib/${WXCFG}, defaulting to: ${WXWIN}/lib/clang_x64_dll/mswu"
-    )
-    set(WXCFG "clang_x64_dll/mswu")
+      STATUS
+        "Running: ${CL_WX_CONFIG} --cmake --prefix=${WXWIN} --wxcfg=${WXCFG}")
+    execute_process(
+      COMMAND wx-config --cmake --prefix=${WXWIN} --wxcfg=${WXCFG}
+      OUTPUT_VARIABLE wxWidgets_USE_FILE
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    message(STATUS "wxWidgets_USE_FILE is set to: ${wxWidgets_USE_FILE}")
   endif()
-
-  message(STATUS "WXWIN is set to ${WXWIN}")
-  message(STATUS "WXCFG is set to ${WXCFG}")
-
-  execute_process(
-    COMMAND wx-config --cmake --prefix=${WXWIN} --wxcfg=${WXCFG}
-    OUTPUT_VARIABLE wxWidgets_USE_FILE
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-  message(STATUS "wxWidgets_USE_FILE is set to: ${wxWidgets_USE_FILE}")
   include(${CMAKE_BINARY_DIR}/wxWidgets.cmake)
 else()
   find_package(
