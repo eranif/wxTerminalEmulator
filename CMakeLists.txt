@@ -12,7 +12,18 @@ if(MINGW)
   if(NOT WXWIN)
     message(FATAL_ERROR "Missing -DWXWIN=<wxWidgets/root/install/dir>")
   endif()
-  if(NOT WXCFG)
+
+  if(CMAKE_BUILD_TYPE MATCHES Release)
+    set(WXCFG "clang_x64_dll/mswu")
+  else()
+    set(WXCFG "clang_x64_dll/mswud")
+  endif()
+
+  if(NOT EXISTS "${WXWIN}/lib/${WXCFG}")
+    message(
+      WARNING
+        "Could not find path: ${WXWIN}/lib/${WXCFG}, defaulting to: ${WXWIN}/lib/clang_x64_dll/mswu"
+    )
     set(WXCFG "clang_x64_dll/mswu")
   endif()
 
@@ -34,7 +45,11 @@ else()
   # Find wxWidgets
   find_package(wxWidgets REQUIRED COMPONENTS core base)
 endif()
-add_compile_definitions(-DwxDEBUG_LEVEL=0)
+
+if(CMAKE_BUILD_TYPE MATCHES Release)
+  add_compile_definitions(-DwxDEBUG_LEVEL=0)
+endif()
+
 # Source files
 set(LIB_SOURCES terminal_core.cpp terminal_logger.cpp terminal_view.cpp
                 terminal_event.cpp)
