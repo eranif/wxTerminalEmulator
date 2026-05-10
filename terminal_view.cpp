@@ -1358,6 +1358,14 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
       return;
     }
 
+    // Handle Ctrl+V - Paste clipboard content and scroll to bottom
+    if (key == 'V' || key == 'v') {
+      TLOG_DEBUG() << "Ctrl+V: pasting clipboard content" << std::endl;
+      wxCommandEvent pasteEvt(wxEVT_MENU, wxID_PASTE);
+      OnPaste(pasteEvt);
+      return;
+    }
+
     // Handle common Ctrl+<CHAR> combinations
     if (key == 'U' || key == 'u') {
       SendCtrlU();
@@ -1683,6 +1691,8 @@ void wxTerminalViewCtrl::Paste() {
     wxTheClipboard->GetData(data);
     std::string text = data.GetText().ToStdString(wxConvUTF8);
     SendInput(text);
+    // Clamp view to bottom after paste
+    ScrollToLastLine();
   }
 
   wxTheClipboard->Close();
