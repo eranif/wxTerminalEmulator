@@ -79,6 +79,7 @@ set(HEADER_SOURCES)
 add_library(wxterminal_lib STATIC ${LIB_SOURCES} ${HEADER_SOURCES})
 target_link_libraries(wxterminal_lib PUBLIC ${wxWidgets_LIBRARIES})
 if(APPLE)
+  add_compile_definitions(-DwxDEBUG_LEVEL=0)
   target_link_libraries(wxterminal_lib PUBLIC "-framework CoreText"
                                               "-framework CoreGraphics")
 endif()
