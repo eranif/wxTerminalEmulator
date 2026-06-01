@@ -21,14 +21,15 @@ inline bool IsFlagSet(EnumName flags, EnumName flag) {
 }
 
 /// Checked subtraction: returns std::nullopt if a - b would overflow/underflow.
-template <typename T>
-constexpr std::optional<T> CheckedSub(T a, T b) {
+template <typename T> constexpr std::optional<T> CheckedSub(T a, T b) {
   if constexpr (std::is_unsigned_v<T>) {
     return (b > a) ? std::nullopt : std::optional<T>(a - b);
   } else {
     // Signed overflow check
-    if (b > 0 && a < std::numeric_limits<T>::min() + b) return std::nullopt;
-    if (b < 0 && a > std::numeric_limits<T>::max() + b) return std::nullopt;
+    if (b > 0 && a < std::numeric_limits<T>::min() + b)
+      return std::nullopt;
+    if (b < 0 && a > std::numeric_limits<T>::max() + b)
+      return std::nullopt;
     return a - b;
   }
 }
@@ -213,7 +214,9 @@ public:
   void SetTitleCallback(std::function<void(const std::string &)> callback) {
     m_titleCallback = callback;
   }
-  void SetBellCallback(std::function<void()> callback) { m_bellCallback = callback; }
+  void SetBellCallback(std::function<void()> callback) {
+    m_bellCallback = callback;
+  }
 
   std::size_t Rows() const { return m_rows; }
   std::size_t Cols() const { return m_cols; }
@@ -326,6 +329,11 @@ private:
   // Scroll region (0-based, inclusive)
   std::size_t m_scrollTop{0};
   std::size_t m_scrollBottom{23}; // m_rows - 1
+
+  // Deferred (pending) autowrap: set when a character is written to the last
+  // column.  The actual wrap happens only when the next printable character
+  // arrives.  Cleared by CR, LF, and any explicit cursor-positioning sequence.
+  bool m_pendingWrap{false};
 
   // Saved cursor (for ESC[s / ESC[u)
   wxPoint m_savedCursor{};

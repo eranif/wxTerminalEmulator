@@ -194,6 +194,7 @@ void TerminalCore::Resize(std::size_t rows, std::size_t cols) {
   // Reset scroll region to full screen on resize
   m_scrollTop = 0;
   m_scrollBottom = m_rows - 1;
+  m_pendingWrap = false;
 }
 
 void TerminalCore::SetViewportSize(std::size_t rows, std::size_t cols) {
@@ -228,6 +229,7 @@ void TerminalCore::Reset() {
   m_viewStart = 0;
   m_shellStart = 0;
   m_cursor = {};
+  m_pendingWrap = false;
   m_scrollTop = 0;
   m_scrollBottom = m_rows - 1;
   m_savedCursor = {};
@@ -366,7 +368,7 @@ void TerminalCore::PutPrintable(char c) { PutCell(c); }
 void TerminalCore::PutPrintable(char32_t cp) { PutCell(cp); }
 
 Cell TerminalCore::MakeEraseCell() const {
-  Cell cell;                  // space + no colours = truly empty
+  Cell cell; // space + no colours = truly empty
   cell.ch = U' ';
   // Per VT spec, erase operations fill with the current SGR background.
   // Only propagate the background when one has been explicitly set;
@@ -374,7 +376,7 @@ Cell TerminalCore::MakeEraseCell() const {
   // and the renderer can fast-path it.
   if (m_attr.colours.has_value() && m_attr.colours->bg.has_value()) {
     CellColours cc;
-    cc.bg = m_attr.colours->bg;   // keep only the background
+    cc.bg = m_attr.colours->bg; // keep only the background
     // fg stays std::nullopt — an erased cell has no foreground colour
     cell.colours = cc;
   }
@@ -382,13 +384,13 @@ Cell TerminalCore::MakeEraseCell() const {
 }
 
 void TerminalCore::PutCell(char32_t cp) {
-  if (m_cursor.x >= m_cols) {
+  if (m_pendingWrap) {
+    m_pendingWrap = false;
     m_cursor.x = 0;
     NewLine();
     // Mark the new row as a soft-wrap continuation
     std::size_t abs = AbsRow(m_cursor.y);
     m_buffer.SetWrapped(abs, true);
-    CarriageReturn();
   }
 
   std::size_t abs = AbsRow(m_cursor.y);
@@ -398,10 +400,15 @@ void TerminalCore::PutCell(char32_t cp) {
     m_buffer[abs][m_cursor.x] = cell;
     m_lastChar = cp;
     ++m_cursor.x;
+    if (m_cursor.x >= m_cols) {
+      m_cursor.x = m_cols - 1;
+      m_pendingWrap = true;
+    }
   }
 }
 
 void TerminalCore::NewLine() {
+  m_pendingWrap = false;
   if (m_cursor.y == m_scrollBottom) {
     // Full-screen scroll region: grow the buffer (preserves scrollback)
     if (m_scrollTop == 0 && m_scrollBottom == m_rows - 1)
@@ -415,16 +422,21 @@ void TerminalCore::NewLine() {
   }
 }
 
-void TerminalCore::CarriageReturn() { m_cursor.x = 0; }
+void TerminalCore::CarriageReturn() {
+  m_cursor.x = 0;
+  m_pendingWrap = false;
+}
 
 void TerminalCore::Backspace() {
   if (m_cursor.x > 0)
     --m_cursor.x;
+  m_pendingWrap = false;
 }
 
 void TerminalCore::Tab() {
   m_cursor.x =
       std::min(static_cast<int>(m_cols - 1), ((m_cursor.x / 8) + 1) * 8);
+  m_pendingWrap = false;
 }
 
 void TerminalCore::ScrollUp() {
@@ -491,12 +503,14 @@ void TerminalCore::ParseEscape(const std::string &seq) {
         ScrollRegionDown();
       else if (m_cursor.y > 0)
         --m_cursor.y;
+      m_pendingWrap = false;
       break;
     case 'D': // Index — cursor down, scroll up if at bottom
       if (m_cursor.y == m_scrollBottom)
         ScrollRegionUp();
       else if (m_cursor.y < m_rows - 1)
         ++m_cursor.y;
+      m_pendingWrap = false;
       break;
     case 'E': // Next Line
       m_cursor.x = 0;
@@ -504,6 +518,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
         ScrollRegionUp();
       else if (m_cursor.y < m_rows - 1)
         ++m_cursor.y;
+      m_pendingWrap = false;
       break;
     case '7': // Save Cursor (DECSC)
       m_savedCursor = m_cursor;
@@ -514,6 +529,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
         m_cursor.y = m_rows - 1;
       if (m_cursor.x >= m_cols)
         m_cursor.x = m_cols - 1;
+      m_pendingWrap = false;
       break;
     default:
       break;
@@ -599,6 +615,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
           m_viewStart = 0;
           m_shellStart = 0;
           m_cursor = {};
+          m_pendingWrap = false;
           m_scrollTop = 0;
           m_scrollBottom = m_rows - 1;
         } else if (!setMode && m_altScreenActive) {
@@ -623,6 +640,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
             m_cursor.y = m_rows - 1;
           if (m_cursor.x >= m_cols)
             m_cursor.x = m_cols - 1;
+          m_pendingWrap = false;
         }
         break;
       case 25: // Show/hide cursor — acknowledged, rendering handles this
@@ -665,6 +683,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
                         ? 1
                         : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.y = (m_cursor.y > n) ? (m_cursor.y - n) : 0;
+    m_pendingWrap = false;
     break;
   }
   case 'B': {
@@ -679,6 +698,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
                         ? 1
                         : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.x = std::min(m_cols - 1, m_cursor.x + n);
+    m_pendingWrap = false;
     break;
   }
   case 'D': {
@@ -686,6 +706,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
                         ? 1
                         : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.x = (m_cursor.x > n) ? (m_cursor.x - n) : 0;
+    m_pendingWrap = false;
     break;
   }
   case 'E': {
@@ -694,6 +715,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
                         : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.y = std::min(m_rows - 1, m_cursor.y + n);
     m_cursor.x = 0;
+    m_pendingWrap = false;
     break;
   }
   case 'F': {
@@ -702,6 +724,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
                         : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.y = (m_cursor.y > n) ? (m_cursor.y - n) : 0;
     m_cursor.x = 0;
+    m_pendingWrap = false;
     break;
   }
   case 'G': {
@@ -709,6 +732,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
                           ? 1
                           : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.x = std::min(m_cols - 1, col - 1);
+    m_pendingWrap = false;
     break;
   }
   case 'H':
@@ -719,6 +743,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
     if (paramList.size() >= 2 && paramList[1] > 0)
       col = paramList[1] - 1;
     MoveCursor(row, col);
+    m_pendingWrap = false;
     break;
   }
 
@@ -892,6 +917,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
       m_cursor.y = m_rows - 1;
     if (m_cursor.x >= m_cols)
       m_cursor.x = m_cols - 1;
+    m_pendingWrap = false;
     break;
 
   case 'r': { // Set Scroll Region (DECSTBM)
@@ -906,6 +932,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
     }
     m_cursor.y = 0;
     m_cursor.x = 0;
+    m_pendingWrap = false;
     break;
   }
 
@@ -917,6 +944,7 @@ void TerminalCore::ParseEscape(const std::string &seq) {
                           ? 1
                           : static_cast<std::size_t>(std::max(1, paramList[0]));
     m_cursor.y = std::min(m_rows - 1, row - 1);
+    m_pendingWrap = false;
     break;
   }
 
