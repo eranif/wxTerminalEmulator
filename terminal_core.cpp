@@ -1,55 +1,19 @@
 #include "terminal_core.h"
 
 #include <algorithm>
-#include <iomanip>
-#include <sstream>
+#include <cstring>
 
 #include <wx/string.h>
 
+#include "libtsm.h"
 #include "terminal_logger.h"
 
 namespace terminal {
-
-static std::string OscRgbResponse(const wxColour &c, int oscId) {
-  const auto to16 = [](std::uint32_t c) {
-    return static_cast<unsigned int>((c & 0xFFu) * 257u);
-  };
-  const unsigned int r = to16(c.Red());
-  const unsigned int g = to16(c.Green());
-  const unsigned int b = to16(c.Blue());
-
-  std::ostringstream oss;
-  oss << "\x1b]";
-  oss << oscId << ";rgb:" << std::hex << std::setfill('0') << std::setw(4) << r
-      << "/" << std::setw(4) << g << "/" << std::setw(4) << b << "\x1b\\";
-  return oss.str();
-}
-
-TerminalCore::TerminalCore(std::size_t rows, std::size_t cols,
-                           std::size_t maxLines)
-    : m_rows(rows), m_cols(cols), m_maxLines(maxLines) {
-  Reset();
-}
-
-void TerminalCore::SetTheme(const wxTerminalTheme &theme) { m_theme = theme; }
-
-static ColourIndex MakeColourIndex(int index, bool bright = false) {
-  return ColourIndex{index, bright};
-}
-
-static void ResetColours(Cell &cell) { cell.colours = CellColours{}; }
 
 static ColourSpec MakeAnsiSpec(int index, bool bright = false) {
   ColourSpec s;
   s.kind = ColourSpec::Kind::Ansi;
   s.ansi = ColourIndex{index, bright};
-  return s;
-}
-
-static ColourSpec MakePaletteSpec(int index) {
-  ColourSpec s;
-  s.kind = ColourSpec::Kind::Palette256;
-  s.paletteIndex = index;
   return s;
 }
 
@@ -60,47 +24,151 @@ static ColourSpec MakeTrueColorSpec(std::uint32_t rgb) {
   return s;
 }
 
+// Convert tsm_screen_attr color fields to our ColourSpec
+static std::optional<ColourSpec>
+ConvertFgColor(const struct tsm_screen_attr *attr) {
+  if (attr->fccode == TSM_COLOR_FOREGROUND)
+    return std::nullopt; // default foreground
+  if (attr->fccode >= 0 && attr->fccode < 16) {
+    bool bright = attr->fccode >= 8;
+    int idx = bright ? attr->fccode - 8 : attr->fccode;
+    return MakeAnsiSpec(idx, bright);
+  }
+  // fccode == -1: RGB (used for 256-color indices 16-255 and true color)
+  return MakeTrueColorSpec((static_cast<uint32_t>(attr->fr) << 16) |
+                           (static_cast<uint32_t>(attr->fg) << 8) |
+                           static_cast<uint32_t>(attr->fb));
+}
+
+static std::optional<ColourSpec>
+ConvertBgColor(const struct tsm_screen_attr *attr) {
+  if (attr->bccode == TSM_COLOR_BACKGROUND)
+    return std::nullopt; // default background
+  if (attr->bccode >= 0 && attr->bccode < 16) {
+    bool bright = attr->bccode >= 8;
+    int idx = bright ? attr->bccode - 8 : attr->bccode;
+    return MakeAnsiSpec(idx, bright);
+  }
+  return MakeTrueColorSpec((static_cast<uint32_t>(attr->br) << 16) |
+                           (static_cast<uint32_t>(attr->bg) << 8) |
+                           static_cast<uint32_t>(attr->bb));
+}
+
+TerminalCore::TerminalCore(std::size_t rows, std::size_t cols,
+                           std::size_t maxLines)
+    : m_rows(rows), m_cols(cols), m_maxLines(maxLines) {
+  tsm_screen_new(&m_tsmScreen, nullptr, nullptr);
+  tsm_screen_resize(m_tsmScreen, static_cast<unsigned int>(cols),
+                    static_cast<unsigned int>(rows));
+  tsm_screen_set_max_sb(m_tsmScreen, static_cast<unsigned int>(maxLines));
+
+  tsm_vte_new(&m_tsmVte, m_tsmScreen, TsmWriteCb, this, nullptr, nullptr);
+  tsm_vte_set_osc_cb(m_tsmVte, TsmOscCb, this);
+  tsm_vte_set_bell_cb(m_tsmVte, TsmBellCb, this);
+
+  m_activeScreen.assign(m_rows, std::vector<Cell>(m_cols));
+  m_activeScreenWrapped.assign(m_rows, false);
+  m_viewStart = 0;
+}
+
+TerminalCore::~TerminalCore() {
+  if (m_tsmVte)
+    tsm_vte_unref(m_tsmVte);
+  if (m_tsmScreen)
+    tsm_screen_unref(m_tsmScreen);
+}
+
+void TerminalCore::SetTheme(const wxTerminalTheme &theme) {
+  m_theme = theme;
+  SyncPalette();
+}
+
+void TerminalCore::SyncPalette() {
+  uint8_t palette[TSM_COLOR_NUM][3];
+  auto setEntry = [&](int idx, const wxColour &c) {
+    palette[idx][0] = c.Red();
+    palette[idx][1] = c.Green();
+    palette[idx][2] = c.Blue();
+  };
+  setEntry(TSM_COLOR_BLACK, m_theme.black);
+  setEntry(TSM_COLOR_RED, m_theme.red);
+  setEntry(TSM_COLOR_GREEN, m_theme.green);
+  setEntry(TSM_COLOR_YELLOW, m_theme.yellow);
+  setEntry(TSM_COLOR_BLUE, m_theme.blue);
+  setEntry(TSM_COLOR_MAGENTA, m_theme.magenta);
+  setEntry(TSM_COLOR_CYAN, m_theme.cyan);
+  setEntry(TSM_COLOR_LIGHT_GREY, m_theme.white);
+  setEntry(TSM_COLOR_DARK_GREY, m_theme.brightBlack);
+  setEntry(TSM_COLOR_LIGHT_RED, m_theme.brightRed);
+  setEntry(TSM_COLOR_LIGHT_GREEN, m_theme.brightGreen);
+  setEntry(TSM_COLOR_LIGHT_YELLOW, m_theme.brightYellow);
+  setEntry(TSM_COLOR_LIGHT_BLUE, m_theme.brightBlue);
+  setEntry(TSM_COLOR_LIGHT_MAGENTA, m_theme.brightMagenta);
+  setEntry(TSM_COLOR_LIGHT_CYAN, m_theme.brightCyan);
+  setEntry(TSM_COLOR_WHITE, m_theme.brightWhite);
+  setEntry(TSM_COLOR_FOREGROUND, m_theme.fg);
+  setEntry(TSM_COLOR_BACKGROUND, m_theme.bg);
+  // Must set palette name to "custom" so get_palette() uses our storage
+  tsm_vte_set_palette(m_tsmVte, "custom");
+  tsm_vte_set_custom_palette(m_tsmVte, palette);
+}
+
+void TerminalCore::SetMaxLines(std::size_t maxLines) {
+  m_maxLines = maxLines;
+  tsm_screen_set_max_sb(m_tsmScreen, static_cast<unsigned int>(maxLines));
+}
+
 std::size_t TerminalCore::AbsRow(std::size_t viewportRow) const {
-  return m_shellStart + viewportRow;
+  return m_viewStart + viewportRow;
 }
 
 Cell *TerminalCore::GetCell(const wxPoint &absCoords) {
-  size_t row = static_cast<size_t>(absCoords.y);
-  if (row >= m_buffer.size()) {
-    return nullptr;
+  std::size_t row = static_cast<std::size_t>(absCoords.y);
+  std::size_t col = static_cast<std::size_t>(absCoords.x);
+  std::size_t sbSize = m_scrollback.size();
+
+  if (row < sbSize) {
+    auto &line = m_scrollback[row];
+    if (col >= line.size())
+      return nullptr;
+    return &line[col];
   }
 
-  auto &line = m_buffer[row];
-  size_t col = static_cast<size_t>(absCoords.x);
-  if (col >= line.size()) {
+  std::size_t screenRow = row - sbSize;
+  if (screenRow >= m_rows)
     return nullptr;
-  }
-  return &line[col];
+  if (col >= m_activeScreen[screenRow].size())
+    return nullptr;
+  return &m_activeScreen[screenRow][col];
 }
 
 std::optional<std::size_t> TerminalCore::ViewPortRow(std::size_t absrow) const {
   if (absrow < m_viewStart || absrow >= m_viewStart + m_rows)
     return std::nullopt;
-
   return absrow - m_viewStart;
 }
 
-wxPoint TerminalCore::Cursor() const { return m_cursor; }
+wxPoint TerminalCore::Cursor() const {
+  return wxPoint(static_cast<int>(tsm_screen_get_cursor_x(m_tsmScreen)),
+                 static_cast<int>(tsm_screen_get_cursor_y(m_tsmScreen)));
+}
 
 const std::vector<Cell> &TerminalCore::BufferRow(std::size_t absRow) const {
   static const std::vector<Cell> empty;
-  if (absRow < m_buffer.size())
-    return m_buffer[absRow];
+  std::size_t sbSize = m_scrollback.size();
+
+  if (absRow < sbSize)
+    return m_scrollback[absRow];
+
+  std::size_t screenRow = absRow - sbSize;
+  if (screenRow < m_activeScreen.size())
+    return m_activeScreen[screenRow];
   return empty;
 }
 
 const std::vector<Cell> &
 TerminalCore::ViewBufferRow(std::size_t viewareaRow) const {
-  static const std::vector<Cell> empty;
-  auto absRow = viewareaRow + m_viewStart;
-  if (absRow < m_buffer.size())
-    return m_buffer[absRow];
-  return empty;
+  return BufferRow(m_viewStart + viewareaRow);
 }
 
 std::vector<const std::vector<Cell> *> TerminalCore::GetViewArea() const {
@@ -112,12 +180,22 @@ std::vector<const std::vector<Cell> *> TerminalCore::GetViewArea() const {
 
 bool TerminalCore::IsViewRowWrapped(std::size_t viewRow) const {
   std::size_t abs = m_viewStart + viewRow;
-  return m_buffer.IsWrapped(abs);
+  std::size_t sbSize = m_scrollback.size();
+
+  if (abs < sbSize)
+    return m_scrollback.IsWrapped(abs);
+
+  std::size_t screenRow = abs - sbSize;
+  if (screenRow < m_activeScreenWrapped.size())
+    return m_activeScreenWrapped[screenRow];
+  return false;
 }
 
 void TerminalCore::SetViewStart(std::size_t vs) {
-  std::size_t maxVs = m_buffer.size() > m_rows ? m_buffer.size() - m_rows : 0;
+  std::size_t total = TotalLines();
+  std::size_t maxVs = total > m_rows ? total - m_rows : 0;
   m_viewStart = std::min(vs, maxVs);
+  m_followingBottom = (m_viewStart >= m_scrollback.size());
 }
 
 void TerminalCore::Resize(std::size_t rows, std::size_t cols) {
@@ -127,74 +205,26 @@ void TerminalCore::Resize(std::size_t rows, std::size_t cols) {
   if (newRows == m_rows && newCols == m_cols)
     return;
 
-  // Remember the absolute row the cursor is on so we can preserve it.
-  std::size_t cursorAbs = m_shellStart + m_cursor.y;
-
-  // Remember whether the user was scrolled to the bottom (following output).
-  bool wasAtBottom = (m_viewStart >= m_shellStart);
-
-  // If cols changed, resize all existing rows
-  if (newCols != m_cols) {
-    for (std::size_t i = 0; i < m_buffer.size(); ++i) {
-      m_buffer[i].resize(newCols);
-    }
-  }
-
-  // If viewport grew taller, pull scrollback into view before adding blanks.
-  if (newRows > m_rows) {
-    std::size_t extraRows = newRows - m_rows;
-    // Try to reclaim scrollback lines above shellStart instead of appending
-    // blank rows. This keeps existing history visible.
-    std::size_t reclaimable = std::min(extraRows, m_shellStart);
-    m_shellStart -= reclaimable;
-
-    // If we still need more rows, append blank lines at the end.
-    while (m_buffer.size() < m_shellStart + newRows) {
-      m_buffer.push_back(std::vector<Cell>(newCols));
-    }
-  }
-
   m_rows = newRows;
   m_cols = newCols;
 
-  // Recompute shellStart so the cursor stays on the same absolute row.
-  // The cursor must remain within [0, m_rows), so shellStart is anchored
-  // relative to cursorAbs.
-  if (cursorAbs >= m_shellStart + m_rows) {
-    std::size_t maxShellStart =
-        m_buffer.size() > m_rows ? m_buffer.size() - m_rows : 0;
-    std::size_t idealShellStart = cursorAbs - (m_rows - 1);
-    m_shellStart = std::min(idealShellStart, maxShellStart);
-  }
+  tsm_screen_resize(m_tsmScreen, static_cast<unsigned int>(m_cols),
+                    static_cast<unsigned int>(m_rows));
 
-  // Ensure the buffer covers the shell viewport.
-  while (m_buffer.size() < m_shellStart + m_rows) {
-    m_buffer.push_back(std::vector<Cell>(m_cols));
-  }
+  m_activeScreen.assign(m_rows, std::vector<Cell>(m_cols));
+  m_activeScreenWrapped.assign(m_rows, false);
 
-  // Preserve the user's scroll position. If they were following output
-  // (at the bottom), keep them there. Otherwise clamp to valid range.
-  if (wasAtBottom) {
-    m_viewStart = m_shellStart;
-  } else {
-    std::size_t maxView =
-        m_buffer.size() > m_rows ? m_buffer.size() - m_rows : 0;
-    m_viewStart = std::min(m_viewStart, maxView);
-  }
+  // Resizing may have changed scrollback count
+  m_trackedSbCount = tsm_screen_sb_get_line_count(m_tsmScreen);
 
-  // Recompute cursor.y from the preserved absolute row.
-  m_cursor.y = static_cast<int>(cursorAbs - m_shellStart);
+  RefreshActiveScreen();
 
-  // Clamp cursor
-  if (m_cursor.y >= m_rows)
-    m_cursor.y = m_rows - 1;
-  if (m_cursor.x >= m_cols)
-    m_cursor.x = m_cols - 1;
-
-  // Reset scroll region to full screen on resize
-  m_scrollTop = 0;
-  m_scrollBottom = m_rows - 1;
-  m_pendingWrap = false;
+  // Clamp viewStart
+  std::size_t maxVs = TotalLines() > m_rows ? TotalLines() - m_rows : 0;
+  if (m_followingBottom)
+    m_viewStart = m_scrollback.size();
+  else
+    m_viewStart = std::min(m_viewStart, maxVs);
 }
 
 void TerminalCore::SetViewportSize(std::size_t rows, std::size_t cols) {
@@ -202,907 +232,169 @@ void TerminalCore::SetViewportSize(std::size_t rows, std::size_t cols) {
 }
 
 void TerminalCore::AppendLine(const std::string &line) {
-  PutString(line);
-  PutChar('\n');
+  std::string data = line + "\n";
+  PutData(data);
 }
 
 void TerminalCore::ClearScreen() {
-  for (std::size_t r = 0; r < m_rows; ++r) {
-    std::size_t abs = AbsRow(r);
-    if (abs < m_buffer.size()) {
-      for (auto &cell : m_buffer[abs])
-        cell = Cell{};
-    }
-  }
+  tsm_screen_erase_screen(m_tsmScreen, false);
+  tsm_screen_clear_sb(m_tsmScreen);
+  m_scrollback.clear();
+  m_trackedSbCount = 0;
+  m_viewStart = 0;
+  m_followingBottom = true;
+  RefreshActiveScreen();
 }
 
 void TerminalCore::MoveCursor(std::size_t row, std::size_t col) {
-  m_cursor.y = std::min(row, m_rows - 1);
-  m_cursor.x = std::min(col, m_cols - 1);
+  tsm_screen_move_to(m_tsmScreen, static_cast<unsigned int>(col),
+                     static_cast<unsigned int>(row));
 }
 
 void TerminalCore::Reset() {
-  m_buffer.clear();
-  for (std::size_t r = 0; r < m_rows; ++r) {
-    m_buffer.push_back(std::vector<Cell>(m_cols));
-  }
+  tsm_vte_hard_reset(m_tsmVte);
+  m_scrollback.clear();
+  m_trackedSbCount = 0;
+  m_activeScreen.assign(m_rows, std::vector<Cell>(m_cols));
+  m_activeScreenWrapped.assign(m_rows, false);
   m_viewStart = 0;
-  m_shellStart = 0;
-  m_cursor = {};
-  m_pendingWrap = false;
-  m_scrollTop = 0;
-  m_scrollBottom = m_rows - 1;
-  m_savedCursor = {};
-  m_lastChar = U' ';
-  m_inEscape = false;
-  m_escape.clear();
-  m_attr = {};
+  m_followingBottom = true;
 }
 
 void TerminalCore::PutData(const std::string &data) {
   TLOG_IF_TRACE { TLOG_TRACE() << "PutData len=" << data.size() << std::endl; }
-  for (char c : data) {
-    if (m_inEscape) {
-      m_escape.push_back(c);
 
-      // Safety: if escape buffer grows too large, it's stuck — dump and reset
-      if (m_escape.size() > 256) {
-        TLOG_WARN() << "Escape buffer overflow, resetting" << std::endl;
-        m_escape.clear();
-        m_inEscape = false;
-        continue;
-      }
-
-      if (m_escape.size() > 0 && m_escape[0] == ']') {
-        if (c == '\x07') {
-          ParseEscape(m_escape);
-          m_escape.clear();
-          m_inEscape = false;
-        } else if (m_escape.size() >= 2 &&
-                   m_escape[m_escape.size() - 2] == '\x1b' && c == '\\') {
-          ParseEscape(m_escape);
-          m_escape.clear();
-          m_inEscape = false;
-        }
-        continue;
-      }
-
-      if (c >= '@' && c <= '~') {
-        if (m_escape.size() > 1 && m_escape[0] == '[') {
-          ParseEscape(m_escape);
-          m_escape.clear();
-          m_inEscape = false;
-        } else if (m_escape.size() == 1 && c != '[' && c != ']') {
-          ParseEscape(m_escape);
-          m_escape.clear();
-          m_inEscape = false;
-        } else if (m_escape.size() == 2 && m_escape[0] >= 0x20 &&
-                   m_escape[0] <= 0x2F) {
-          // Two-byte sequences with intermediate: ESC ( B, ESC ) 0, etc.
-          ParseEscape(m_escape);
-          m_escape.clear();
-          m_inEscape = false;
-        }
-      } else if (c >= '0' && c <= '?') {
-        if (m_escape.size() == 1 && m_escape[0] != '[' && m_escape[0] != ']') {
-          ParseEscape(m_escape);
-          m_escape.clear();
-          m_inEscape = false;
-        }
-      }
-      continue;
-    }
-
-    if (c == '\x1b') {
-      if (!m_utf8Buf.empty()) {
-        wxString ws = wxString::FromUTF8(m_utf8Buf);
-        for (size_t i = 0; i < ws.length(); ++i)
-          PutPrintable(static_cast<char32_t>(ws[i].GetValue()));
-        m_utf8Buf.clear();
-      }
-      m_inEscape = true;
-      m_escape.clear();
-      continue;
-    }
-
-    unsigned char uc = static_cast<unsigned char>(c);
-    if (uc >= 0x20 && uc != 0x7f) {
-      m_utf8Buf.push_back(c);
-      continue;
-    }
-
-    if (!m_utf8Buf.empty()) {
-      wxString ws = wxString::FromUTF8(m_utf8Buf);
-      for (size_t i = 0; i < ws.length(); ++i) {
-        PutPrintable(static_cast<char32_t>(ws[i].GetValue()));
-      }
-      m_utf8Buf.clear();
-    }
-    PutChar(c);
+  // Handle ESC[3J (erase scrollback) which libtsm doesn't support
+  if (data.find("\033[3J") != std::string::npos) {
+    m_scrollback.clear();
+    m_trackedSbCount = 0;
+    tsm_screen_clear_sb(m_tsmScreen);
+    m_viewStart = 0;
+    m_followingBottom = true;
   }
 
-  if (!m_utf8Buf.empty()) {
-    wxString ws = wxString::FromUTF8(m_utf8Buf);
-    for (size_t i = 0; i < ws.length(); ++i)
-      PutPrintable(static_cast<char32_t>(ws[i].GetValue()));
-    m_utf8Buf.clear();
-  }
+  std::size_t prevSb = tsm_screen_sb_get_line_count(m_tsmScreen);
+  tsm_vte_input(m_tsmVte, data.c_str(), data.size());
+  CaptureScrollback(prevSb);
+  RefreshActiveScreen();
+
+  // Auto-follow bottom if user was at bottom
+  if (m_followingBottom)
+    m_viewStart = m_scrollback.size();
 }
 
-void TerminalCore::PutChar(char c) {
-  unsigned char uc = static_cast<unsigned char>(c);
-  if (uc < 0x20 && c != '\n' && c != '\r' && c != '\b' && c != '\t' &&
-      c != '\x07')
-    return;
-  switch (c) {
-  case '\n':
-    NewLine();
-    break;
-  case '\r':
-    CarriageReturn();
-    break;
-  case '\b':
-    Backspace();
-    break;
-  case '\t':
-    Tab();
-    break;
-  case '\x07':
-    TLOG_IF_TRACE { TLOG_TRACE() << "Captured BELL" << std::endl; }
-    if (m_bellCallback) {
-      m_bellCallback();
-    }
-    break;
-  default:
-    PutPrintable(c);
-    break;
-  }
-}
-
-void TerminalCore::PutString(const std::string &text) {
-  for (char c : text)
-    PutChar(c);
-}
-
-void TerminalCore::PutPrintable(char c) { PutCell(c); }
-void TerminalCore::PutPrintable(char32_t cp) { PutCell(cp); }
-
-Cell TerminalCore::MakeEraseCell() const {
-  Cell cell; // space + no colours = truly empty
-  cell.ch = U' ';
-  // Per VT spec, erase operations fill with the current SGR background.
-  // Only propagate the background when one has been explicitly set;
-  // otherwise leave the cell in its default state so IsEmpty() stays true
-  // and the renderer can fast-path it.
-  if (m_attr.colours.has_value() && m_attr.colours->bg.has_value()) {
-    CellColours cc;
-    cc.bg = m_attr.colours->bg; // keep only the background
-    // fg stays std::nullopt — an erased cell has no foreground colour
-    cell.colours = cc;
-  }
-  return cell;
-}
-
-void TerminalCore::PutCell(char32_t cp) {
-  if (m_pendingWrap) {
-    m_pendingWrap = false;
-    m_cursor.x = 0;
-    NewLine();
-    // Mark the new row as a soft-wrap continuation
-    std::size_t abs = AbsRow(m_cursor.y);
-    m_buffer.SetWrapped(abs, true);
-  }
-
-  std::size_t abs = AbsRow(m_cursor.y);
-  if (abs < m_buffer.size() && m_cursor.x < m_cols) {
-    auto cell = m_attr;
-    cell.ch = cp;
-    m_buffer[abs][m_cursor.x] = cell;
-    m_lastChar = cp;
-    ++m_cursor.x;
-    if (m_cursor.x >= m_cols) {
-      m_cursor.x = m_cols - 1;
-      m_pendingWrap = true;
-    }
-  }
-}
-
-void TerminalCore::NewLine() {
-  m_pendingWrap = false;
-  if (m_cursor.y == m_scrollBottom) {
-    // Full-screen scroll region: grow the buffer (preserves scrollback)
-    if (m_scrollTop == 0 && m_scrollBottom == m_rows - 1)
-      ScrollUp();
-    else
-      ScrollRegionUp();
-  } else if (m_cursor.y >= m_rows - 1) {
-    ScrollUp();
-  } else {
-    ++m_cursor.y;
-  }
-}
-
-void TerminalCore::CarriageReturn() {
-  m_cursor.x = 0;
-  m_pendingWrap = false;
-}
-
-void TerminalCore::Backspace() {
-  if (m_cursor.x > 0)
-    --m_cursor.x;
-  m_pendingWrap = false;
-}
-
-void TerminalCore::Tab() {
-  m_cursor.x =
-      std::min(static_cast<int>(m_cols - 1), ((m_cursor.x / 8) + 1) * 8);
-  m_pendingWrap = false;
-}
-
-void TerminalCore::ScrollUp() {
-  // Check if the user was at the bottom before adding the new line.
-  // Only if they were at the bottom should we follow the new content.
-  bool wasAtBottom = (m_viewStart == m_shellStart);
-  m_buffer.push_back(std::vector<Cell>(m_cols));
-  ++m_shellStart;
-  if (wasAtBottom)
-    m_viewStart = m_shellStart;
-  if (m_buffer.size() > m_maxLines) {
-    m_buffer.pop_front();
-    --m_shellStart;
-    if (m_viewStart > 0)
-      --m_viewStart;
-  }
-}
-
-void TerminalCore::ScrollRegionUp() {
-  // Delete the top row of the scroll region, shift rows up, blank the bottom
-  std::size_t top = AbsRow(m_scrollTop);
-  std::size_t bot = AbsRow(m_scrollBottom);
-  if (top >= m_buffer.size() || bot >= m_buffer.size())
-    return;
-  for (std::size_t r = top; r < bot; ++r) {
-    m_buffer[r] = m_buffer[r + 1];
-    m_buffer.SetWrapped(r, m_buffer.IsWrapped(r + 1));
-  }
-  m_buffer[bot] = std::vector<Cell>(m_cols);
-  m_buffer.SetWrapped(bot, false);
-}
-
-void TerminalCore::ScrollRegionDown() {
-  // Insert a blank row at the top of the scroll region, shift rows down
-  std::size_t top = AbsRow(m_scrollTop);
-  std::size_t bot = AbsRow(m_scrollBottom);
-  if (top >= m_buffer.size() || bot >= m_buffer.size())
-    return;
-  for (std::size_t r = bot; r > top; --r) {
-    m_buffer[r] = m_buffer[r - 1];
-    m_buffer.SetWrapped(r, m_buffer.IsWrapped(r - 1));
-  }
-  m_buffer[top] = std::vector<Cell>(m_cols);
-  m_buffer.SetWrapped(top, false);
-}
-
-void TerminalCore::ParseEscape(const std::string &seq) {
-  if (seq.empty())
+void TerminalCore::CaptureScrollback(std::size_t prevSbCount) {
+  std::size_t newSbCount = tsm_screen_sb_get_line_count(m_tsmScreen);
+  if (newSbCount <= prevSbCount)
     return;
 
-  TLOG_IF_TRACE {
-    std::ostringstream oss;
-    oss << "ESC [";
-    for (unsigned char ch : seq)
-      oss << std::hex << std::setfill('0') << std::setw(2) << (int)ch << " ";
-    oss << "] cursor=(" << std::dec << m_cursor.y << "," << m_cursor.x << ")";
-    TLOG_TRACE() << oss.str() << std::endl;
+  std::size_t delta = newSbCount - prevSbCount;
+
+  // The top `delta` rows of the previous active screen have scrolled off.
+  // Push them into our scrollback.
+  for (std::size_t i = 0; i < delta && i < m_activeScreen.size(); ++i) {
+    bool wrapped =
+        (i < m_activeScreenWrapped.size()) && m_activeScreenWrapped[i];
+    m_scrollback.push_back(std::move(m_activeScreen[i]), wrapped);
   }
 
-  if (seq.size() == 1) {
-    switch (seq[0]) {
-    case 'M': // Reverse Index — cursor up, scroll down if at top
-      if (m_cursor.y == m_scrollTop)
-        ScrollRegionDown();
-      else if (m_cursor.y > 0)
-        --m_cursor.y;
-      m_pendingWrap = false;
-      break;
-    case 'D': // Index — cursor down, scroll up if at bottom
-      if (m_cursor.y == m_scrollBottom)
-        ScrollRegionUp();
-      else if (m_cursor.y < m_rows - 1)
-        ++m_cursor.y;
-      m_pendingWrap = false;
-      break;
-    case 'E': // Next Line
-      m_cursor.x = 0;
-      if (m_cursor.y == m_scrollBottom)
-        ScrollRegionUp();
-      else if (m_cursor.y < m_rows - 1)
-        ++m_cursor.y;
-      m_pendingWrap = false;
-      break;
-    case '7': // Save Cursor (DECSC)
-      m_savedCursor = m_cursor;
-      break;
-    case '8': // Restore Cursor (DECRC)
-      m_cursor = m_savedCursor;
-      if (m_cursor.y >= m_rows)
-        m_cursor.y = m_rows - 1;
-      if (m_cursor.x >= m_cols)
-        m_cursor.x = m_cols - 1;
-      m_pendingWrap = false;
-      break;
-    default:
-      break;
-    }
-    return;
+  // Trim scrollback to max
+  while (m_scrollback.size() > m_maxLines) {
+    m_scrollback.pop_front();
   }
 
-  if (seq[0] == ']') {
-    if (seq.size() > 3 && seq[1] == '1' && seq[2] == '1' && seq[3] == ';') {
-      if (seq.find('?') != std::string::npos && m_responseCallback) {
-        m_responseCallback(OscRgbResponse(m_theme.bg, 11));
-      }
-      return;
-    }
-    if (seq.size() > 3 && seq[1] == '1' && seq[2] == '0' && seq[3] == ';') {
-      if (seq.find('?') != std::string::npos && m_responseCallback) {
-        m_responseCallback(OscRgbResponse(m_theme.fg, 10));
-      }
-      return;
-    }
-    if (seq.size() > 2 && (seq[1] == '0' || seq[1] == '2') && seq[2] == ';') {
-      std::string title = seq.substr(3);
-      if (!title.empty() && (title.back() == '\x07' || title.back() == '\\'))
-        title.pop_back();
-      if (!title.empty() && title.back() == '\x1b')
-        title.pop_back();
-      if (m_titleCallback)
-        m_titleCallback(title);
-    }
-    return;
-  }
+  m_trackedSbCount = newSbCount;
+}
 
-  if (seq[0] != '[')
+void TerminalCore::RefreshActiveScreen() {
+  // Reset active screen to proper dimensions (rows may have been moved during
+  // scrollback capture)
+  m_activeScreen.assign(m_rows, std::vector<Cell>(m_cols));
+
+  tsm_screen_draw(m_tsmScreen, TsmDrawCb, this);
+
+  // Compute soft-wrap heuristic
+  for (std::size_t r = 0; r + 1 < m_rows; ++r) {
+    const auto &row = m_activeScreen[r];
+    m_activeScreenWrapped[r] = !row.empty() && row.back().ch != U' ';
+  }
+  if (m_rows > 0)
+    m_activeScreenWrapped[m_rows - 1] = false;
+}
+
+// --- libtsm callbacks ---
+
+void TerminalCore::TsmWriteCb(struct tsm_vte * /*vte*/, const char *u8,
+                              size_t len, void *data) {
+  auto *self = static_cast<TerminalCore *>(data);
+  if (self->m_responseCallback)
+    self->m_responseCallback(std::string(u8, len));
+}
+
+void TerminalCore::TsmOscCb(struct tsm_vte * /*vte*/, const char *u8,
+                            size_t len, void *data) {
+  auto *self = static_cast<TerminalCore *>(data);
+  if (!self->m_titleCallback || len < 3)
     return;
 
-  const char final_ch = seq.back();
-
-  std::size_t paramStart = 1;
-  bool privateMode = false;
-  if (seq.size() > 1 &&
-      (seq[1] == '?' || seq[1] == '>' || seq[1] == '<' || seq[1] == '=')) {
-    paramStart = 2;
-    privateMode = true;
-  }
-  const std::string params =
-      (seq.size() > paramStart)
-          ? seq.substr(paramStart, seq.size() - paramStart - 1)
-          : "";
-
-  std::vector<int> paramList;
-  if (!params.empty()) {
-    std::stringstream ss(params);
-    std::string token;
-    while (std::getline(ss, token, ';')) {
-      try {
-        paramList.push_back(token.empty() ? 0 : std::stoi(token));
-      } catch (...) {
-        paramList.push_back(0);
-      }
-    }
-  }
-
-  if (privateMode) {
-    bool setMode = (final_ch == 'h');
-    for (int mode : paramList) {
-      switch (mode) {
-      case 1049: // Alternate screen buffer with save/restore cursor
-      case 47:   // Alternate screen buffer (no cursor save)
-        if (setMode && !m_altScreenActive) {
-          // Save current screen and switch to alt
-          m_savedScreen.buffer = m_buffer;
-          m_savedScreen.viewStart = m_viewStart;
-          m_savedScreen.shellStart = m_shellStart;
-          m_savedScreen.cursor = m_cursor;
-          m_savedScreen.scrollTop = m_scrollTop;
-          m_savedScreen.scrollBottom = m_scrollBottom;
-          m_altScreenActive = true;
-          // Clear alt screen
-          m_buffer.clear();
-          for (std::size_t r = 0; r < m_rows; ++r) {
-            m_buffer.push_back(std::vector<Cell>(m_cols));
-          }
-          m_viewStart = 0;
-          m_shellStart = 0;
-          m_cursor = {};
-          m_pendingWrap = false;
-          m_scrollTop = 0;
-          m_scrollBottom = m_rows - 1;
-        } else if (!setMode && m_altScreenActive) {
-          // Restore main screen
-          m_buffer = m_savedScreen.buffer;
-          m_cursor = m_savedScreen.cursor;
-          m_scrollTop = m_savedScreen.scrollTop;
-          m_scrollBottom = m_savedScreen.scrollBottom;
-          m_altScreenActive = false;
-
-          // Recalculate view/shell start from restored buffer size
-          // (dimensions may have changed while alt screen was active)
-          if (m_buffer.size() > m_rows) {
-            m_shellStart = m_buffer.size() - m_rows;
-          } else {
-            m_shellStart = 0;
-          }
-          m_viewStart = m_shellStart;
-
-          // Clamp cursor to current dimensions
-          if (m_cursor.y >= m_rows)
-            m_cursor.y = m_rows - 1;
-          if (m_cursor.x >= m_cols)
-            m_cursor.x = m_cols - 1;
-          m_pendingWrap = false;
-        }
-        break;
-      case 25: // Show/hide cursor — acknowledged, rendering handles this
-        break;
-      case 1: // Application/normal cursor keys — acknowledged
-        break;
-      case 7: // Auto-wrap — acknowledged
-        break;
-      default:
-        break;
-      }
-    }
-    return;
-  }
-
-  if (final_ch == 'c') {
-    if (m_responseCallback)
-      m_responseCallback("\x1b[?1;0c");
-    return;
-  }
-
-  if (final_ch == 'n') {
-    if (!paramList.empty() && paramList[0] == 6 && m_responseCallback) {
-      m_responseCallback("\x1b[" + std::to_string(m_cursor.y + 1) + ";" +
-                         std::to_string(m_cursor.x + 1) + "R");
-    }
-    return;
-  }
-
-  // Helper to get absolute row for cursor
-  auto cursorAbsRow = [&]() { return AbsRow(m_cursor.y); };
-
-  switch (final_ch) {
-  case 'm':
-    ApplySgr(params);
-    break;
-
-  case 'A': {
-    std::size_t n = paramList.empty()
-                        ? 1
-                        : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.y = (m_cursor.y > n) ? (m_cursor.y - n) : 0;
-    m_pendingWrap = false;
-    break;
-  }
-  case 'B': {
-    std::size_t n = paramList.empty()
-                        ? 1
-                        : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.y = std::min(m_rows - 1, m_cursor.y + n);
-    break;
-  }
-  case 'C': {
-    std::size_t n = paramList.empty()
-                        ? 1
-                        : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.x = std::min(m_cols - 1, m_cursor.x + n);
-    m_pendingWrap = false;
-    break;
-  }
-  case 'D': {
-    std::size_t n = paramList.empty()
-                        ? 1
-                        : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.x = (m_cursor.x > n) ? (m_cursor.x - n) : 0;
-    m_pendingWrap = false;
-    break;
-  }
-  case 'E': {
-    std::size_t n = paramList.empty()
-                        ? 1
-                        : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.y = std::min(m_rows - 1, m_cursor.y + n);
-    m_cursor.x = 0;
-    m_pendingWrap = false;
-    break;
-  }
-  case 'F': {
-    std::size_t n = paramList.empty()
-                        ? 1
-                        : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.y = (m_cursor.y > n) ? (m_cursor.y - n) : 0;
-    m_cursor.x = 0;
-    m_pendingWrap = false;
-    break;
-  }
-  case 'G': {
-    std::size_t col = paramList.empty()
-                          ? 1
-                          : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.x = std::min(m_cols - 1, col - 1);
-    m_pendingWrap = false;
-    break;
-  }
-  case 'H':
-  case 'f': {
-    std::size_t row = 0, col = 0;
-    if (paramList.size() >= 1 && paramList[0] > 0)
-      row = paramList[0] - 1;
-    if (paramList.size() >= 2 && paramList[1] > 0)
-      col = paramList[1] - 1;
-    MoveCursor(row, col);
-    m_pendingWrap = false;
-    break;
-  }
-
-  case 'J': {
-    int mode = paramList.empty() ? 0 : paramList[0];
-    const Cell eraseCell = MakeEraseCell();
-    if (mode == 0) {
-      std::size_t abs = cursorAbsRow();
-      if (abs < m_buffer.size())
-        for (std::size_t c = m_cursor.x; c < m_cols; ++c)
-          m_buffer[abs][c] = eraseCell;
-      for (std::size_t r = m_cursor.y + 1; r < m_rows; ++r) {
-        std::size_t a = AbsRow(r);
-        if (a < m_buffer.size())
-          for (std::size_t c = 0; c < m_cols; ++c)
-            m_buffer[a][c] = eraseCell;
-      }
-    } else if (mode == 1) {
-      for (std::size_t r = 0; r < m_cursor.y; ++r) {
-        std::size_t a = AbsRow(r);
-        if (a < m_buffer.size())
-          for (std::size_t c = 0; c < m_cols; ++c)
-            m_buffer[a][c] = eraseCell;
-      }
-      std::size_t abs = cursorAbsRow();
-      if (abs < m_buffer.size())
-        for (std::size_t c = 0; c <= m_cursor.x && c < m_cols; ++c)
-          m_buffer[abs][c] = eraseCell;
-    } else if (mode == 2) {
-      ClearScreen();
-    } else if (mode == 3) {
-      ClearScreen();
-      while (m_buffer.size() > m_rows) {
-        m_buffer.pop_front();
-      }
-      m_viewStart = 0;
-      m_shellStart = 0;
-      m_cursor = {0, 0};
-    }
-    break;
-  }
-
-  case 'K': {
-    int mode = paramList.empty() ? 0 : paramList[0];
-    std::size_t abs = cursorAbsRow();
-    if (abs >= m_buffer.size())
-      break;
-    auto &row = m_buffer[abs];
-    const Cell eraseCell = MakeEraseCell();
-    if (mode == 0) {
-      for (std::size_t c = m_cursor.x; c < m_cols; ++c)
-        row[c] = eraseCell;
-    } else if (mode == 1) {
-      for (std::size_t c = 0; c <= m_cursor.x && c < m_cols; ++c)
-        row[c] = eraseCell;
-    } else if (mode == 2) {
-      for (std::size_t c = 0; c < m_cols; ++c)
-        row[c] = eraseCell;
-    }
-    break;
-  }
-
-  case 'S': {
-    std::size_t n =
-        params.empty()
-            ? 1
-            : static_cast<std::size_t>(std::max(1, std::stoi(params)));
-    for (std::size_t i = 0; i < n; ++i)
-      ScrollUp();
-    break;
-  }
-
-  case 'P': {
-    std::size_t n = paramList.empty()
-                        ? 1
-                        : static_cast<std::size_t>(std::max(1, paramList[0]));
-    std::size_t abs = cursorAbsRow();
-    if (abs < m_buffer.size()) {
-      auto &row = m_buffer[abs];
-      for (std::size_t c = m_cursor.x; c + n < m_cols; ++c)
-        row[c] = row[c + n];
-      for (std::size_t c = m_cols > n ? m_cols - n : 0; c < m_cols; ++c)
-        row[c] = Cell{};
-    }
-    break;
-  }
-
-  case '@': {
-    std::size_t n = paramList.empty()
-                        ? 1
-                        : static_cast<std::size_t>(std::max(1, paramList[0]));
-    std::size_t abs = cursorAbsRow();
-    if (abs < m_buffer.size()) {
-      auto &row = m_buffer[abs];
-      for (std::size_t c = m_cols - 1; c >= m_cursor.x + n; --c)
-        row[c] = row[c - n];
-      for (std::size_t c = m_cursor.x; c < m_cursor.x + n && c < m_cols; ++c)
-        row[c] = Cell{};
-    }
-    break;
-  }
-
-  case 'T': { // Scroll Down
-    std::size_t n = paramList.empty()
-                        ? 1
-                        : static_cast<std::size_t>(std::max(1, paramList[0]));
-    for (std::size_t i = 0; i < n; ++i)
-      ScrollRegionDown();
-    break;
-  }
-
-  case 'L': { // Insert Lines
-    std::size_t n = paramList.empty()
-                        ? 1
-                        : static_cast<std::size_t>(std::max(1, paramList[0]));
-    for (std::size_t i = 0; i < n; ++i) {
-      // Shift rows from cursor down to scroll bottom
-      std::size_t bot = AbsRow(m_scrollBottom);
-      std::size_t cur = AbsRow(m_cursor.y);
-      if (cur < m_buffer.size() && bot < m_buffer.size()) {
-        for (std::size_t r = bot; r > cur; --r) {
-          m_buffer[r] = m_buffer[r - 1];
-          m_buffer.SetWrapped(r, m_buffer.IsWrapped(r - 1));
-        }
-        m_buffer[cur] = std::vector<Cell>(m_cols);
-        m_buffer.SetWrapped(cur, false);
-      }
-    }
-    break;
-  }
-
-  case 'M': { // Delete Lines
-    std::size_t n = paramList.empty()
-                        ? 1
-                        : static_cast<std::size_t>(std::max(1, paramList[0]));
-    for (std::size_t i = 0; i < n; ++i) {
-      std::size_t bot = AbsRow(m_scrollBottom);
-      std::size_t cur = AbsRow(m_cursor.y);
-      if (cur < m_buffer.size() && bot < m_buffer.size()) {
-        for (std::size_t r = cur; r < bot; ++r) {
-          m_buffer[r] = m_buffer[r + 1];
-          m_buffer.SetWrapped(r, m_buffer.IsWrapped(r + 1));
-        }
-        m_buffer[bot] = std::vector<Cell>(m_cols);
-        m_buffer.SetWrapped(bot, false);
-      }
-    }
-    break;
-  }
-
-  case 'X': { // Erase Characters (no shift)
-    std::size_t n = paramList.empty()
-                        ? 1
-                        : static_cast<std::size_t>(std::max(1, paramList[0]));
-    std::size_t abs = cursorAbsRow();
-    if (abs < m_buffer.size()) {
-      const Cell eraseCell = MakeEraseCell();
-      for (std::size_t c = m_cursor.x; c < m_cursor.x + n && c < m_cols; ++c)
-        m_buffer[abs][c] = eraseCell;
-    }
-    break;
-  }
-
-  case 's': // Save Cursor Position
-    m_savedCursor = m_cursor;
-    break;
-
-  case 'u': // Restore Cursor Position
-    m_cursor = m_savedCursor;
-    if (m_cursor.y >= m_rows)
-      m_cursor.y = m_rows - 1;
-    if (m_cursor.x >= m_cols)
-      m_cursor.x = m_cols - 1;
-    m_pendingWrap = false;
-    break;
-
-  case 'r': { // Set Scroll Region (DECSTBM)
-    std::size_t top =
-        paramList.size() >= 1 && paramList[0] > 0 ? paramList[0] - 1 : 0;
-    std::size_t bot = paramList.size() >= 2 && paramList[1] > 0
-                          ? paramList[1] - 1
-                          : m_rows - 1;
-    if (top < m_rows && bot < m_rows && top < bot) {
-      m_scrollTop = top;
-      m_scrollBottom = bot;
-    }
-    m_cursor.y = 0;
-    m_cursor.x = 0;
-    m_pendingWrap = false;
-    break;
-  }
-
-  case 'g': // Tab Clear (ignored for now — no custom tab stops)
-    break;
-
-  case 'd': { // Line Position Absolute (VPA)
-    std::size_t row = paramList.empty()
-                          ? 1
-                          : static_cast<std::size_t>(std::max(1, paramList[0]));
-    m_cursor.y = std::min(m_rows - 1, row - 1);
-    m_pendingWrap = false;
-    break;
-  }
-
-  case 'b': { // Repeat Previous Character
-    std::size_t n = paramList.empty()
-                        ? 1
-                        : static_cast<std::size_t>(std::max(1, paramList[0]));
-    for (std::size_t i = 0; i < n; ++i)
-      PutCell(m_lastChar);
-    break;
-  }
-
-  default:
-    break;
+  std::string osc(u8, len);
+  // OSC 0;title or OSC 2;title
+  if ((osc[0] == '0' || osc[0] == '2') && osc[1] == ';') {
+    self->m_titleCallback(osc.substr(2));
   }
 }
 
-void TerminalCore::ApplySgr(const std::string &params) {
-  if (params.empty()) {
-    m_attr = Cell::New();
-    return;
-  }
-
-  std::vector<int> codes;
-  std::size_t start = 0;
-  while (start <= params.size()) {
-    const std::size_t semi = params.find(';', start);
-    const std::size_t colon = params.find(':', start);
-    const std::size_t end = std::min(semi, colon);
-    const std::string token = params.substr(
-        start, end == std::string::npos ? std::string::npos : end - start);
-    int value = 0;
-    if (!token.empty()) {
-      try {
-        value = std::stoi(token);
-      } catch (...) {
-      }
-    }
-    codes.push_back(value);
-    if (end == std::string::npos)
-      break;
-    start = end + 1;
-  }
-
-  for (std::size_t i = 0; i < codes.size(); ++i) {
-    int code = codes[i];
-    switch (code) {
-    case 0:
-      m_attr = Cell::New();
-      break;
-    case 1:
-      m_attr.SetBold(true);
-      break;
-    case 4:
-      m_attr.SetUnderlined(true);
-      break;
-    case 7:
-      m_attr.SetReverse(true);
-      break;
-    case 22:
-      m_attr.SetBold(false);
-      break;
-    case 24:
-      m_attr.SetUnderlined(false);
-      break;
-    case 27:
-      m_attr.SetReverse(false);
-      break;
-    case 30:
-    case 31:
-    case 32:
-    case 33:
-    case 34:
-    case 35:
-    case 36:
-    case 37:
-      m_attr.SetFgColour(MakeAnsiSpec(code - 30, false));
-      break;
-    case 90:
-    case 91:
-    case 92:
-    case 93:
-    case 94:
-    case 95:
-    case 96:
-    case 97:
-      m_attr.SetFgColour(MakeAnsiSpec(code - 90, true));
-      break;
-    case 40:
-    case 41:
-    case 42:
-    case 43:
-    case 44:
-    case 45:
-    case 46:
-    case 47:
-      m_attr.SetBgColour(MakeAnsiSpec(code - 40, false));
-      break;
-    case 100:
-    case 101:
-    case 102:
-    case 103:
-    case 104:
-    case 105:
-    case 106:
-    case 107:
-      m_attr.SetBgColour(MakeAnsiSpec(code - 100, true));
-      break;
-    case 38:
-      if (i + 1 < codes.size()) {
-        if (codes[i + 1] == 5 && i + 2 < codes.size()) {
-          m_attr.SetFgColour(MakePaletteSpec(codes[i + 2]));
-          i += 2;
-        } else if (codes[i + 1] == 2 && i + 4 < codes.size()) {
-          m_attr.SetFgColour(MakeTrueColorSpec(
-              (codes[i + 2] << 16) | (codes[i + 3] << 8) | codes[i + 4]));
-          i += 4;
-        }
-      }
-      break;
-    case 48:
-      if (i + 1 < codes.size()) {
-        if (codes[i + 1] == 5 && i + 2 < codes.size()) {
-          m_attr.SetBgColour(MakePaletteSpec(codes[i + 2]));
-          i += 2;
-        } else if (codes[i + 1] == 2 && i + 4 < codes.size()) {
-          m_attr.SetBgColour(MakeTrueColorSpec(
-              (codes[i + 2] << 16) | (codes[i + 3] << 8) | codes[i + 4]));
-          i += 4;
-        }
-      }
-      break;
-    case 39:
-      if (!m_attr.colours)
-        m_attr.colours = CellColours{};
-      m_attr.colours->fg = std::nullopt;
-      break;
-    case 49:
-      if (!m_attr.colours)
-        m_attr.colours = CellColours{};
-      m_attr.colours->bg = std::nullopt;
-      break;
-    default:
-      break;
-    }
-  }
+void TerminalCore::TsmBellCb(struct tsm_vte * /*vte*/, void *data) {
+  auto *self = static_cast<TerminalCore *>(data);
+  if (self->m_bellCallback)
+    self->m_bellCallback();
 }
+
+int TerminalCore::TsmDrawCb(struct tsm_screen * /*con*/, uint64_t /*id*/,
+                            const uint32_t *ch, size_t len,
+                            unsigned int /*width*/, unsigned int posx,
+                            unsigned int posy,
+                            const struct tsm_screen_attr *attr,
+                            tsm_age_t /*age*/, void *data) {
+  auto *self = static_cast<TerminalCore *>(data);
+
+  if (posy >= self->m_rows || posx >= self->m_cols)
+    return 0;
+
+  Cell cell;
+  cell.ch = (len > 0) ? static_cast<char32_t>(ch[0]) : U' ';
+
+  // Convert attributes
+  if (attr->bold)
+    cell.SetBold(true);
+  if (attr->underline)
+    cell.SetUnderlined(true);
+  if (attr->inverse)
+    cell.SetReverse(true);
+
+  // Convert colors
+  auto fgSpec = ConvertFgColor(attr);
+  auto bgSpec = ConvertBgColor(attr);
+  if (fgSpec.has_value() || bgSpec.has_value()) {
+    CellColours colours;
+    colours.fg = fgSpec;
+    colours.bg = bgSpec;
+    cell.colours = colours;
+  }
+
+  self->m_activeScreen[posy][posx] = cell;
+  return 0;
+}
+
+// --- Selection / Clicked Range ---
 
 wxString TerminalCore::Flatten() const {
   wxString out;
-  out.reserve(MaxLines() * Cols() * 2);
+  out.reserve(m_rows * m_cols * 2);
   for (std::size_t r = 0; r < m_rows; ++r) {
-    std::size_t abs = m_viewStart + r;
-    if (abs < m_buffer.size()) {
-      for (const auto &cell : m_buffer[abs]) {
-        wxString ch(wxUniChar(cell.ch));
-        out << ch;
-      }
+    const auto &row = BufferRow(m_viewStart + r);
+    for (const auto &cell : row) {
+      out << wxString(wxUniChar(cell.ch));
     }
     out << "\n";
   }
@@ -1110,19 +402,16 @@ wxString TerminalCore::Flatten() const {
 }
 
 void TerminalCore::DoSetClickedRange(bool b) {
-  if (m_clickedRect.IsEmpty()) {
+  if (m_clickedRect.IsEmpty())
     return;
-  }
 
-  for (size_t row = m_clickedRect.y;
-       row < m_clickedRect.height + m_clickedRect.y; ++row) {
-    for (size_t col = m_clickedRect.x;
-         col < m_clickedRect.width + m_clickedRect.x; ++col) {
-      auto cell =
-          GetCell(wxPoint{static_cast<int>(col), static_cast<int>(row)});
-      if (cell) {
+  for (int row = m_clickedRect.y; row < m_clickedRect.height + m_clickedRect.y;
+       ++row) {
+    for (int col = m_clickedRect.x; col < m_clickedRect.width + m_clickedRect.x;
+         ++col) {
+      auto cell = GetCell(wxPoint{col, row});
+      if (cell)
         cell->SetClicked(b);
-      }
     }
   }
 }
@@ -1134,17 +423,15 @@ void TerminalCore::SetClickedRange(const wxRect &absRect) {
 }
 
 bool TerminalCore::ClearClickedRange() {
-  if (m_clickedRect.IsEmpty()) {
+  if (m_clickedRect.IsEmpty())
     return false;
-  }
   SetClickedRange({});
   return true;
 }
 
 wxString TerminalCore::GetClickedText() const {
-  if (m_clickedRect.IsEmpty()) {
+  if (m_clickedRect.IsEmpty())
     return wxEmptyString;
-  }
   TLOG_DEBUG() << "Clicked rect:" << m_clickedRect << std::endl;
 
   wxString clicked_text =
@@ -1156,19 +443,16 @@ wxString TerminalCore::GetClickedText() const {
 wxString TerminalCore::GetTextRange(std::size_t row, std::size_t col,
                                     std::size_t count) const {
   const auto &line = BufferRow(row);
-  if (col >= line.size() || count == 0) {
+  if (col >= line.size() || count == 0)
     return wxEmptyString;
-  }
 
   wxString text_range;
   text_range.reserve(count);
-  for (size_t i = col; i < line.size(); ++i) {
-    if (count == 0) {
-      break;
-    }
+  for (std::size_t i = col; i < line.size() && count > 0; ++i) {
     text_range << wxString{wxUniChar{line[i].ch}};
     count--;
   }
   return text_range;
 }
+
 } // namespace terminal
