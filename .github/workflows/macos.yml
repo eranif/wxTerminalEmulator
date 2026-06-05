@@ -47,6 +47,8 @@ jobs:
     # wxTerminalEmulator
     - name: Checkout wxTerminalEmulator
       uses: actions/checkout@v6
+      with:
+        submodules: recursive
 
     - name: cmake --version
       run: cmake --version

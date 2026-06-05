@@ -154,8 +154,8 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   Bind(wxEVT_SCROLLWIN_PAGEDOWN, &wxTerminalViewCtrl::OnScroll, this);
   Bind(wxEVT_SCROLLWIN_THUMBTRACK, &wxTerminalViewCtrl::OnScroll, this);
   Bind(wxEVT_SCROLLWIN_THUMBRELEASE, &wxTerminalViewCtrl::OnScroll, this);
-  Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent &e) { e.Skip(); });
-  Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent &) {});
+  Bind(wxEVT_LEAVE_WINDOW, &wxTerminalViewCtrl::OnLeaveWindow, this);
+  Bind(wxEVT_ERASE_BACKGROUND, &wxTerminalViewCtrl::OnEraseBg, this);
 
   m_shell_command = shellCommand;
   m_environment = std::move(environment);
@@ -192,6 +192,30 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
 }
 
 wxTerminalViewCtrl::~wxTerminalViewCtrl() {
+  // Un-Bind events using modern API
+  Unbind(wxEVT_PAINT, &wxTerminalViewCtrl::OnPaint, this);
+  Unbind(wxEVT_SIZE, &wxTerminalViewCtrl::OnSize, this);
+  Unbind(wxEVT_CHAR_HOOK, &wxTerminalViewCtrl::OnCharHook, this);
+  Unbind(wxEVT_KEY_DOWN, &wxTerminalViewCtrl::OnKeyDown, this);
+  Unbind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
+  Unbind(wxEVT_LEFT_DCLICK, &wxTerminalViewCtrl::OnMouseLeftDoubleClick, this);
+  Unbind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseUp, this);
+  Unbind(wxEVT_MOTION, &wxTerminalViewCtrl::OnMouseMove, this);
+  Unbind(wxEVT_CONTEXT_MENU, &wxTerminalViewCtrl::OnContextMenu, this);
+  Unbind(wxEVT_MOUSEWHEEL, &wxTerminalViewCtrl::OnMouseWheel, this);
+  Unbind(wxEVT_SET_FOCUS, &wxTerminalViewCtrl::OnFocus, this);
+  Unbind(wxEVT_KILL_FOCUS, &wxTerminalViewCtrl::OnLostFocus, this);
+  Unbind(wxEVT_SCROLLWIN_TOP, &wxTerminalViewCtrl::OnScroll, this);
+  Unbind(wxEVT_SCROLLWIN_BOTTOM, &wxTerminalViewCtrl::OnScroll, this);
+  Unbind(wxEVT_SCROLLWIN_LINEUP, &wxTerminalViewCtrl::OnScroll, this);
+  Unbind(wxEVT_SCROLLWIN_LINEDOWN, &wxTerminalViewCtrl::OnScroll, this);
+  Unbind(wxEVT_SCROLLWIN_PAGEUP, &wxTerminalViewCtrl::OnScroll, this);
+  Unbind(wxEVT_SCROLLWIN_PAGEDOWN, &wxTerminalViewCtrl::OnScroll, this);
+  Unbind(wxEVT_SCROLLWIN_THUMBTRACK, &wxTerminalViewCtrl::OnScroll, this);
+  Unbind(wxEVT_SCROLLWIN_THUMBRELEASE, &wxTerminalViewCtrl::OnScroll, this);
+  Unbind(wxEVT_LEAVE_WINDOW, &wxTerminalViewCtrl::OnLeaveWindow, this);
+  Unbind(wxEVT_ERASE_BACKGROUND, &wxTerminalViewCtrl::OnEraseBg, this);
+
 #if USE_TIMER_REFRESH
   m_shutdownFlag.store(true);
   if (m_drawingTimerThread && m_drawingTimerThread->joinable()) {

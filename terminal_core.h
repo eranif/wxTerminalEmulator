@@ -12,6 +12,13 @@
 #include <vector>
 #include <wx/gdicmn.h>
 
+extern "C" {
+struct tsm_screen;
+struct tsm_vte;
+struct tsm_screen_attr;
+typedef uint_fast32_t tsm_age_t;
+}
+
 namespace terminal {
 
 template <typename EnumName>
@@ -133,19 +140,6 @@ struct Cell {
     colours.value().bg = c;
   }
 
-  /**
-   * @brief Creates a new Cell initialized with the given character and theme
-   * colors.
-   *
-   * Constructs a Cell, assigns its character value, applies the colors from the
-   * provided wxTerminalTheme, and returns the initialized object.
-   *
-   * @param theme const wxTerminalTheme & The theme used to initialize the
-   * Cell's colours.
-   * @param c char32_t The character to store in the new Cell.
-   *
-   * @return Cell The newly created and fully initialized Cell.
-   */
   inline static Cell New(char32_t c = U' ') {
     Cell cell;
     cell.ch = c;
@@ -195,6 +189,7 @@ class TerminalCore {
 public:
   TerminalCore(std::size_t rows = 24, std::size_t cols = 80,
                std::size_t maxLines = 1000);
+  ~TerminalCore();
 
   void SetTheme(const wxTerminalTheme &theme);
   const wxTerminalTheme &GetTheme() const { return m_theme; }
@@ -221,16 +216,16 @@ public:
   std::size_t Rows() const { return m_rows; }
   std::size_t Cols() const { return m_cols; }
   std::size_t MaxLines() const { return m_maxLines; }
-  void SetMaxLines(std::size_t maxLines) { m_maxLines = maxLines; }
+  void SetMaxLines(std::size_t maxLines);
 
   // Cursor position relative to viewport
   wxPoint Cursor() const;
 
   // View into the buffer: returns rows [viewStart .. viewStart+m_rows)
   std::size_t ViewStart() const { return m_viewStart; }
-  std::size_t ShellStart() const { return m_shellStart; }
+  std::size_t ShellStart() const { return m_scrollback.size(); }
   void SetViewStart(std::size_t vs);
-  std::size_t TotalLines() const { return m_buffer.size(); }
+  std::size_t TotalLines() const { return m_scrollback.size() + m_rows; }
 
   // Access a row by absolute index in the buffer
   const std::vector<Cell> &BufferRow(std::size_t absRow) const;
@@ -253,114 +248,53 @@ public:
   std::optional<std::size_t> ViewPortRow(std::size_t absrow) const;
   Cell *GetCell(const wxPoint &absCoords);
 
-  /**
-   * @brief Sets the clicked range for this TerminalCore instance.
-   *
-   * Updates the stored absolute clicked rectangle and refreshes the internal
-   * clicked-range state before and after the assignment.
-   *
-   * @param absRect const wxRect& The absolute rectangle to store as the clicked
-   * range.
-   *
-   * @return void
-   */
   void SetClickedRange(const wxRect &absRect);
-
-  /**
-   * @brief Clears the current clicked range, if any, from the terminal core.
-   *
-   * This method belongs to TerminalCore and resets the stored clicked rectangle
-   * only when a non-empty range is currently selected.
-   *
-   * @return bool True if a clicked range was present and was cleared; false if
-   * there was no clicked range to clear.
-   */
   bool ClearClickedRange();
-  /**
-   * @brief Returns the text currently associated with the clicked rectangle.
-   *
-   * This TerminalCore method uses the stored click geometry to extract the text
-   * range at the clicked location. If no clicked rectangle is set, it returns
-   * an empty string without performing any text lookup.
-   *
-   * @return wxString The text extracted from the clicked rectangle, or an empty
-   *         string if no clicked rectangle is available.
-   */
   wxString GetClickedText() const;
   wxString GetTextRange(std::size_t row, std::size_t col,
                         std::size_t count) const;
 
 private:
   void DoSetClickedRange(bool b);
-  void PutChar(char c);
-  void NewLine();
-  void CarriageReturn();
-  void Backspace();
-  void Tab();
-  void ScrollUp();
-  void ParseEscape(const std::string &seq);
-  void PutPrintable(char c);
-  void PutPrintable(char32_t cp);
-  void ApplySgr(const std::string &params);
-  void PutString(const std::string &text);
-  void PutCell(char c) { PutCell(static_cast<char32_t>(c)); }
-  void PutCell(char32_t cp);
+  void CaptureScrollback(std::size_t prevSbCount);
+  void RefreshActiveScreen();
+  void SyncPalette();
 
-  /// Return a blank (space) Cell that carries the current SGR background
-  /// colour.  Used by erase operations (EL, ED, ECH) per VT spec.
-  Cell MakeEraseCell() const;
-
-  // Scroll helpers (respect scroll region)
-  void ScrollRegionUp();
-  void ScrollRegionDown();
+  static void TsmWriteCb(struct tsm_vte *vte, const char *u8, size_t len,
+                         void *data);
+  static void TsmOscCb(struct tsm_vte *vte, const char *u8, size_t len,
+                       void *data);
+  static void TsmBellCb(struct tsm_vte *vte, void *data);
+  static int TsmDrawCb(struct tsm_screen *con, uint64_t id, const uint32_t *ch,
+                       size_t len, unsigned int width, unsigned int posx,
+                       unsigned int posy, const struct tsm_screen_attr *attr,
+                       tsm_age_t age, void *data);
 
   std::size_t m_rows{24};
   std::size_t m_cols{80};
   std::size_t m_maxLines{1000};
 
-  Lines m_buffer;
+  // Scrollback buffer (lines that have scrolled off the active screen)
+  Lines m_scrollback;
+  // Active screen content (refreshed from tsm_screen_draw after each PutData)
+  std::vector<std::vector<Cell>> m_activeScreen;
+  // Wrap flags for active screen rows
+  std::vector<bool> m_activeScreenWrapped;
+
   // Where the user is currently looking (changes on scroll wheel).
   std::size_t m_viewStart{0};
-  // Where the shell's viewport begins — the origin for cursor and all I/O.
-  // Equal to m_viewStart when not scrolled; greater when scrolled back.
-  std::size_t m_shellStart{0};
-  wxPoint m_cursor{};
+  // Whether the user is scrolled to the bottom (following output)
+  bool m_followingBottom{true};
 
-  // Scroll region (0-based, inclusive)
-  std::size_t m_scrollTop{0};
-  std::size_t m_scrollBottom{23}; // m_rows - 1
+  // libtsm handles
+  struct tsm_screen *m_tsmScreen{nullptr};
+  struct tsm_vte *m_tsmVte{nullptr};
+  std::size_t m_trackedSbCount{0};
 
-  // Deferred (pending) autowrap: set when a character is written to the last
-  // column.  The actual wrap happens only when the next printable character
-  // arrives.  Cleared by CR, LF, and any explicit cursor-positioning sequence.
-  bool m_pendingWrap{false};
-
-  // Saved cursor (for ESC[s / ESC[u)
-  wxPoint m_savedCursor{};
-
-  // Last printed character (for ESC[b repeat)
-  char32_t m_lastChar{U' '};
-
-  // Alternate screen buffer
-  struct ScreenState {
-    Lines buffer;
-    std::size_t viewStart{0};
-    std::size_t shellStart{0};
-    wxPoint cursor{};
-    std::size_t scrollTop{0};
-    std::size_t scrollBottom{0};
-  };
-  ScreenState m_savedScreen;
-  bool m_altScreenActive{false};
-
-  bool m_inEscape{false};
-  std::string m_escape;
-  Cell m_attr{};
   wxTerminalTheme m_theme;
   std::function<void(const std::string &)> m_responseCallback;
   std::function<void(const std::string &)> m_titleCallback;
   std::function<void()> m_bellCallback;
-  std::string m_utf8Buf;
   wxRect m_clickedRect;
 };
 

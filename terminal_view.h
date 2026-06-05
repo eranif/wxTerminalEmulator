@@ -283,6 +283,9 @@ private:
   void UpdateFontCache();
   void UpdateScrollbar();
   void OnScroll(wxScrollWinEvent &evt);
+  void OnEraseBg(wxEraseEvent &) {}
+  void OnLeaveWindow(wxMouseEvent &e) { e.Skip(); }
+
   const wxFont &GetCachedFont(bool bold, bool underlined) const;
   /**
    * @brief Computes the selection rectangle from mouse position.

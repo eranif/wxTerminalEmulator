@@ -10,7 +10,7 @@
 #include <wx/frame.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
-#include <wx/notebook.h>
+#include <wx/aui/auibook.h>
 #include <wx/settings.h>
 #include <wx/string.h>
 #include <wx/sysopt.h>
@@ -74,13 +74,18 @@ public:
     ApplyNativeAppTheme();
 
     BuildMenuBar();
-    m_notebook = new wxNotebook(this, wxID_ANY);
+    m_notebook = new wxAuiNotebook(this, wxID_ANY, wxDefaultPosition,
+                                   wxDefaultSize,
+                                   wxAUI_NB_DEFAULT_STYLE | wxAUI_NB_CLOSE_ON_ALL_TABS);
     m_defaultShellCommand = shellCommand;
     m_defaultEnvironment = environment;
     m_view = CreateTerminalPage({shellCommand, environment});
     m_notebook->Bind(
-        wxEVT_BOOKCTRL_PAGE_CHANGED, [this](wxBookCtrlEvent &event) {
+        wxEVT_AUINOTEBOOK_PAGE_CHANGED, [this](wxAuiNotebookEvent &event) {
           event.Skip();
+          if (m_notebook->GetPageCount() == 0) {
+            return;
+          }
           auto page = m_notebook->GetPage(m_notebook->GetSelection());
           if (page) {
             page->SetFocus();
@@ -428,21 +433,16 @@ public:
       return;
     }
 
-    CallAfter([this, tabIndex]() {
-      if (!m_notebook) {
-        return;
-      }
+    if (!m_notebook || m_notebook->GetPageCount() == 0) {
+      return;
+    }
 
-      if (tabIndex >= 0 &&
-          tabIndex < static_cast<int>(m_notebook->GetPageCount())) {
-        m_notebook->DeletePage(static_cast<size_t>(tabIndex));
-      }
-
-      if (m_notebook->GetPageCount() == 0) {
-        Close(true);
-      }
-    });
+    if (tabIndex >= 0 &&
+        tabIndex < static_cast<int>(m_notebook->GetPageCount())) {
+      m_notebook->DeletePage(static_cast<size_t>(tabIndex));
+    }
   }
+
   void OnTitleChanged(wxTerminalEvent &event) {
     if (auto *view =
             dynamic_cast<wxTerminalViewCtrl *>(event.GetEventObject())) {
@@ -523,7 +523,7 @@ public:
   }
 
 private:
-  wxNotebook *m_notebook{nullptr};
+  wxAuiNotebook *m_notebook{nullptr};
   wxTerminalViewCtrl *m_view{nullptr};
   wxString m_defaultShellCommand;
   std::optional<EnvironmentList> m_defaultEnvironment;
