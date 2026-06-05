@@ -307,8 +307,6 @@ void TerminalCore::CaptureScrollback(std::size_t prevSbCount) {
 }
 
 void TerminalCore::RefreshActiveScreen() {
-  // Reset active screen to proper dimensions (rows may have been moved during
-  // scrollback capture)
   m_activeScreen.assign(m_rows, std::vector<Cell>(m_cols));
 
   tsm_screen_draw(m_tsmScreen, TsmDrawCb, this);
@@ -331,16 +329,42 @@ void TerminalCore::TsmWriteCb(struct tsm_vte * /*vte*/, const char *u8,
     self->m_responseCallback(std::string(u8, len));
 }
 
+static std::string OscRgbResponse(const wxColour &c, int oscId) {
+  unsigned int r = c.Red() * 257u;
+  unsigned int g = c.Green() * 257u;
+  unsigned int b = c.Blue() * 257u;
+  char buf[64];
+  std::snprintf(buf, sizeof(buf), "\x1b]%d;rgb:%04x/%04x/%04x\x1b\\", oscId, r,
+                g, b);
+  return buf;
+}
+
 void TerminalCore::TsmOscCb(struct tsm_vte * /*vte*/, const char *u8,
                             size_t len, void *data) {
   auto *self = static_cast<TerminalCore *>(data);
-  if (!self->m_titleCallback || len < 3)
+  if (len < 2)
     return;
 
   std::string osc(u8, len);
+
+  // OSC 10;? — query foreground color
+  if (osc.rfind("10;", 0) == 0 && osc.find('?') != std::string::npos) {
+    if (self->m_responseCallback)
+      self->m_responseCallback(OscRgbResponse(self->m_theme.fg, 10));
+    return;
+  }
+
+  // OSC 11;? — query background color
+  if (osc.rfind("11;", 0) == 0 && osc.find('?') != std::string::npos) {
+    if (self->m_responseCallback)
+      self->m_responseCallback(OscRgbResponse(self->m_theme.bg, 11));
+    return;
+  }
+
   // OSC 0;title or OSC 2;title
   if ((osc[0] == '0' || osc[0] == '2') && osc[1] == ';') {
-    self->m_titleCallback(osc.substr(2));
+    if (self->m_titleCallback)
+      self->m_titleCallback(osc.substr(2));
   }
 }
 
