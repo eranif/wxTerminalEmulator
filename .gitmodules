@@ -1,0 +1,3 @@
+[submodule "submodules/libtsm"]
+	path = submodules/libtsm
+	url = https://github.com/kmscon/libtsm.git

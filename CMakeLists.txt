@@ -55,6 +55,9 @@ if(CMAKE_BUILD_TYPE MATCHES Release)
   add_compile_definitions(-DwxDEBUG_LEVEL=0)
 endif()
 
+# Build libtsm
+add_subdirectory(submodules)
+
 # Source files
 set(LIB_SOURCES terminal_core.cpp terminal_logger.cpp terminal_view.cpp
                 terminal_event.cpp)
@@ -77,7 +80,7 @@ set(HEADER_SOURCES)
 
 # Create library
 add_library(wxterminal_lib STATIC ${LIB_SOURCES} ${HEADER_SOURCES})
-target_link_libraries(wxterminal_lib PUBLIC ${wxWidgets_LIBRARIES})
+target_link_libraries(wxterminal_lib PUBLIC ${wxWidgets_LIBRARIES} tsm)
 if(APPLE)
   add_compile_definitions(-DwxDEBUG_LEVEL=0)
   target_link_libraries(wxterminal_lib PUBLIC "-framework CoreText"
