@@ -44,11 +44,11 @@ if(MINGW)
 else()
   find_package(
     wxWidgets
-    COMPONENTS base core net
+    COMPONENTS base core net aui
     REQUIRED)
   include(${wxWidgets_USE_FILE})
   # Find wxWidgets
-  find_package(wxWidgets REQUIRED COMPONENTS core base)
+  find_package(wxWidgets REQUIRED COMPONENTS core base aui)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
