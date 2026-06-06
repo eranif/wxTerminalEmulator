@@ -2,15 +2,16 @@
 #include "terminal_event.h"
 #include "terminal_logger.h"
 #include "terminal_view.h"
+#include <deque>
 #include <optional>
 #include <wx/app.h>
+#include <wx/aui/auibook.h>
 #include <wx/cmdline.h>
 #include <wx/display.h>
 #include <wx/fontdlg.h>
 #include <wx/frame.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
-#include <wx/aui/auibook.h>
 #include <wx/settings.h>
 #include <wx/string.h>
 #include <wx/sysopt.h>
@@ -74,9 +75,9 @@ public:
     ApplyNativeAppTheme();
 
     BuildMenuBar();
-    m_notebook = new wxAuiNotebook(this, wxID_ANY, wxDefaultPosition,
-                                   wxDefaultSize,
-                                   wxAUI_NB_DEFAULT_STYLE | wxAUI_NB_CLOSE_ON_ALL_TABS);
+    m_notebook =
+        new wxAuiNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+                          wxAUI_NB_DEFAULT_STYLE | wxAUI_NB_CLOSE_ON_ALL_TABS);
     m_defaultShellCommand = shellCommand;
     m_defaultEnvironment = environment;
     m_view = CreateTerminalPage({shellCommand, environment});
