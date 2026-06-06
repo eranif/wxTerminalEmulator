@@ -24,17 +24,15 @@ static ColourSpec MakeTrueColorSpec(std::uint32_t rgb) {
   return s;
 }
 
-// Convert tsm_screen_attr color fields to our ColourSpec
 static std::optional<ColourSpec>
 ConvertFgColor(const struct tsm_screen_attr *attr) {
   if (attr->fccode == TSM_COLOR_FOREGROUND)
-    return std::nullopt; // default foreground
+    return std::nullopt;
   if (attr->fccode >= 0 && attr->fccode < 16) {
     bool bright = attr->fccode >= 8;
     int idx = bright ? attr->fccode - 8 : attr->fccode;
     return MakeAnsiSpec(idx, bright);
   }
-  // fccode == -1: RGB (used for 256-color indices 16-255 and true color)
   return MakeTrueColorSpec((static_cast<uint32_t>(attr->fr) << 16) |
                            (static_cast<uint32_t>(attr->fg) << 8) |
                            static_cast<uint32_t>(attr->fb));
@@ -43,7 +41,7 @@ ConvertFgColor(const struct tsm_screen_attr *attr) {
 static std::optional<ColourSpec>
 ConvertBgColor(const struct tsm_screen_attr *attr) {
   if (attr->bccode == TSM_COLOR_BACKGROUND)
-    return std::nullopt; // default background
+    return std::nullopt;
   if (attr->bccode >= 0 && attr->bccode < 16) {
     bool bright = attr->bccode >= 8;
     int idx = bright ? attr->bccode - 8 : attr->bccode;
@@ -52,6 +50,28 @@ ConvertBgColor(const struct tsm_screen_attr *attr) {
   return MakeTrueColorSpec((static_cast<uint32_t>(attr->br) << 16) |
                            (static_cast<uint32_t>(attr->bg) << 8) |
                            static_cast<uint32_t>(attr->bb));
+}
+
+static Cell ConvertTsmCell(const struct tsm_screen_cell &tsmCell) {
+  Cell cell;
+  cell.ch = (tsmCell.ch != 0) ? static_cast<char32_t>(tsmCell.ch) : U' ';
+
+  if (tsmCell.attr.bold)
+    cell.SetBold(true);
+  if (tsmCell.attr.underline)
+    cell.SetUnderlined(true);
+  if (tsmCell.attr.inverse)
+    cell.SetReverse(true);
+
+  auto fgSpec = ConvertFgColor(&tsmCell.attr);
+  auto bgSpec = ConvertBgColor(&tsmCell.attr);
+  if (fgSpec.has_value() || bgSpec.has_value()) {
+    CellColours colours;
+    colours.fg = fgSpec;
+    colours.bg = bgSpec;
+    cell.colours = colours;
+  }
+  return cell;
 }
 
 TerminalCore::TerminalCore(std::size_t rows, std::size_t cols,
@@ -67,7 +87,6 @@ TerminalCore::TerminalCore(std::size_t rows, std::size_t cols,
   tsm_vte_set_bell_cb(m_tsmVte, TsmBellCb, this);
 
   m_activeScreen.assign(m_rows, std::vector<Cell>(m_cols));
-  m_activeScreenWrapped.assign(m_rows, false);
   m_viewStart = 0;
 }
 
@@ -108,7 +127,6 @@ void TerminalCore::SyncPalette() {
   setEntry(TSM_COLOR_WHITE, m_theme.brightWhite);
   setEntry(TSM_COLOR_FOREGROUND, m_theme.fg);
   setEntry(TSM_COLOR_BACKGROUND, m_theme.bg);
-  // Must set palette name to "custom" so get_palette() uses our storage
   tsm_vte_set_palette(m_tsmVte, "custom");
   tsm_vte_set_custom_palette(m_tsmVte, palette);
 }
@@ -118,6 +136,12 @@ void TerminalCore::SetMaxLines(std::size_t maxLines) {
   tsm_screen_set_max_sb(m_tsmScreen, static_cast<unsigned int>(maxLines));
 }
 
+std::size_t TerminalCore::ShellStart() const {
+  return tsm_screen_sb_get_line_count(m_tsmScreen);
+}
+
+std::size_t TerminalCore::TotalLines() const { return ShellStart() + m_rows; }
+
 std::size_t TerminalCore::AbsRow(std::size_t viewportRow) const {
   return m_viewStart + viewportRow;
 }
@@ -125,13 +149,18 @@ std::size_t TerminalCore::AbsRow(std::size_t viewportRow) const {
 Cell *TerminalCore::GetCell(const wxPoint &absCoords) {
   std::size_t row = static_cast<std::size_t>(absCoords.y);
   std::size_t col = static_cast<std::size_t>(absCoords.x);
-  std::size_t sbSize = m_scrollback.size();
+  std::size_t sbSize = ShellStart();
 
   if (row < sbSize) {
-    auto &line = m_scrollback[row];
-    if (col >= line.size())
-      return nullptr;
-    return &line[col];
+    // Check if it's in the scrollback cache
+    if (row >= m_sbCacheStart &&
+        row < m_sbCacheStart + m_sbCache.size()) {
+      auto &line = m_sbCache[row - m_sbCacheStart];
+      if (col >= line.size())
+        return nullptr;
+      return &line[col];
+    }
+    return nullptr;
   }
 
   std::size_t screenRow = row - sbSize;
@@ -155,10 +184,15 @@ wxPoint TerminalCore::Cursor() const {
 
 const std::vector<Cell> &TerminalCore::BufferRow(std::size_t absRow) const {
   static const std::vector<Cell> empty;
-  std::size_t sbSize = m_scrollback.size();
+  std::size_t sbSize = ShellStart();
 
-  if (absRow < sbSize)
-    return m_scrollback[absRow];
+  if (absRow < sbSize) {
+    if (absRow >= m_sbCacheStart &&
+        absRow < m_sbCacheStart + m_sbCache.size()) {
+      return m_sbCache[absRow - m_sbCacheStart];
+    }
+    return empty;
+  }
 
   std::size_t screenRow = absRow - sbSize;
   if (screenRow < m_activeScreen.size())
@@ -178,24 +212,12 @@ std::vector<const std::vector<Cell> *> TerminalCore::GetViewArea() const {
   return view;
 }
 
-bool TerminalCore::IsViewRowWrapped(std::size_t viewRow) const {
-  std::size_t abs = m_viewStart + viewRow;
-  std::size_t sbSize = m_scrollback.size();
-
-  if (abs < sbSize)
-    return m_scrollback.IsWrapped(abs);
-
-  std::size_t screenRow = abs - sbSize;
-  if (screenRow < m_activeScreenWrapped.size())
-    return m_activeScreenWrapped[screenRow];
-  return false;
-}
-
 void TerminalCore::SetViewStart(std::size_t vs) {
   std::size_t total = TotalLines();
   std::size_t maxVs = total > m_rows ? total - m_rows : 0;
   m_viewStart = std::min(vs, maxVs);
-  m_followingBottom = (m_viewStart >= m_scrollback.size());
+  m_followingBottom = (m_viewStart >= ShellStart());
+  RefreshScrollbackCache();
 }
 
 void TerminalCore::Resize(std::size_t rows, std::size_t cols) {
@@ -212,19 +234,16 @@ void TerminalCore::Resize(std::size_t rows, std::size_t cols) {
                     static_cast<unsigned int>(m_rows));
 
   m_activeScreen.assign(m_rows, std::vector<Cell>(m_cols));
-  m_activeScreenWrapped.assign(m_rows, false);
-
-  // Resizing may have changed scrollback count
-  m_trackedSbCount = tsm_screen_sb_get_line_count(m_tsmScreen);
-
   RefreshActiveScreen();
 
   // Clamp viewStart
   std::size_t maxVs = TotalLines() > m_rows ? TotalLines() - m_rows : 0;
   if (m_followingBottom)
-    m_viewStart = m_scrollback.size();
+    m_viewStart = ShellStart();
   else
     m_viewStart = std::min(m_viewStart, maxVs);
+
+  RefreshScrollbackCache();
 }
 
 void TerminalCore::SetViewportSize(std::size_t rows, std::size_t cols) {
@@ -239,8 +258,8 @@ void TerminalCore::AppendLine(const std::string &line) {
 void TerminalCore::ClearScreen() {
   tsm_screen_erase_screen(m_tsmScreen, false);
   tsm_screen_clear_sb(m_tsmScreen);
-  m_scrollback.clear();
-  m_trackedSbCount = 0;
+  m_sbCache.clear();
+  m_sbCacheStart = 0;
   m_viewStart = 0;
   m_followingBottom = true;
   RefreshActiveScreen();
@@ -253,10 +272,9 @@ void TerminalCore::MoveCursor(std::size_t row, std::size_t col) {
 
 void TerminalCore::Reset() {
   tsm_vte_hard_reset(m_tsmVte);
-  m_scrollback.clear();
-  m_trackedSbCount = 0;
   m_activeScreen.assign(m_rows, std::vector<Cell>(m_cols));
-  m_activeScreenWrapped.assign(m_rows, false);
+  m_sbCache.clear();
+  m_sbCacheStart = 0;
   m_viewStart = 0;
   m_followingBottom = true;
 }
@@ -266,58 +284,82 @@ void TerminalCore::PutData(const std::string &data) {
 
   // Handle ESC[3J (erase scrollback) which libtsm doesn't support
   if (data.find("\033[3J") != std::string::npos) {
-    m_scrollback.clear();
-    m_trackedSbCount = 0;
     tsm_screen_clear_sb(m_tsmScreen);
+    m_sbCache.clear();
+    m_sbCacheStart = 0;
     m_viewStart = 0;
     m_followingBottom = true;
   }
 
-  std::size_t prevSb = tsm_screen_sb_get_line_count(m_tsmScreen);
   tsm_vte_input(m_tsmVte, data.c_str(), data.size());
-  CaptureScrollback(prevSb);
   RefreshActiveScreen();
 
   // Auto-follow bottom if user was at bottom
   if (m_followingBottom)
-    m_viewStart = m_scrollback.size();
-}
+    m_viewStart = ShellStart();
 
-void TerminalCore::CaptureScrollback(std::size_t prevSbCount) {
-  std::size_t newSbCount = tsm_screen_sb_get_line_count(m_tsmScreen);
-  if (newSbCount <= prevSbCount)
-    return;
-
-  std::size_t delta = newSbCount - prevSbCount;
-
-  // The top `delta` rows of the previous active screen have scrolled off.
-  // Push them into our scrollback.
-  for (std::size_t i = 0; i < delta && i < m_activeScreen.size(); ++i) {
-    bool wrapped =
-        (i < m_activeScreenWrapped.size()) && m_activeScreenWrapped[i];
-    m_scrollback.push_back(std::move(m_activeScreen[i]), wrapped);
-  }
-
-  // Trim scrollback to max
-  while (m_scrollback.size() > m_maxLines) {
-    m_scrollback.pop_front();
-  }
-
-  m_trackedSbCount = newSbCount;
+  RefreshScrollbackCache();
 }
 
 void TerminalCore::RefreshActiveScreen() {
   m_activeScreen.assign(m_rows, std::vector<Cell>(m_cols));
-
   tsm_screen_draw(m_tsmScreen, TsmDrawCb, this);
+}
 
-  // Compute soft-wrap heuristic
-  for (std::size_t r = 0; r + 1 < m_rows; ++r) {
-    const auto &row = m_activeScreen[r];
-    m_activeScreenWrapped[r] = !row.empty() && row.back().ch != U' ';
+void TerminalCore::RefreshScrollbackCache() {
+  std::size_t sbSize = ShellStart();
+  if (m_viewStart >= sbSize) {
+    m_sbCache.clear();
+    m_sbCacheStart = 0;
+    return;
   }
-  if (m_rows > 0)
-    m_activeScreenWrapped[m_rows - 1] = false;
+
+  // How many scrollback rows are visible in the viewport?
+  std::size_t sbEnd = std::min(m_viewStart + m_rows, sbSize);
+  std::size_t count = sbEnd - m_viewStart;
+
+  m_sbCacheStart = m_viewStart;
+  m_sbCache.resize(count);
+
+  // Bulk-read from libtsm
+  std::vector<struct tsm_screen_cell> buf(count * m_cols);
+  std::vector<unsigned int> lens(count);
+
+  int rc = tsm_screen_sb_get_lines(
+      m_tsmScreen, static_cast<unsigned int>(m_viewStart),
+      static_cast<unsigned int>(count), buf.data(), lens.data(),
+      static_cast<unsigned int>(m_cols));
+
+  if (rc != 0) {
+    m_sbCache.clear();
+    m_sbCacheStart = 0;
+    return;
+  }
+
+  for (std::size_t r = 0; r < count; ++r) {
+    unsigned int lineLen = lens[r];
+    m_sbCache[r].resize(lineLen);
+    for (unsigned int c = 0; c < lineLen; ++c) {
+      m_sbCache[r][c] = ConvertTsmCell(buf[r * m_cols + c]);
+    }
+  }
+}
+
+std::vector<Cell>
+TerminalCore::ConvertScrollbackLine(unsigned int lineIdx) const {
+  std::vector<struct tsm_screen_cell> buf(m_cols);
+  unsigned int len = 0;
+
+  int rc = tsm_screen_sb_get_line_cells(m_tsmScreen, lineIdx, buf.data(), &len,
+                                        static_cast<unsigned int>(m_cols));
+  if (rc != 0)
+    return {};
+
+  std::vector<Cell> row(len);
+  for (unsigned int c = 0; c < len; ++c) {
+    row[c] = ConvertTsmCell(buf[c]);
+  }
+  return row;
 }
 
 // --- libtsm callbacks ---
@@ -388,7 +430,6 @@ int TerminalCore::TsmDrawCb(struct tsm_screen * /*con*/, uint64_t /*id*/,
   Cell cell;
   cell.ch = (len > 0) ? static_cast<char32_t>(ch[0]) : U' ';
 
-  // Convert attributes
   if (attr->bold)
     cell.SetBold(true);
   if (attr->underline)
@@ -396,7 +437,6 @@ int TerminalCore::TsmDrawCb(struct tsm_screen * /*con*/, uint64_t /*id*/,
   if (attr->inverse)
     cell.SetReverse(true);
 
-  // Convert colors
   auto fgSpec = ConvertFgColor(attr);
   auto bgSpec = ConvertBgColor(attr);
   if (fgSpec.has_value() || bgSpec.has_value()) {

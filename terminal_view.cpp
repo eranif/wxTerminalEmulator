@@ -1679,16 +1679,9 @@ void wxTerminalViewCtrl::Copy() {
     for (int x = startCol; x <= endCol; ++x) {
       selection += wxUniChar(row[x].ch);
     }
-    // Only insert newline between rows if the next row is NOT a soft-wrap
-    // continuation of this row
     if (absY != e.y) {
-      auto nextViewRow = m_core.ViewPortRow(absY + 1);
-      bool nextIsWrapped =
-          nextViewRow.has_value() && m_core.IsViewRowWrapped(*nextViewRow);
-      if (!nextIsWrapped) {
-        selection.Trim();
-        selection += "\n";
-      }
+      selection.Trim();
+      selection += "\n";
     }
   }
 

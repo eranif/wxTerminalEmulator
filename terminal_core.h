@@ -4,7 +4,6 @@
 #include "wx/colour.h"
 #include <cstddef>
 #include <cstdint>
-#include <deque>
 #include <functional>
 #include <limits>
 #include <optional>
@@ -147,43 +146,6 @@ struct Cell {
   }
 };
 
-/// Synchronized container for terminal rows and their wrap flags.
-struct Lines {
-  using Row = std::vector<Cell>;
-
-  std::size_t size() const { return m_rows.size(); }
-
-  void clear() {
-    m_rows.clear();
-    m_wrapped.clear();
-  }
-
-  void push_back(Row row, bool wrapped = false) {
-    m_rows.push_back(std::move(row));
-    m_wrapped.push_back(wrapped);
-  }
-
-  void pop_front() {
-    m_rows.pop_front();
-    m_wrapped.pop_front();
-  }
-
-  Row &operator[](std::size_t i) { return m_rows[i]; }
-  const Row &operator[](std::size_t i) const { return m_rows[i]; }
-
-  bool IsWrapped(std::size_t i) const {
-    return i < m_wrapped.size() && m_wrapped[i];
-  }
-
-  void SetWrapped(std::size_t i, bool v) {
-    if (i < m_wrapped.size())
-      m_wrapped[i] = v;
-  }
-
-private:
-  std::deque<Row> m_rows;
-  std::deque<bool> m_wrapped;
-};
 
 class TerminalCore {
 public:
@@ -223,9 +185,9 @@ public:
 
   // View into the buffer: returns rows [viewStart .. viewStart+m_rows)
   std::size_t ViewStart() const { return m_viewStart; }
-  std::size_t ShellStart() const { return m_scrollback.size(); }
+  std::size_t ShellStart() const;
   void SetViewStart(std::size_t vs);
-  std::size_t TotalLines() const { return m_scrollback.size() + m_rows; }
+  std::size_t TotalLines() const;
 
   // Access a row by absolute index in the buffer
   const std::vector<Cell> &BufferRow(std::size_t absRow) const;
@@ -235,9 +197,6 @@ public:
 
   // Returns the visible rows (view area) as a vector of pointers to rows
   std::vector<const std::vector<Cell> *> GetViewArea() const;
-
-  /// Returns true if the given viewport row was created by a soft line wrap.
-  bool IsViewRowWrapped(std::size_t viewRow) const;
 
   wxString Flatten() const;
 
@@ -256,9 +215,10 @@ public:
 
 private:
   void DoSetClickedRange(bool b);
-  void CaptureScrollback(std::size_t prevSbCount);
   void RefreshActiveScreen();
+  void RefreshScrollbackCache();
   void SyncPalette();
+  std::vector<Cell> ConvertScrollbackLine(unsigned int lineIdx) const;
 
   static void TsmWriteCb(struct tsm_vte *vte, const char *u8, size_t len,
                          void *data);
@@ -274,12 +234,13 @@ private:
   std::size_t m_cols{80};
   std::size_t m_maxLines{1000};
 
-  // Scrollback buffer (lines that have scrolled off the active screen)
-  Lines m_scrollback;
   // Active screen content (refreshed from tsm_screen_draw after each PutData)
   std::vector<std::vector<Cell>> m_activeScreen;
-  // Wrap flags for active screen rows
-  std::vector<bool> m_activeScreenWrapped;
+
+  // Cache for scrollback rows currently visible in the viewport.
+  // Populated by RefreshScrollbackCache() when viewStart < ShellStart().
+  std::vector<std::vector<Cell>> m_sbCache;
+  std::size_t m_sbCacheStart{0};
 
   // Where the user is currently looking (changes on scroll wheel).
   std::size_t m_viewStart{0};
@@ -289,7 +250,6 @@ private:
   // libtsm handles
   struct tsm_screen *m_tsmScreen{nullptr};
   struct tsm_vte *m_tsmVte{nullptr};
-  std::size_t m_trackedSbCount{0};
 
   wxTerminalTheme m_theme;
   std::function<void(const std::string &)> m_responseCallback;
