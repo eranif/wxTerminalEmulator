@@ -1323,7 +1323,11 @@ void wxTerminalViewCtrl::OnCharHook(wxKeyEvent &evt) {
   int key = evt.GetKeyCode();
 
   if (key == WXK_RETURN || key == WXK_NUMPAD_ENTER) {
-    SendEnter();
+    if (evt.ShiftDown()) {
+      SendInput("\n");
+    } else {
+      SendEnter();
+    }
     return;
   } else if (key == WXK_TAB) {
     SendTab();
