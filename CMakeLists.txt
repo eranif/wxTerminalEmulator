@@ -56,7 +56,7 @@ if(CMAKE_BUILD_TYPE MATCHES Release)
 endif()
 
 # Build libtsm
-add_subdirectory(submodules/libtsm)
+add_subdirectory(libtsm)
 
 # Source files
 set(LIB_SOURCES terminal_core.cpp terminal_logger.cpp terminal_view.cpp
