@@ -216,6 +216,14 @@ public:
   wxString GetTextRange(std::size_t row, std::size_t col,
                         std::size_t count) const;
 
+  // Handle mouse events (returns true if event was consumed by application)
+  bool HandleMouseEvent(unsigned int cell_x, unsigned int cell_y,
+                        unsigned int button, unsigned int event,
+                        unsigned char flags = 0);
+
+  // Check if mouse tracking is enabled
+  unsigned int GetMouseTrackingMode() const;
+
 private:
   void DoSetClickedRange(bool b);
   void RefreshActiveScreen();

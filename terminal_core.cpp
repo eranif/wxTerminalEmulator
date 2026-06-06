@@ -528,4 +528,15 @@ wxString TerminalCore::GetTextRange(std::size_t row, std::size_t col,
   return text_range;
 }
 
+bool TerminalCore::HandleMouseEvent(unsigned int cell_x, unsigned int cell_y,
+                                    unsigned int button, unsigned int event,
+                                    unsigned char flags) {
+  return tsm_vte_handle_mouse(m_tsmVte, cell_x, cell_y, 0, 0, button, event,
+                              flags);
+}
+
+unsigned int TerminalCore::GetMouseTrackingMode() const {
+  return tsm_vte_get_mouse_mode(m_tsmVte);
+}
+
 } // namespace terminal

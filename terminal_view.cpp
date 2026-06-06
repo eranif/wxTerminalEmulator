@@ -2,6 +2,7 @@
 
 #include "terminal_event.h"
 #include "terminal_logger.h"
+#include "libtsm.h"
 #include <algorithm>
 #if USE_TIMER_REFRESH
 #include <chrono>
@@ -1196,19 +1197,31 @@ void wxTerminalViewCtrl::OnMouseWheel(wxMouseEvent &evt) {
   if (lines == 0)
     return;
 
-  // Maximum view start is shell start - don't scroll beyond the prompt line
-  std::size_t maxPos = m_core.ShellStart();
-  std::size_t vs = m_core.ViewStart();
-  if (lines > 0 && vs >= static_cast<std::size_t>(lines))
-    m_core.SetViewStart(vs - lines);
-  else if (lines > 0)
-    m_core.SetViewStart(0);
-  else {
-    std::size_t newPos = vs + static_cast<std::size_t>(-lines);
-    m_core.SetViewStart(std::min(newPos, maxPos));
+  unsigned int trackMode = m_core.GetMouseTrackingMode();
+  if (trackMode == 0) {
+    // Mouse tracking disabled: scroll the viewport
+    std::size_t maxPos = m_core.ShellStart();
+    std::size_t vs = m_core.ViewStart();
+    if (lines > 0 && vs >= static_cast<std::size_t>(lines))
+      m_core.SetViewStart(vs - lines);
+    else if (lines > 0)
+      m_core.SetViewStart(0);
+    else {
+      std::size_t newPos = vs + static_cast<std::size_t>(-lines);
+      m_core.SetViewStart(std::min(newPos, maxPos));
+    }
+    m_mouseSelection.Clear();
+    RefreshView();
+  } else {
+    // Mouse tracking enabled: send wheel events to the application
+    auto cellOpt = PointToCell(evt.GetPosition());
+    if (cellOpt) {
+      unsigned int button =
+          (lines > 0) ? TSM_MOUSE_BUTTON_WHEEL_UP : TSM_MOUSE_BUTTON_WHEEL_DOWN;
+      m_core.HandleMouseEvent(cellOpt->x, cellOpt->y, button,
+                              TSM_MOUSE_EVENT_PRESSED, 0);
+    }
   }
-  m_mouseSelection.Clear();
-  RefreshView();
 }
 
 void wxTerminalViewCtrl::OnContextMenu(wxContextMenuEvent &evt) {
