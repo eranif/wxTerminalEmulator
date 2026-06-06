@@ -188,6 +188,12 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     event.SetEventObject(this);
     GetEventHandler()->AddPendingEvent(event);
   });
+  m_core.SetAltScreenCallback([this](bool entered) {
+    if (entered && m_backend && m_core.Cols() > 0 && m_core.Rows() > 0) {
+      m_backend->Resize(static_cast<int>(m_core.Cols()),
+                        static_cast<int>(m_core.Rows()));
+    }
+  });
   CallAfter(&wxTerminalViewCtrl::SetFocus);
 }
 

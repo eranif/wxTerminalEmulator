@@ -291,7 +291,16 @@ void TerminalCore::PutData(const std::string &data) {
     m_followingBottom = true;
   }
 
+  unsigned int flagsBefore = tsm_screen_get_flags(m_tsmScreen);
   tsm_vte_input(m_tsmVte, data.c_str(), data.size());
+  unsigned int flagsAfter = tsm_screen_get_flags(m_tsmScreen);
+
+  if ((flagsBefore ^ flagsAfter) & TSM_SCREEN_ALTERNATE) {
+    bool entered = (flagsAfter & TSM_SCREEN_ALTERNATE) != 0;
+    if (m_altScreenCallback)
+      m_altScreenCallback(entered);
+  }
+
   RefreshActiveScreen();
 
   // Auto-follow bottom if user was at bottom

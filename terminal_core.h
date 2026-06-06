@@ -174,6 +174,9 @@ public:
   void SetBellCallback(std::function<void()> callback) {
     m_bellCallback = callback;
   }
+  void SetAltScreenCallback(std::function<void(bool entered)> callback) {
+    m_altScreenCallback = callback;
+  }
 
   std::size_t Rows() const { return m_rows; }
   std::size_t Cols() const { return m_cols; }
@@ -255,6 +258,7 @@ private:
   std::function<void(const std::string &)> m_responseCallback;
   std::function<void(const std::string &)> m_titleCallback;
   std::function<void()> m_bellCallback;
+  std::function<void(bool entered)> m_altScreenCallback;
   wxRect m_clickedRect;
 };
 
