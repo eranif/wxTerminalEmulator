@@ -12,6 +12,7 @@
 #if USE_TIMER_REFRESH
 #include <thread>
 #endif
+#include <atomic>
 #include <wx/dcbuffer.h>
 #include <wx/dcgraph.h>
 #include <wx/panel.h>
