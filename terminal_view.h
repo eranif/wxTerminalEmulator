@@ -164,6 +164,15 @@ public:
     m_pendingCommands.push_back(command);
   }
 
+  using OutputCallback = std::function<void(const std::string &)>;
+
+  /// Set a callback to be invoked with each chunk of raw output received from
+  /// the terminal process. Useful for detecting prompts or waiting-for-input
+  /// patterns. Pass nullptr or an empty function to remove.
+  void SetOutputCallback(OutputCallback callback) {
+    m_outputCallback = std::move(callback);
+  }
+
   // Override to indicate this window can receive keyboard focus
   bool AcceptsFocus() const override { return true; }
   bool AcceptsFocusFromKeyboard() const override { return true; }
@@ -453,4 +462,5 @@ private:
   bool m_hasFocusBorder{false};
   std::vector<wxString> m_pendingCommands;
   bool m_backendReady{false};
+  OutputCallback m_outputCallback{nullptr};
 };
