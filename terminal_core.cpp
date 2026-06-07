@@ -153,8 +153,7 @@ Cell *TerminalCore::GetCell(const wxPoint &absCoords) {
 
   if (row < sbSize) {
     // Check if it's in the scrollback cache
-    if (row >= m_sbCacheStart &&
-        row < m_sbCacheStart + m_sbCache.size()) {
+    if (row >= m_sbCacheStart && row < m_sbCacheStart + m_sbCache.size()) {
       auto &line = m_sbCache[row - m_sbCacheStart];
       if (col >= line.size())
         return nullptr;
@@ -311,11 +310,15 @@ void TerminalCore::PutData(const std::string &data) {
 }
 
 void TerminalCore::RefreshActiveScreen() {
+  LogFunction log{"TerminalCore::RefreshActiveScreen",
+                  TerminalLogLevel::kDebug};
   m_activeScreen.assign(m_rows, std::vector<Cell>(m_cols));
   tsm_screen_draw(m_tsmScreen, TsmDrawCb, this);
 }
 
 void TerminalCore::RefreshScrollbackCache() {
+  LogFunction log{"TerminalCore::RefreshScrollbackCache",
+                  TerminalLogLevel::kDebug};
   std::size_t sbSize = ShellStart();
   if (m_viewStart >= sbSize) {
     m_sbCache.clear();

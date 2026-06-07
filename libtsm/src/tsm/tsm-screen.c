@@ -1026,12 +1026,23 @@ int tsm_screen_sb_get_lines(struct tsm_screen *con,
 	if (start_idx + count > con->sb.count)
 		count = con->sb.count - start_idx;
 
-	/* Walk to start_idx */
-	i = 0;
-	iter = con->sb.list.next;
-	while (i < start_idx && iter != &con->sb.list) {
-		iter = iter->next;
-		++i;
+	/* Walk to start_idx from whichever end is closer */
+	if (start_idx < con->sb.count / 2) {
+		/* Walk forward from head */
+		i = 0;
+		iter = con->sb.list.next;
+		while (i < start_idx && iter != &con->sb.list) {
+			iter = iter->next;
+			++i;
+		}
+	} else {
+		/* Walk backward from tail */
+		i = con->sb.count - 1;
+		iter = con->sb.list.prev;
+		while (i > start_idx && iter != &con->sb.list) {
+			iter = iter->prev;
+			--i;
+		}
 	}
 
 	/* Read count consecutive lines */
