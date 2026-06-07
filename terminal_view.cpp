@@ -1,8 +1,8 @@
 #include "terminal_view.h"
 
+#include "libtsm.h"
 #include "terminal_event.h"
 #include "terminal_logger.h"
-#include "libtsm.h"
 #include <algorithm>
 #if USE_TIMER_REFRESH
 #include <chrono>
@@ -113,7 +113,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     wxWindow *parent, const wxString &shellCommand,
     const std::optional<EnvironmentList> &environment)
     : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-              wxTAB_TRAVERSAL | wxVSCROLL) {
+              wxTAB_TRAVERSAL | wxVSCROLL | wxALWAYS_SHOW_SB) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   UpdateFontCache();
   SetSelectionDelimChars(" \t<>{}[]()$,;*!@^\"'");
@@ -238,10 +238,6 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
 }
 
 void wxTerminalViewCtrl::Feed(const std::string &data) {
-  static size_t s_feedCount = 0;
-  static size_t s_refreshCount = 0;
-  ++s_feedCount;
-
   if (m_outputCallback) {
     m_outputCallback(data);
   }
@@ -251,17 +247,7 @@ void wxTerminalViewCtrl::Feed(const std::string &data) {
     m_core.SetViewStart(m_core.ShellStart());
   }
 
-  if (!m_refreshPending) {
-    m_refreshPending = true;
-    CallAfter([this]() {
-      m_refreshPending = false;
-      ++s_refreshCount;
-      TLOG_DEBUG() << "Feed: " << s_feedCount << " calls, " << s_refreshCount
-                   << " refreshes, " << (s_feedCount - s_refreshCount)
-                   << " skipped" << std::endl;
-      RefreshView();
-    });
-  }
+  RefreshView();
 }
 
 void wxTerminalViewCtrl::SetTerminalSizeFromClient() {
@@ -275,8 +261,10 @@ void wxTerminalViewCtrl::SetTerminalSizeFromClient() {
   if (cols == m_core.Cols() && rows == m_core.Rows())
     return;
 
-  TLOG_DEBUG() << "Resize: " << cols << "x" << rows << " (charW=" << m_charW
-               << " charH=" << m_charH << ")" << std::endl;
+  TLOG_IF_DEBUG {
+    TLOG_DEBUG() << "Resize: " << cols << "x" << rows << " (charW=" << m_charW
+                 << " charH=" << m_charH << ")" << std::endl;
+  }
   m_core.SetViewportSize(rows, cols);
   if (m_backend) {
     m_backend->Resize(static_cast<int>(cols), static_cast<int>(rows));
@@ -1973,7 +1961,21 @@ void wxTerminalViewCtrl::RefreshView(bool now) {
   m_needsRepaint = true;
 #else
   wxUnusedVar(now);
-  Refresh();
+  m_refreshRequested++;
+  if (!m_refreshPending) {
+    m_refreshPending = true;
+    CallAfter([this]() {
+      m_refreshExecuted++;
+      m_refreshPending = false;
+      TLOG_IF_DEBUG {
+        TLOG_DEBUG() << "RefreshView: " << m_refreshRequested << " calls, "
+                     << m_refreshExecuted << " refreshes, "
+                     << (m_refreshRequested - m_refreshExecuted) << " skipped"
+                     << std::endl;
+      }
+      Refresh();
+    });
+  }
 #endif
 }
 

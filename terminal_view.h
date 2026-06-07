@@ -463,5 +463,7 @@ private:
   std::vector<wxString> m_pendingCommands;
   bool m_backendReady{false};
   OutputCallback m_outputCallback{nullptr};
-  bool m_refreshPending{false};
+  std::atomic_bool m_refreshPending{false};
+  size_t m_refreshRequested{0};
+  size_t m_refreshExecuted{0};
 };
