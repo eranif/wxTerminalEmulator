@@ -472,6 +472,9 @@ const wxTerminalTheme &wxTerminalViewCtrl::GetTheme() const {
 }
 
 void wxTerminalViewCtrl::ScrollToLastLine() {
+  if (m_core.ViewStart() == m_core.ShellStart()) {
+    return;
+  }
   m_core.SetViewStart(m_core.ShellStart());
   RefreshView();
 }
@@ -1029,6 +1032,9 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
 
   int y = 0;
   auto viewArea = m_core.GetViewArea();
+  TLOG_IF_DEBUG {
+    TLOG_DEBUG() << "Drawing " << viewArea.size() << " lines" << std::endl;
+  }
   for (int rowIdx = 0; rowIdx < static_cast<int>(viewArea.size()); ++rowIdx) {
     const auto &row = *viewArea[rowIdx];
     RenderRow(dc, y, rowIdx, row, paint_counters);
