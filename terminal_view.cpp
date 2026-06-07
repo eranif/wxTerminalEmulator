@@ -113,7 +113,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     wxWindow *parent, const wxString &shellCommand,
     const std::optional<EnvironmentList> &environment)
     : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-              wxTAB_TRAVERSAL | wxVSCROLL | wxALWAYS_SHOW_SB) {
+              wxTAB_TRAVERSAL | wxVSCROLL) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   UpdateFontCache();
   SetSelectionDelimChars(" \t<>{}[]()$,;*!@^\"'");
