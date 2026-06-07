@@ -238,17 +238,30 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
 }
 
 void wxTerminalViewCtrl::Feed(const std::string &data) {
+  static size_t s_feedCount = 0;
+  static size_t s_refreshCount = 0;
+  ++s_feedCount;
+
   if (m_outputCallback) {
     m_outputCallback(data);
   }
-  // Only clamp to bottom if the user is already at the bottom.
-  // If they scrolled up to view history, preserve their scroll position.
   bool wasAtBottom = (m_core.ViewStart() == m_core.ShellStart());
   m_core.PutData(data);
   if (wasAtBottom) {
     m_core.SetViewStart(m_core.ShellStart());
   }
-  RefreshView();
+
+  if (!m_refreshPending) {
+    m_refreshPending = true;
+    CallAfter([this]() {
+      m_refreshPending = false;
+      ++s_refreshCount;
+      TLOG_DEBUG() << "Feed: " << s_feedCount << " calls, " << s_refreshCount
+                   << " refreshes, " << (s_feedCount - s_refreshCount)
+                   << " skipped" << std::endl;
+      RefreshView();
+    });
+  }
 }
 
 void wxTerminalViewCtrl::SetTerminalSizeFromClient() {
@@ -1080,7 +1093,6 @@ void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
                << GetClientSize().GetHeight() << std::endl;
   SetTerminalSizeFromClient();
   UpdateScrollbar();
-  RefreshView(true);
   evt.Skip();
 }
 
