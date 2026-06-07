@@ -445,16 +445,23 @@ public:
   }
 
   void OnTitleChanged(wxTerminalEvent &event) {
+    wxString title = event.GetTitle();
+    title.Trim().Trim(false);
+    if (title.empty()) {
+      title = _("Terminal");
+    }
     if (auto *view =
             dynamic_cast<wxTerminalViewCtrl *>(event.GetEventObject())) {
-      if (m_notebook) {
-        int sel = m_notebook->FindPage(view);
-        if (sel != wxNOT_FOUND) {
-          m_notebook->SetPageText(sel, event.GetTitle());
-        }
+      if (!m_notebook) {
+        return;
+      }
+      int sel = m_notebook->FindPage(view);
+      if (sel != wxNOT_FOUND) {
+        m_notebook->SetPageText(sel, title);
       }
     }
-    SetTitle(event.GetTitle());
+
+    SetTitle(title);
   }
 
   void OnTerminalLink(wxTerminalEvent &event) {
