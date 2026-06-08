@@ -5,9 +5,9 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <vector>
-#include <optional>
 
 namespace terminal {
 
@@ -18,6 +18,7 @@ public:
 
   bool Start(const std::string &command,
              const std::optional<EnvironmentList> &environment,
+             const std::optional<std::string> &workingDirectory,
              OutputCallback on_output) override;
   void Write(const std::string &data) override;
   void Resize(int cols, int rows) override;

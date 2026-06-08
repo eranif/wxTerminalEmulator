@@ -30,7 +30,8 @@ public:
   using EnvironmentList = terminal::PtyBackend::EnvironmentList;
 
   wxTerminalViewCtrl(wxWindow *parent, const wxString &shellCommand,
-                     const std::optional<EnvironmentList> &environment);
+                     const std::optional<EnvironmentList> &environment,
+                     std::optional<wxString> workingDirectory = std::nullopt);
   ~wxTerminalViewCtrl() override;
 
   /**
@@ -453,6 +454,7 @@ private:
   bool m_contextMenuShowing{false};
   wxString m_shell_command;
   std::optional<EnvironmentList> m_environment{std::nullopt};
+  std::optional<std::string> m_workingDirectory{std::nullopt};
   bool m_safeDrawing{false};
 #if USE_TIMER_REFRESH
   std::atomic_bool m_needsRepaint{true};

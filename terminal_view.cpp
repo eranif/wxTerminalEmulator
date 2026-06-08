@@ -111,7 +111,8 @@ static const std::unordered_map<int, int> shiftMap = {
 
 wxTerminalViewCtrl::wxTerminalViewCtrl(
     wxWindow *parent, const wxString &shellCommand,
-    const std::optional<EnvironmentList> &environment)
+    const std::optional<EnvironmentList> &environment,
+    std::optional<wxString> workingDirectory)
     : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
               wxTAB_TRAVERSAL | wxVSCROLL) {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
@@ -160,6 +161,9 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
 
   m_shell_command = shellCommand;
   m_environment = std::move(environment);
+  if (workingDirectory) {
+    m_workingDirectory = workingDirectory->ToStdString(wxConvUTF8);
+  }
 
   if (!m_environment.has_value()) {
     TLOG_DEBUG() << "No env provided. Building one." << std::endl;
@@ -281,11 +285,12 @@ void wxTerminalViewCtrl::StartProcess(
   m_environment = environment;
 
   TLOG_DEBUG() << "Starting shell with command: " << command << std::endl;
-  bool ok = m_backend &&
-            m_backend->Start(m_shell_command.ToStdString(wxConvUTF8),
-                             m_environment, [this](const std::string &out) {
-                               CallAfter(&wxTerminalViewCtrl::Feed, out);
-                             });
+  bool ok =
+      m_backend &&
+      m_backend->Start(m_shell_command.ToStdString(wxConvUTF8), m_environment,
+                       m_workingDirectory, [this](const std::string &out) {
+                         CallAfter(&wxTerminalViewCtrl::Feed, out);
+                       });
   if (ok && m_core.Cols() > 0 && m_core.Rows() > 0) {
     m_backend->Resize(static_cast<int>(m_core.Cols()),
                       static_cast<int>(m_core.Rows()));

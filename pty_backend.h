@@ -19,6 +19,7 @@ public:
   virtual ~PtyBackend() = default;
   virtual bool Start(const std::string &command,
                      const std::optional<EnvironmentList> &environment,
+                     const std::optional<std::string> &workingDirectory,
                      OutputCallback on_output) = 0;
   virtual void Write(const std::string &data) = 0;
   virtual void Resize(int cols, int rows) = 0;

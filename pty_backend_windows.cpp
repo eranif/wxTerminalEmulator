@@ -303,9 +303,11 @@ WindowsPtyBackend::WindowsPtyBackend(wxEvtHandler *eventHandler)
 
 WindowsPtyBackend::~WindowsPtyBackend() { Stop(); }
 
-bool WindowsPtyBackend::Start(const std::string &command,
-                              const std::optional<EnvironmentList> &environment,
-                              OutputCallback on_output) {
+bool WindowsPtyBackend::Start(
+    const std::string &command,
+    const std::optional<EnvironmentList> &environment,
+    const std::optional<std::string> &workingDirectory,
+    OutputCallback on_output) {
   Stop();
 
   m_onOutput = std::move(on_output);

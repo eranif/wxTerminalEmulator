@@ -45,6 +45,7 @@ PosixPtyBackend::~PosixPtyBackend() { Stop(); }
 
 bool PosixPtyBackend::Start(const std::string &command,
                             const std::optional<EnvironmentList> &environment,
+                            const std::optional<std::string> &workingDirectory,
                             OutputCallback on_output) {
   Stop();
   m_onOutput = std::move(on_output);
@@ -94,6 +95,11 @@ bool PosixPtyBackend::Start(const std::string &command,
 
   if (pid == 0) {
     // Child process — async-signal-safe calls only.
+    if (workingDirectory) {
+      // Set working directory before launching the process.
+      ::wxSetWorkingDirectory(wxString::FromUTF8(*workingDirectory));
+    }
+
     if (hasEnv) {
 #if defined(__APPLE__)
       execve(shell_argv[0], shell_argv.data(), envp.data());
