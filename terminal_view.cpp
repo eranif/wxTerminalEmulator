@@ -112,9 +112,13 @@ static const std::unordered_map<int, int> shiftMap = {
 wxTerminalViewCtrl::wxTerminalViewCtrl(
     wxWindow *parent, const wxString &shellCommand,
     const std::optional<EnvironmentList> &environment,
-    std::optional<wxString> workingDirectory)
-    : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-              wxTAB_TRAVERSAL | wxVSCROLL) {
+    std::optional<wxString> workingDirectory, bool showScrollBar)
+    : m_showScrollBar{showScrollBar} {
+  long style = wxTAB_TRAVERSAL;
+  if (m_showScrollBar) {
+    style |= wxVSCROLL;
+  }
+  wxPanel::Create(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, style);
   SetBackgroundStyle(wxBG_STYLE_PAINT);
   UpdateFontCache();
   SetSelectionDelimChars(" \t<>{}[]()$,;*!@^\"'");
@@ -1991,11 +1995,13 @@ void wxTerminalViewCtrl::RefreshView(bool now) {
 }
 
 void wxTerminalViewCtrl::UpdateScrollbar() {
-  // Don't allow scrolling beyond the shell start (prompt line)
-  int total = static_cast<int>(m_core.ShellStart() + m_core.Rows());
-  int thumb = static_cast<int>(m_core.Rows());
-  int pos = static_cast<int>(m_core.ViewStart());
-  SetScrollbar(wxVERTICAL, pos, thumb, total);
+  if (m_showScrollBar) {
+    // Don't allow scrolling beyond the shell start (prompt line)
+    int total = static_cast<int>(m_core.ShellStart() + m_core.Rows());
+    int thumb = static_cast<int>(m_core.Rows());
+    int pos = static_cast<int>(m_core.ViewStart());
+    SetScrollbar(wxVERTICAL, pos, thumb, total);
+  }
 }
 
 void wxTerminalViewCtrl::OnScroll(wxScrollWinEvent &evt) {

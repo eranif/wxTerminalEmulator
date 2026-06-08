@@ -31,7 +31,8 @@ public:
 
   wxTerminalViewCtrl(wxWindow *parent, const wxString &shellCommand,
                      const std::optional<EnvironmentList> &environment,
-                     std::optional<wxString> workingDirectory = std::nullopt);
+                     std::optional<wxString> workingDirectory = std::nullopt,
+                     bool showScrollBar = true);
   ~wxTerminalViewCtrl() override;
 
   /**
@@ -469,4 +470,5 @@ private:
   std::atomic_bool m_refreshPending{false};
   size_t m_refreshRequested{0};
   size_t m_refreshExecuted{0};
+  bool m_showScrollBar{true};
 };
