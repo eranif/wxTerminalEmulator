@@ -96,7 +96,14 @@ if(BUILD_WXTERMINAL_DEMO)
   if(MINGW)
     add_executable(wxterminal WIN32 ${EXAMPLE_SOURCES})
   elseif(APPLE)
-    add_executable(wxterminal MACOSX_BUNDLE ${EXAMPLE_SOURCES})
+    set(MACOSX_BUNDLE_ICON_FILE icon.icns)
+    set(APP_ICON "${CMAKE_SOURCE_DIR}/assets/icon.icns")
+    set_source_files_properties(${APP_ICON} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    add_executable(wxterminal MACOSX_BUNDLE ${EXAMPLE_SOURCES} ${APP_ICON})
+    set_target_properties(wxterminal PROPERTIES
+      MACOSX_BUNDLE_ICON_FILE icon.icns
+      MACOSX_BUNDLE_BUNDLE_NAME "wxTerminalEmulator"
+    )
   else()
     add_executable(wxterminal ${EXAMPLE_SOURCES})
   endif()

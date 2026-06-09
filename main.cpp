@@ -80,12 +80,6 @@ public:
                           wxAUI_NB_DEFAULT_STYLE | wxAUI_NB_CLOSE_ON_ALL_TABS);
     m_defaultShellCommand = shellCommand;
     m_defaultEnvironment = environment;
-    auto first_terminal = CreateTerminalPage({shellCommand, environment});
-#ifndef __WXMSW__
-    first_terminal->EnsureStarted();
-    first_terminal->SendCommand("sleep 2 && ls -la");
-#endif
-
     m_view = CreateTerminalPage({shellCommand, environment});
     m_notebook->Bind(
         wxEVT_AUINOTEBOOK_PAGE_CHANGED, [this](wxAuiNotebookEvent &event) {
