@@ -189,6 +189,9 @@ public:
   inline void EnsureStarted() { InitialiseAndStart(nullptr); }
 
 private:
+  wxRect GetTerminalRect() const;
+  wxSize GetTerminalSize() const;
+
   /// Linear selection defined by anchor and current cell in viewport
   /// coordinates. Cells between anchor and current in reading order
   /// (left-to-right, top-to-bottom) are considered selected.

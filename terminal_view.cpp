@@ -245,6 +245,21 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   }
 }
 
+wxRect wxTerminalViewCtrl::GetTerminalRect() const {
+  static int kScrollbarWidth{wxNOT_FOUND};
+  if (kScrollbarWidth == wxNOT_FOUND) {
+    kScrollbarWidth = wxSystemSettings::GetMetric(wxSYS_VSCROLL_X) + 3;
+  }
+
+  wxRect r{GetSize()}; // this size is fixed - without or with the scrollbars.
+  r.SetWidth(r.GetWidth() - kScrollbarWidth);
+  return r;
+}
+
+wxSize wxTerminalViewCtrl::GetTerminalSize() const {
+  return GetTerminalRect().GetSize();
+}
+
 void wxTerminalViewCtrl::Feed(const std::string &data) {
   if (m_outputCallback) {
     m_outputCallback(data);
@@ -262,7 +277,7 @@ void wxTerminalViewCtrl::SetTerminalSizeFromClient() {
   if (m_charH == 0 || m_charW == 0) {
     return;
   }
-  const wxSize sz = GetClientSize();
+  const wxSize sz = GetTerminalSize();
   const std::size_t cols = std::max(1, sz.GetWidth() / m_charW);
   const std::size_t rows = std::max(1, sz.GetHeight() / m_charH);
 
@@ -284,7 +299,7 @@ void wxTerminalViewCtrl::StartProcess(
     const std::optional<EnvironmentList> &environment) {
   if (m_backend)
     return;
-  m_backend = terminal::PtyBackend::Create(GetEventHandler());
+  m_backend = terminal::PtyBackend::Create(this);
   m_shell_command = command;
   m_environment = environment;
 
@@ -1105,8 +1120,6 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
 }
 
 void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
-  TLOG_DEBUG() << "OnSize: " << GetClientSize().GetWidth() << "x"
-               << GetClientSize().GetHeight() << std::endl;
   SetTerminalSizeFromClient();
   UpdateScrollbar();
   evt.Skip();

@@ -136,6 +136,10 @@ void TerminalCore::SetMaxLines(std::size_t maxLines) {
   tsm_screen_set_max_sb(m_tsmScreen, static_cast<unsigned int>(maxLines));
 }
 
+bool TerminalCore::HasScroll() const {
+  return tsm_screen_sb_get_line_count(m_tsmScreen);
+}
+
 std::size_t TerminalCore::ShellStart() const {
   return tsm_screen_sb_get_line_count(m_tsmScreen);
 }

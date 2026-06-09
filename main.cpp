@@ -422,7 +422,6 @@ public:
   }
 
   void OnTerminated(wxTerminalEvent &event) {
-    wxUnusedVar(event);
     auto *view = dynamic_cast<wxTerminalViewCtrl *>(event.GetEventObject());
     if (!view || !m_notebook) {
       return;

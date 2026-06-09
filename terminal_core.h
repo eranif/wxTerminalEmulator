@@ -146,7 +146,6 @@ struct Cell {
   }
 };
 
-
 class TerminalCore {
 public:
   TerminalCore(std::size_t rows = 24, std::size_t cols = 80,
@@ -189,6 +188,7 @@ public:
   // View into the buffer: returns rows [viewStart .. viewStart+m_rows)
   std::size_t ViewStart() const { return m_viewStart; }
   std::size_t ShellStart() const;
+  bool HasScroll() const;
   void SetViewStart(std::size_t vs);
   std::size_t TotalLines() const;
 
