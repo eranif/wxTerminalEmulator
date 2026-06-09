@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background with rounded corners -->
+  <rect width="512" height="512" rx="100" ry="100" fill="#1E1E2E"/>
+
+  <!-- Terminal window chrome -->
+  <rect x="48" y="80" width="416" height="352" rx="12" ry="12" fill="#181825"/>
+
+  <!-- Title bar -->
+  <rect x="48" y="80" width="416" height="40" rx="12" ry="12" fill="#313244"/>
+  <rect x="48" y="100" width="416" height="20" fill="#313244"/>
+
+  <!-- Traffic light dots -->
+  <circle cx="88" cy="100" r="8" fill="#FF5F57"/>
+  <circle cx="116" cy="100" r="8" fill="#FFBD2E"/>
+  <circle cx="144" cy="100" r="8" fill="#28CA41"/>
+
+  <!-- Terminal text lines -->
+  <!-- Line 1: prompt + command -->
+  <text x="76" y="172" font-family="monospace" font-size="28" fill="#A6E3A1">$</text>
+  <text x="100" y="172" font-family="monospace" font-size="28" fill="#CDD6F4"> ./wxterminal</text>
+
+  <!-- Line 2: output -->
+  <text x="76" y="214" font-family="monospace" font-size="24" fill="#89B4FA">wxTerminalEmulator v1.0</text>
+
+  <!-- Line 3: output -->
+  <text x="76" y="252" font-family="monospace" font-size="24" fill="#6C7086">Starting shell...</text>
+
+  <!-- Line 4: prompt with cursor -->
+  <text x="76" y="310" font-family="monospace" font-size="28" fill="#A6E3A1">$</text>
+  <!-- Blinking cursor block -->
+  <rect x="102" y="285" width="16" height="30" rx="2" fill="#F5C2E7"/>
+</svg>
