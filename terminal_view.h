@@ -184,6 +184,10 @@ public:
   bool ShouldInheritColours() const override { return true; }
   wxBorder GetDefaultBorder() const override { return wxBORDER_NONE; }
 
+  // Call this method to ensure that the terminal is started even if the
+  // terminal is placed in a hidden window.
+  inline void EnsureStarted() { InitialiseAndStart(nullptr); }
+
 private:
   /// Linear selection defined by anchor and current cell in viewport
   /// coordinates. Cells between anchor and current in reading order
@@ -247,6 +251,7 @@ private:
   bool IsPowerShell() const;
   bool IsCmdShell() const;
   bool IsShell(const wxString &shell_name, const wxArrayString &children) const;
+  bool InitialiseAndStart(wxDC *pdc = nullptr);
 
   void Feed(const std::string &data);
   void StartProcess(const wxString &command,

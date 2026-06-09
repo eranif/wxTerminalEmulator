@@ -966,6 +966,62 @@ void wxTerminalViewCtrl::RenderRow(wxDC &dc, int y, int rowIdx,
   RenderRowWithGrouping(dc, y, rowIdx, row, counters);
 }
 
+bool wxTerminalViewCtrl::InitialiseAndStart(wxDC *pdc) {
+  if (m_charH != 0 || m_charW != 0 || m_backend != nullptr) {
+    return false;
+  }
+
+  wxDC *dc{pdc};
+  wxClientDC client_dc(this);
+  if (dc == nullptr) {
+    dc = &client_dc;
+  }
+
+  dc->SetFont(m_defaultFontBold);
+
+  // first time — measure font, set size, then start the shell
+  int i_width = dc->GetTextExtent("i").GetWidth();
+  m_charW = dc->GetTextExtent("W").GetWidth();
+
+  int i_height = dc->GetTextExtent("i").GetHeight();
+  m_charH = dc->GetTextExtent("W").GetHeight();
+
+  if (i_width != m_charW || i_height != m_charH) {
+    m_charW = 0;
+    // Mark the font has "non-monospaced" font.
+    m_core.GetTheme().isMonospaced = false;
+    // Find the widest letter from the A-Z
+    for (auto c = 'A'; c <= 'Z'; c++) {
+      wxString t(c, 1);
+      int tmp_width = dc->GetTextExtent(t).GetWidth();
+      m_charW = std::max(tmp_width, m_charW);
+    }
+  } else {
+    // Monospaced font.
+    static const wxString kTextSample = "codelite/.build-release";
+    // Sometimes drawing block of text shows a different char width overall.
+    // So use an avg.
+    int char_width = m_charW;
+    m_charW = std::ceil(
+        static_cast<float>(dc->GetTextExtent(kTextSample).GetWidth()) /
+        static_cast<float>(kTextSample.length()));
+
+    TLOG_IF_DEBUG {
+      TLOG_DEBUG() << "m_charW=" << m_charW << ", m_charH=" << m_charH
+                   << ". Single char width is=" << char_width << std::endl;
+    }
+  }
+
+  SetTerminalSizeFromClient();
+  if (m_backend == nullptr) {
+    CallAfter(&wxTerminalViewCtrl::StartProcess, m_shell_command,
+              m_environment);
+  }
+  // Now that the char width is known, do another paint.
+  CallAfter(&wxTerminalViewCtrl::Refresh, true, nullptr);
+  return true;
+}
+
 void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
   // For logging purposes
   LogFunction function_logger{"TerminalView::OnPaint",
@@ -983,50 +1039,7 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
   dc.SetBackground(wxBrush(theme.bg));
   dc.Clear();
   dc.SetFont(m_defaultFont);
-
-  if (m_charH == 0 && m_charW == 0) {
-    dc.SetFont(m_defaultFontBold);
-
-    // first time — measure font, set size, then start the shell
-    int i_width = dc.GetTextExtent("i").GetWidth();
-    m_charW = dc.GetTextExtent("W").GetWidth();
-
-    int i_height = dc.GetTextExtent("i").GetHeight();
-    m_charH = dc.GetTextExtent("W").GetHeight();
-
-    if (i_width != m_charW || i_height != m_charH) {
-      m_charW = 0;
-      // Mark the font has "non-monospaced" font.
-      m_core.GetTheme().isMonospaced = false;
-      // Find the widest letter from the A-Z
-      for (auto c = 'A'; c <= 'Z'; c++) {
-        wxString t(c, 1);
-        int tmp_width = dc.GetTextExtent(t).GetWidth();
-        m_charW = std::max(tmp_width, m_charW);
-      }
-    } else {
-      // Monospaced font.
-      static const wxString kTextSample = "codelite/.build-release";
-      // Sometimes drawing block of text shows a different char width overall.
-      // So use an avg.
-      int char_width = m_charW;
-      m_charW = std::ceil(
-          static_cast<float>(dc.GetTextExtent(kTextSample).GetWidth()) /
-          static_cast<float>(kTextSample.length()));
-
-      TLOG_IF_DEBUG {
-        TLOG_DEBUG() << "m_charW=" << m_charW << ", m_charH=" << m_charH
-                     << ". Single char width is=" << char_width << std::endl;
-      }
-    }
-
-    SetTerminalSizeFromClient();
-    if (m_backend == nullptr) {
-      CallAfter(&wxTerminalViewCtrl::StartProcess, m_shell_command,
-                m_environment);
-    }
-    // Now that the char width is known, do another paint.
-    CallAfter(&wxTerminalViewCtrl::Refresh, true, nullptr);
+  if (InitialiseAndStart(&dc)) {
     return;
   }
 
