@@ -588,6 +588,8 @@ void wxTerminalViewCtrl::UpdateFontCache() {
   m_defaultFontBoldUnderlined = m_defaultFont;
   m_defaultFontBoldUnderlined.MakeBold();
   m_defaultFontBoldUnderlined.MakeUnderlined();
+  // Fonts changed: every row must be repainted.
+  InvalidateRenderCache();
 }
 
 void wxTerminalViewCtrl::DebugDumpViewArea(TerminalLogLevel log_level,
@@ -1047,13 +1049,49 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
       function_logger.AddCounter("GroupedRows calls"),
       function_logger.AddCounter("FullRow Grouped"),
   };
+  // Incremental-rendering stats: how many visible rows were actually
+  // re-rendered vs. left untouched in the backing store this paint.
+  size_t &rows_redrawn = function_logger.AddCounter("Rows redrawn");
+  size_t &rows_skipped = function_logger.AddCounter("Rows skipped");
 
-  wxAutoBufferedPaintDC dc{this};
+  // Keep a persistent off-screen buffer the same size as the client area.
+  // Retaining it between paints is what allows us to redraw only the rows
+  // that changed instead of the whole screen on every keystroke.
+  //
+  // On HiDPI/Retina displays the bitmap must be allocated in *physical*
+  // pixels (logical size * scale factor) and tagged via SetScaleFactor(),
+  // otherwise wxWidgets upscales a low-resolution buffer and the text looks
+  // blurry.
+  const wxSize clientSize = GetClientSize();
+  const double scale = GetDPIScaleFactor();
+  bool sizeChanged = false;
+  if (clientSize.x > 0 && clientSize.y > 0) {
+    const int physW = static_cast<int>(std::ceil(clientSize.x * scale));
+    const int physH = static_cast<int>(std::ceil(clientSize.y * scale));
+    if (!m_backingStore.IsOk() || m_backingStore.GetWidth() != physW ||
+        m_backingStore.GetHeight() != physH ||
+        m_backingStore.GetScaleFactor() != scale) {
+      m_backingStore = wxBitmap(physW, physH);
+      m_backingStore.SetScaleFactor(scale);
+      sizeChanged = true;
+    }
+  }
+
+  wxBufferedPaintDC dc{this, m_backingStore};
 
   const auto &theme = m_core.GetTheme();
-  dc.SetBackground(wxBrush(theme.bg));
-  dc.Clear();
   dc.SetFont(m_defaultFont);
+
+  // On the first paint, after a resize, or after an explicit invalidation we
+  // start from a clean background. Otherwise the buffer already holds the
+  // previous frame and we leave its pixels untouched.
+  bool cleared = false;
+  if (sizeChanged || !m_renderCacheValid) {
+    dc.SetBackground(wxBrush(theme.bg));
+    dc.Clear();
+    cleared = true;
+  }
+
   if (InitialiseAndStart(&dc)) {
     return;
   }
@@ -1067,27 +1105,83 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
     m_mouseSelection.Clear();
   }
 
-  int y = 0;
   auto viewArea = m_core.GetViewArea();
-  TLOG_IF_DEBUG {
-    TLOG_DEBUG() << "Drawing " << viewArea.size() << " lines" << std::endl;
+  const int rowCount = static_cast<int>(viewArea.size());
+
+  // Compute the cursor's screen row up front: both the current and previous
+  // cursor rows are always re-rendered so the block caret is correctly erased
+  // and redrawn as it moves, even when the row's text is otherwise unchanged.
+  auto cursor = m_core.Cursor();
+  std::size_t viewStart = m_core.ViewStart();
+  std::size_t shellStart = m_core.ShellStart();
+  int cursorScreenRow = -1;
+  if (viewStart <= shellStart &&
+      shellStart + cursor.y < viewStart + m_core.Rows()) {
+    cursorScreenRow = static_cast<int>(shellStart - viewStart + cursor.y);
   }
-  for (int rowIdx = 0; rowIdx < static_cast<int>(viewArea.size()); ++rowIdx) {
+
+  // A full redraw is required when the cache is stale or its shape no longer
+  // matches the view (e.g. the number of visible rows changed).
+  const bool fullRedraw =
+      sizeChanged || !m_renderCacheValid ||
+      static_cast<int>(m_rowCache.size()) != rowCount;
+  if (fullRedraw) {
+    if (!cleared) {
+      dc.SetBackground(wxBrush(theme.bg));
+      dc.Clear();
+    }
+    m_rowCache.assign(rowCount, {});
+  }
+
+  TLOG_IF_DEBUG {
+    TLOG_DEBUG() << "Drawing " << rowCount << " lines" << std::endl;
+  }
+
+  const wxBrush bgBrush(theme.bg);
+  int y = 0;
+  for (int rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
     const auto &row = *viewArea[rowIdx];
-    RenderRow(dc, y, rowIdx, row, paint_counters);
+    auto result = PrepareRowForDrawing(row, rowIdx);
+
+    // Force the cursor's current and previous rows to redraw so the caret
+    // block is repainted/erased correctly.
+    const bool forced =
+        (rowIdx == cursorScreenRow) || (rowIdx == m_lastCursorScreenRow);
+    const bool dirty = fullRedraw || forced ||
+                       m_rowCache[rowIdx] != result.cells;
+
+    if (dirty) {
+      if (!fullRedraw) {
+        // Erase just this row strip before re-rendering it. (On a full redraw
+        // the whole buffer was already cleared above.)
+        dc.SetPen(*wxTRANSPARENT_PEN);
+        dc.SetBrush(bgBrush);
+        dc.DrawRectangle(0, y, clientSize.x, m_charH);
+      }
+      RenderRow(dc, y, rowIdx, row, paint_counters);
+      m_rowCache[rowIdx] = std::move(result.cells);
+      ++rows_redrawn;
+    } else {
+      ++rows_skipped;
+    }
     y += m_charH;
+  }
+
+  TLOG_IF_DEBUG {
+    TLOG_DEBUG() << "OnPaint: redrew " << rows_redrawn << " row(s), skipped "
+                 << rows_skipped << " of " << rowCount
+                 << (fullRedraw ? " (full redraw)" : " (incremental)")
+                 << std::endl;
   }
 
   DrawFocusBorder(dc);
 
+  m_lastCursorScreenRow = cursorScreenRow;
+
   // Draw cursor (block caret) — only if shell
   // viewport is visible
-  auto cursor = m_core.Cursor();
-  std::size_t viewStart = m_core.ViewStart();
-  std::size_t shellStart = m_core.ShellStart();
-  if (viewStart <= shellStart &&
-      shellStart + cursor.y < viewStart + m_core.Rows()) {
-    int screenRow = static_cast<int>(shellStart - viewStart + cursor.y);
+  if (cursorScreenRow >= 0) {
+    int screenRow = cursorScreenRow;
     int cx = cursor.x * m_charW;
     int cy = screenRow * m_charH;
 
@@ -1117,6 +1211,9 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
       }
     }
   }
+
+  // The buffer now holds the current frame; subsequent paints can reuse it.
+  m_renderCacheValid = true;
 }
 
 void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
@@ -1307,6 +1404,7 @@ void wxTerminalViewCtrl::OnFocus(wxFocusEvent &evt) {
   // Ensure we can receive keyboard events
   evt.Skip();
   m_hasFocusBorder = true;
+  InvalidateRenderCache();
   SetCursor(wxCursor(wxCURSOR_IBEAM));
   Refresh();
 }
@@ -1314,6 +1412,7 @@ void wxTerminalViewCtrl::OnFocus(wxFocusEvent &evt) {
 void wxTerminalViewCtrl::OnLostFocus(wxFocusEvent &evt) {
   evt.Skip();
   m_hasFocusBorder = false;
+  InvalidateRenderCache();
   SetCursor(wxCursor(wxCURSOR_ARROW));
   ClearMouseSelection();
   Refresh();
@@ -1423,6 +1522,8 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
   // (ControlDown() = Cmd key)
   if (evt.ControlDown() && !evt.AltDown()) {
     if (m_mouseSelection.HasSelection() && (key == 'C' || key == 'c')) {
+      // Copying must not move the viewport: cancel the auto-scroll-to-bottom.
+      scroller->Cancel();
       wxCommandEvent copyEvt(wxEVT_MENU, wxID_COPY);
       OnCopy(copyEvt);
       return;
@@ -1734,7 +1835,7 @@ void wxTerminalViewCtrl::Copy() {
   int totalLines = static_cast<int>(m_core.TotalLines());
   int cols = static_cast<int>(m_core.Cols());
   for (int absY = s.y; absY <= e.y && absY < totalLines; ++absY) {
-    const auto &row = m_core.BufferRow(absY);
+    const auto row = m_core.GetBufferRowCopy(absY);
     int rowSize = static_cast<int>(row.size());
     if (rowSize == 0) {
       if (absY != e.y) {

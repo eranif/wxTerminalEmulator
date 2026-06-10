@@ -208,6 +208,25 @@ TerminalCore::ViewBufferRow(std::size_t viewareaRow) const {
   return BufferRow(m_viewStart + viewareaRow);
 }
 
+std::vector<Cell> TerminalCore::GetBufferRowCopy(std::size_t absRow) const {
+  std::size_t sbSize = ShellStart();
+  if (absRow < sbSize) {
+    // Fast path: row is inside the cached (visible) scrollback window.
+    if (absRow >= m_sbCacheStart &&
+        absRow < m_sbCacheStart + m_sbCache.size()) {
+      return m_sbCache[absRow - m_sbCacheStart];
+    }
+    // Otherwise read the scrollback line directly from libtsm so callers can
+    // access rows that have scrolled out of the viewport.
+    return ConvertScrollbackLine(static_cast<unsigned int>(absRow));
+  }
+
+  std::size_t screenRow = absRow - sbSize;
+  if (screenRow < m_activeScreen.size())
+    return m_activeScreen[screenRow];
+  return {};
+}
+
 std::vector<const std::vector<Cell> *> TerminalCore::GetViewArea() const {
   std::vector<const std::vector<Cell> *> view(m_rows);
   for (std::size_t r = 0; r < m_rows; ++r)

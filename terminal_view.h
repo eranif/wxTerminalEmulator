@@ -98,7 +98,10 @@ public:
   void Copy();
   void Paste();
 
-  inline void EnableSafeDrawing(bool b) { m_safeDrawing = b; }
+  inline void EnableSafeDrawing(bool b) {
+    m_safeDrawing = b;
+    InvalidateRenderCache();
+  }
   inline bool IsSafeDrawing() const { return m_safeDrawing; }
 
   /**
@@ -405,6 +408,16 @@ private:
       return attrs.isMouseSelected || attrs.isApiSelected;
     }
     inline bool IsOk() const { return colIdx != wxNOT_FOUND; }
+
+    // Used by the incremental renderer to detect whether a screen row's
+    // visual content changed since the last paint. Two cells render
+    // identically iff their column, glyph and attributes are equal.
+    inline bool operator==(const CellInfo &other) const {
+      return colIdx == other.colIdx && ch == other.ch && attrs == other.attrs;
+    }
+    inline bool operator!=(const CellInfo &other) const {
+      return !(*this == other);
+    }
   };
 
   void PrepareDcForTextDrawing(wxDC &dc,
@@ -479,4 +492,22 @@ private:
   size_t m_refreshRequested{0};
   size_t m_refreshExecuted{0};
   bool m_showScrollBar{true};
+
+  // --- Incremental rendering state -----------------------------------------
+  // Persistent off-screen buffer. Because the buffer is retained between
+  // paints, OnPaint only has to redraw the rows that actually changed; the
+  // rest of the previous frame is already present in the bitmap.
+  wxBitmap m_backingStore;
+  // Signature of what was last drawn for each visible screen row. A row is
+  // re-rendered only when its prepared cell list differs from the cached one.
+  std::vector<std::vector<CellInfo>> m_rowCache;
+  // When false the next paint redraws everything (e.g. after theme/font/size
+  // changes or the very first paint).
+  bool m_renderCacheValid{false};
+  // Screen row that held the cursor block on the previous paint, so it can be
+  // force-redrawn to erase the old block when the cursor moves.
+  int m_lastCursorScreenRow{-1};
+
+  // Force a full redraw on the next paint.
+  inline void InvalidateRenderCache() { m_renderCacheValid = false; }
 };

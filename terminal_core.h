@@ -195,6 +195,12 @@ public:
   // Access a row by absolute index in the buffer
   const std::vector<Cell> &BufferRow(std::size_t absRow) const;
 
+  // Return a copy of any absolute buffer row. Unlike BufferRow(), this works
+  // for scrollback rows that are not part of the currently-visible cache
+  // window (e.g. when a selection was extended past the viewport via
+  // auto-scroll); such rows are read directly from the scrollback store.
+  std::vector<Cell> GetBufferRowCopy(std::size_t absRow) const;
+
   // Access a row by its view index
   const std::vector<Cell> &ViewBufferRow(std::size_t absRow) const;
 
