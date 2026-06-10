@@ -705,7 +705,7 @@ wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
     info.attrs.isClicked = cell.IsClicked();
     info.attrs.isMouseSelected = isMouseSelected;
     info.attrs.isApiSelected = isApiSelected;
-    cells.push_back(info);
+    cells.emplace_back(std::move(info));
   }
   return result;
 }
@@ -1188,25 +1188,28 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
     // Draw cursor block
     dc.SetPen(*wxTRANSPARENT_PEN);
     dc.SetBrush(wxBrush(theme.cursorColour));
-    dc.DrawRectangle(cx, cy, m_charW, m_charH);
+    int cursorWidth = m_core.GetTheme().isBlockCursor ? m_charW : 2;
+    dc.DrawRectangle(cx, cy, cursorWidth, m_charH);
 
-    // Draw the character at cursor position with
-    // inverted color
-    if (screenRow >= 0 && screenRow < static_cast<int>(viewArea.size())) {
-      const auto &cursorRow = *viewArea[screenRow];
-      if (cursor.x >= 0 && cursor.x < static_cast<int>(cursorRow.size())) {
-        const auto &cell = cursorRow[cursor.x];
+    if (m_core.GetTheme().isBlockCursor) {
+      // Draw the character at cursor position with
+      // inverted color
+      if (screenRow >= 0 && screenRow < static_cast<int>(viewArea.size())) {
+        const auto &cursorRow = *viewArea[screenRow];
+        if (cursor.x >= 0 && cursor.x < static_cast<int>(cursorRow.size())) {
+          const auto &cell = cursorRow[cursor.x];
 
-        // Draw character with inverted cursor
-        // color (typically black on white cursor)
-        if (cell.ch != U' ') {
-          dc.SetTextForeground(theme.bg); // Use background color
-                                          // (typically black)
-          const wxFont &font =
-              GetCachedFont(cell.IsBold(), cell.IsUnderlined());
-          dc.SetFont(font);
-          dc.DrawText(wxString(wxUniChar(cell.ch)), cx, cy);
-          dc.SetFont(m_defaultFont);
+          // Draw character with inverted cursor
+          // color (typically black on white cursor)
+          if (cell.ch != U' ') {
+            dc.SetTextForeground(theme.bg); // Use background color
+                                            // (typically black)
+            const wxFont &font =
+                GetCachedFont(cell.IsBold(), cell.IsUnderlined());
+            dc.SetFont(font);
+            dc.DrawText(wxString(wxUniChar(cell.ch)), cx, cy);
+            dc.SetFont(m_defaultFont);
+          }
         }
       }
     }

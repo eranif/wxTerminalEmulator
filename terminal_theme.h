@@ -49,6 +49,7 @@ struct wxTerminalTheme {
   wxColour linkColour{"#33BBFF"};
 
   bool isMonospaced{true};
+  bool isBlockCursor{false};
 
   // Convert wxColour to packed uint32_t (RGB)
   static std::uint32_t ToU32(const wxColour &c) {
