@@ -341,7 +341,7 @@ bool WindowsPtyBackend::Start(
   const std::string shellCommand =
       command.empty() ? GetDefaultShell() : command;
 
-  if (!CreateConPty(shellCommand, environment)) {
+  if (!CreateConPty(shellCommand, environment, workingDirectory)) {
     if (m_onOutput) {
       TLOG_WARN() << "[Failed to create ConPTY backend]" << std::endl;
       m_onOutput("[Failed to create ConPTY backend]\r\n");
@@ -397,7 +397,8 @@ void WindowsPtyBackend::Stop() {
 
 bool WindowsPtyBackend::CreateConPty(
     const std::string &command,
-    const std::optional<EnvironmentList> &environment) {
+    const std::optional<EnvironmentList> &environment,
+    const std::optional<std::string> &workingDirectory) {
   if (!Api().Load()) {
     TLOG_WARN() << "[ConPTY APIs unavailable on this system]" << std::endl;
     if (m_onOutput) {
@@ -609,6 +610,15 @@ bool WindowsPtyBackend::CreateConPty(
   // IMPORTANT: Pass nullptr as lpApplicationName and mutableCmd.data() as
   // lpCommandLine This allows proper command line parsing and shell
   // interpretation
+  std::wstring currentDirectory;
+  const wchar_t *currentDirectoryPtr = nullptr;
+  if (workingDirectory && !workingDirectory->empty()) {
+    currentDirectory = Utf8ToWide(*workingDirectory);
+    if (!currentDirectory.empty()) {
+      currentDirectoryPtr = currentDirectory.c_str();
+    }
+  }
+
   BOOL ok = CreateProcessW(
       nullptr,           // lpApplicationName - nullptr to use command line
       mutableCmd.data(), // lpCommandLine - mutable buffer with full command
@@ -618,9 +628,9 @@ bool WindowsPtyBackend::CreateConPty(
                          // PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE
       flags,             // dwCreationFlags
       envBlock.empty() ? nullptr : envBlock.data(),
-      nullptr, // lpCurrentDirectory - nullptr to inherit parent directory
-      &siex.StartupInfo, // lpStartupInfo
-      &pi);              // lpProcessInformation
+      currentDirectoryPtr, // lpCurrentDirectory
+      &siex.StartupInfo,   // lpStartupInfo
+      &pi);                // lpProcessInformation
 
   DeleteProcThreadAttributeList(siex.lpAttributeList);
 

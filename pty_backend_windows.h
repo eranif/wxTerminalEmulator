@@ -48,7 +48,8 @@ private:
   void WriterThread();
   void InterruptIo();
   bool CreateConPty(const std::string &command,
-                    const std::optional<EnvironmentList> &environment);
+                    const std::optional<EnvironmentList> &environment,
+                    const std::optional<std::string> &workingDirectory);
   void DestroyConPty();
 
   std::atomic<bool> m_running{false};
