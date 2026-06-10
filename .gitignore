@@ -18,3 +18,4 @@
 *.log 
 compile_commands.json
 .kiro
+.DS_Store

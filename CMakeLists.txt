@@ -97,7 +97,7 @@ if(BUILD_WXTERMINAL_DEMO)
     add_executable(wxterminal WIN32 ${EXAMPLE_SOURCES})
   elseif(APPLE)
     set(MACOSX_BUNDLE_ICON_FILE icon.icns)
-    set(APP_ICON "${CMAKE_SOURCE_DIR}/assets/icon.icns")
+    set(APP_ICON "${CMAKE_CURRENT_LIST_DIR}/assets/icon.icns")
     set_source_files_properties(${APP_ICON} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
     add_executable(wxterminal MACOSX_BUNDLE ${EXAMPLE_SOURCES} ${APP_ICON})
     set_target_properties(wxterminal PROPERTIES
