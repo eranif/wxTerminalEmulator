@@ -1077,7 +1077,8 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
     }
   }
 
-  wxBufferedPaintDC dc{this, m_backingStore};
+  wxPaintDC paintDc{this};
+  wxMemoryDC dc{m_backingStore};
 
   const auto &theme = m_core.GetTheme();
   dc.SetFont(m_defaultFont);
@@ -1122,9 +1123,8 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
 
   // A full redraw is required when the cache is stale or its shape no longer
   // matches the view (e.g. the number of visible rows changed).
-  const bool fullRedraw =
-      sizeChanged || !m_renderCacheValid ||
-      static_cast<int>(m_rowCache.size()) != rowCount;
+  const bool fullRedraw = sizeChanged || !m_renderCacheValid ||
+                          static_cast<int>(m_rowCache.size()) != rowCount;
   if (fullRedraw) {
     if (!cleared) {
       dc.SetBackground(wxBrush(theme.bg));
@@ -1147,8 +1147,8 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
     // block is repainted/erased correctly.
     const bool forced =
         (rowIdx == cursorScreenRow) || (rowIdx == m_lastCursorScreenRow);
-    const bool dirty = fullRedraw || forced ||
-                       m_rowCache[rowIdx] != result.cells;
+    const bool dirty =
+        fullRedraw || forced || m_rowCache[rowIdx] != result.cells;
 
     if (dirty) {
       if (!fullRedraw) {
@@ -1214,6 +1214,8 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
 
   // The buffer now holds the current frame; subsequent paints can reuse it.
   m_renderCacheValid = true;
+  dc.SelectObject(wxNullBitmap);
+  paintDc.DrawBitmap(m_backingStore, 0, 0);
 }
 
 void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
