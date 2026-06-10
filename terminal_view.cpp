@@ -1093,7 +1093,7 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
     cleared = true;
   }
 
-  if (InitialiseAndStart(&dc)) {
+  if (InitialiseAndStart(&paintDc)) {
     return;
   }
 
