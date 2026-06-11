@@ -100,6 +100,16 @@ TerminalCore::~TerminalCore() {
 void TerminalCore::SetTheme(const wxTerminalTheme &theme) {
   m_theme = theme;
   SyncPalette();
+
+  // Align libtsm's cursor-cell inversion with the requested caret style.
+  // A block caret inverts the glyph beneath it (libtsm's default behavior);
+  // a beam/line caret is rendered by the front-end and must NOT invert the
+  // underlying glyph, so set TSM_SCREEN_BEAM_CURSOR in that case.
+  if (m_theme.isBlockCursor)
+    tsm_screen_reset_flags(m_tsmScreen, TSM_SCREEN_BEAM_CURSOR);
+  else
+    tsm_screen_set_flags(m_tsmScreen, TSM_SCREEN_BEAM_CURSOR);
+  RefreshActiveScreen();
 }
 
 void TerminalCore::SyncPalette() {

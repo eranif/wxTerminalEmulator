@@ -154,6 +154,10 @@ typedef uint_fast32_t tsm_age_t;
 #define TSM_SCREEN_HIDE_CURSOR	0x10
 #define TSM_SCREEN_FIXED_POS	0x20
 #define TSM_SCREEN_ALTERNATE	0x40
+/* When set, the cell under the cursor is NOT drawn in inverse video. Used by
+ * front-ends that render their own caret (e.g. a thin "beam"/line caret) and
+ * therefore do not want libtsm to invert the glyph beneath it. */
+#define TSM_SCREEN_BEAM_CURSOR	0x80
 
 struct tsm_screen_attr {
 	int8_t fccode;			/* foreground color code or <0 for rgb */
