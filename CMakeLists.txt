@@ -52,7 +52,7 @@ else()
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
-  add_compile_definitions(-DwxDEBUG_LEVEL=0)
+  add_compile_definitions(wxDEBUG_LEVEL=0)
 endif()
 
 # Build libtsm
@@ -82,7 +82,7 @@ set(HEADER_SOURCES)
 add_library(wxterminal_lib STATIC ${LIB_SOURCES} ${HEADER_SOURCES})
 target_link_libraries(wxterminal_lib PUBLIC ${wxWidgets_LIBRARIES} tsm)
 if(APPLE)
-  add_compile_definitions(-DwxDEBUG_LEVEL=0)
+  add_compile_definitions(wxDEBUG_LEVEL=0)
   target_link_libraries(wxterminal_lib PUBLIC "-framework CoreText"
                                               "-framework CoreGraphics")
 endif()
