@@ -526,7 +526,17 @@ public:
   }
 
   void OnTerminalLink(wxTerminalEvent &event) {
-    wxMessageBox(event.GetClickedText());
+    event.Skip();
+    wxString clickedText = event.GetClickedText();
+    if (clickedText.StartsWith("http://") ||
+        clickedText.StartsWith("https://")) {
+      ::wxLaunchDefaultBrowser(clickedText);
+    } else if (clickedText.StartsWith("file://")) {
+      ::wxLaunchDefaultApplication(clickedText);
+    } else if (wxFileName::FileExists(clickedText)) {
+      // file
+      ::wxLaunchDefaultApplication(clickedText);
+    }
   }
 
   void OnBell(wxTerminalEvent &event) {

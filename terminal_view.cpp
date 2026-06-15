@@ -2082,13 +2082,15 @@ void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event, bool fire_event) {
     m_core.ClearClickedRange();
     return;
   }
-  SetCursor(wxCURSOR_HAND);
 
+  SetCursor(wxCURSOR_HAND);
   if (fire_event) {
     wxTerminalEvent click_event{wxEVT_TERMINAL_TEXT_LINK};
     click_event.SetClickedText(clicked_text);
     click_event.SetEventObject(this);
     GetEventHandler()->ProcessEvent(click_event);
+    // Restore the cursor
+    SetCursor(wxCURSOR_IBEAM);
   }
 }
 
