@@ -114,7 +114,8 @@ public:
   void BuildMenuBar() {
     auto *menuBar = new wxMenuBar();
     auto *fileMenu = new wxMenu();
-    fileMenu->Append(ID_NewTerminal, "New terminal");
+    fileMenu->Append(wxID_NEW, _("New Terminal\tCtrl-N"));
+    fileMenu->Append(wxID_CLOSE, _("Close Terminal\tCtrl-W"));
     fileMenu->AppendSeparator();
     fileMenu->Append(ID_Exit, "Exit");
     menuBar->Append(fileMenu, "File");
@@ -131,9 +132,18 @@ public:
     optionsMenu->Append(ID_SendInput, "Send Input...");
     optionsMenu->Check(m_themeIsDark ? ID_ThemeDark : ID_ThemeLight, true);
     menuBar->Append(optionsMenu, "Options");
+
+    auto *searchMenu = new wxMenu();
+    searchMenu->Append(wxID_FORWARD, _("Next Tab\tCtrl-RIGHT"));
+    searchMenu->Append(wxID_BACKWARD, _("Previous Tab\tCtrl-LEFT"));
+    menuBar->Append(searchMenu, "Search");
+
     SetMenuBar(menuBar);
 
-    Bind(wxEVT_MENU, &MyFrame::OnNewTerminal, this, ID_NewTerminal);
+    Bind(wxEVT_MENU, &MyFrame::OnNewTerminal, this, wxID_NEW);
+    Bind(wxEVT_MENU, &MyFrame::OnCloseTab, this, wxID_CLOSE);
+    Bind(wxEVT_MENU, &MyFrame::OnNextTab, this, wxID_FORWARD);
+    Bind(wxEVT_MENU, &MyFrame::OnPreviousTab, this, wxID_BACKWARD);
     Bind(wxEVT_MENU, &MyFrame::OnExit, this, ID_Exit);
     Bind(wxEVT_MENU, &MyFrame::OnDarkTheme, this, ID_ThemeDark);
     Bind(wxEVT_MENU, &MyFrame::OnLightTheme, this, ID_ThemeLight);
@@ -143,6 +153,58 @@ public:
     Bind(wxEVT_MENU, &MyFrame::OnSetSelection, this, ID_SetSelection);
     Bind(wxEVT_MENU, &MyFrame::OnPrintLine, this, ID_PrintLine);
     Bind(wxEVT_MENU, &MyFrame::OnSendInput, this, ID_SendInput);
+    Bind(wxEVT_UPDATE_UI, &MyFrame::OnNextTabUI, this, wxID_FORWARD);
+    Bind(wxEVT_UPDATE_UI, &MyFrame::OnPreviousTabUI, this, wxID_BACKWARD);
+  }
+
+  void OnNextTabUI(wxUpdateUIEvent &event) {
+    event.Enable(m_notebook->GetPageCount() > 1);
+  }
+  void OnPreviousTabUI(wxUpdateUIEvent &event) {
+    event.Enable(m_notebook->GetPageCount() > 1);
+  }
+
+  void OnNextTab(wxCommandEvent &event) {
+    if (m_notebook->GetPageCount() == 0) {
+      return;
+    }
+    int currentTabIndex = m_notebook->GetSelection();
+    if (currentTabIndex == wxNOT_FOUND) {
+      return;
+    }
+
+    if (currentTabIndex + 1 >= m_notebook->GetPageCount()) {
+      // cant move forward, cycle
+      currentTabIndex = 0;
+    } else {
+      currentTabIndex += 1;
+    }
+    m_notebook->SetSelection(currentTabIndex);
+  }
+
+  void OnPreviousTab(wxCommandEvent &event) {
+    if (m_notebook->GetPageCount() == 0) {
+      return;
+    }
+    int currentTabIndex = m_notebook->GetSelection();
+    if (currentTabIndex == wxNOT_FOUND) {
+      return;
+    }
+
+    if (currentTabIndex == 0) {
+      currentTabIndex = m_notebook->GetPageCount() - 1;
+    } else {
+      currentTabIndex -= 1;
+    }
+    m_notebook->SetSelection(currentTabIndex);
+  }
+
+  void OnCloseTab(wxCommandEvent &event) {
+    int currentTabIndex = m_notebook->GetSelection();
+    if (currentTabIndex == wxNOT_FOUND) {
+      return;
+    }
+    m_notebook->DeletePage(static_cast<size_t>(currentTabIndex));
   }
 
   void ApplyThemeToAllTabs(const wxTerminalTheme &theme) {
