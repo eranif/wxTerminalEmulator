@@ -119,8 +119,11 @@ private:
   // Per-frame state.
   double m_scale{1.0};
   float m_ortho[16] = {0};
+  float m_bgR{0}, m_bgG{0}, m_bgB{0};
   std::vector<Vertex> m_solidVerts;
   std::vector<Vertex> m_glyphVerts;
+  std::size_t m_solidVertsHWM{0};
+  std::size_t m_glyphVertsHWM{0};
 
   // Fonts + glyph cache.
   wxFont m_fontRegular;

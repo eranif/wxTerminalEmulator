@@ -222,8 +222,14 @@ std::uint64_t TerminalGLRenderer::MakeKey(char32_t ch, bool bold,
 void TerminalGLRenderer::BeginFrame(int logicalW, int logicalH, double scale,
                                     const wxColour &bg) {
   m_scale = scale > 0 ? scale : 1.0;
+  m_bgR = bg.Red() / 255.0f;
+  m_bgG = bg.Green() / 255.0f;
+  m_bgB = bg.Blue() / 255.0f;
+
   m_solidVerts.clear();
   m_glyphVerts.clear();
+  m_solidVerts.reserve(m_solidVertsHWM);
+  m_glyphVerts.reserve(m_glyphVertsHWM);
 
   // The wxGLCanvas drawable is a physical-pixel (best-resolution) surface, so
   // the viewport must cover the full physical framebuffer. Geometry is authored
@@ -271,10 +277,13 @@ void TerminalGLRenderer::AddSolidRect(int x, int y, int w, int h,
                                       const wxColour &color) {
   if (w <= 0 || h <= 0)
     return;
-  // Logical coordinates: the viewport handles the DPI upscale.
+  const float r = color.Red() / 255.0f;
+  const float g = color.Green() / 255.0f;
+  const float b = color.Blue() / 255.0f;
+  if (r == m_bgR && g == m_bgG && b == m_bgB)
+    return;
   PushQuad(m_solidVerts, static_cast<float>(x), static_cast<float>(y),
-           static_cast<float>(w), static_cast<float>(h), 0, 0, 0, 0,
-           color.Red() / 255.0f, color.Green() / 255.0f, color.Blue() / 255.0f,
+           static_cast<float>(w), static_cast<float>(h), 0, 0, 0, 0, r, g, b,
            1.0f);
 }
 
@@ -423,6 +432,9 @@ void TerminalGLRenderer::EndFrame() {
   if (m_program == 0) {
     return;
   }
+
+  m_solidVertsHWM = std::max(m_solidVertsHWM, m_solidVerts.size());
+  m_glyphVertsHWM = std::max(m_glyphVertsHWM, m_glyphVerts.size());
 
   glUseProgram(m_program);
   glUniformMatrix4fv(m_locOrtho, 1, GL_FALSE, m_ortho);
