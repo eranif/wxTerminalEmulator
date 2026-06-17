@@ -22,6 +22,9 @@
 #include <wx/msgdlg.h>
 #include <wx/settings.h>
 #include <wx/window.h>
+#if USE_OPENGL
+#include <wx/glcanvas.h>
+#endif
 
 using terminal::ColourSpec;
 
@@ -118,8 +121,22 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   if (m_showScrollBar) {
     style |= wxVSCROLL;
   }
+#if USE_OPENGL
+  // RGBA, double-buffered display attributes for the GL canvas.
+  wxGLAttributes dispAttrs;
+  dispAttrs.PlatformDefaults().RGBA().DoubleBuffer().EndList();
+  wxGLCanvas::Create(parent, dispAttrs, wxID_ANY, wxDefaultPosition,
+                     wxDefaultSize, style);
+  // Request a 3.2 core profile context (the highest core profile macOS
+  // exposes; equivalent to "modern core" with GLSL 150).
+  wxGLContextAttrs ctxAttrs;
+  ctxAttrs.PlatformDefaults().CoreProfile().OGLVersion(3, 2).EndList();
+  m_glContext = std::make_unique<wxGLContext>(this, nullptr, &ctxAttrs);
+  // The GL canvas does its own buffer swap; no wxBG_STYLE_PAINT needed.
+#else
   wxPanel::Create(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, style);
   SetBackgroundStyle(wxBG_STYLE_PAINT);
+#endif
   UpdateFontCache();
   SetSelectionDelimChars(" \t<>{}[]()$,;*!@^\"'");
 
@@ -243,6 +260,14 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
     m_backend->Stop();
     m_backendReady = false;
   }
+
+#if USE_OPENGL
+  // Release GL resources while the context is current.
+  if (m_glContext && m_glInitialized) {
+    m_glContext->SetCurrent(*this);
+    m_glRenderer.Destroy();
+  }
+#endif
 }
 
 wxRect wxTerminalViewCtrl::GetTerminalRect() const {
@@ -590,6 +615,11 @@ void wxTerminalViewCtrl::UpdateFontCache() {
   m_defaultFontBoldUnderlined.MakeUnderlined();
   // Fonts changed: every row must be repainted.
   InvalidateRenderCache();
+#if USE_OPENGL
+  // Force the glyph atlas to be flushed and re-rasterized with the new fonts
+  // on the next GL paint, even if the cell size happens to be unchanged.
+  m_glAtlasCharW = m_glAtlasCharH = -1;
+#endif
 }
 
 void wxTerminalViewCtrl::DebugDumpViewArea(TerminalLogLevel log_level,
@@ -1040,6 +1070,14 @@ bool wxTerminalViewCtrl::InitialiseAndStart(wxDC *pdc) {
 }
 
 void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
+#if USE_OPENGL
+  OnPaintGL();
+}
+#else
+  OnPaintDC();
+}
+
+void wxTerminalViewCtrl::OnPaintDC() {
   // For logging purposes
   LogFunction function_logger{"TerminalView::OnPaint",
                               TerminalLogLevel::kTrace};
@@ -1220,6 +1258,140 @@ void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
   dc.SelectObject(wxNullBitmap);
   paintDc.DrawBitmap(m_backingStore, 0, 0);
 }
+#endif // !USE_OPENGL
+
+#if USE_OPENGL
+void wxTerminalViewCtrl::RenderRowGL(int y, int rowIdx,
+                                     const std::vector<terminal::Cell> &row) {
+  auto result = PrepareRowForDrawing(row, rowIdx);
+  for (const auto &cell : result.cells) {
+    const int x = cell.colIdx * m_charW;
+    // Background rectangle for the cell.
+    m_glRenderer.AddSolidRect(x, y, m_charW, m_charH, cell.attrs.bgColor);
+    // Glyph (skips blanks internally).
+    m_glRenderer.AddGlyph(static_cast<char32_t>(cell.ch), cell.attrs.bold,
+                          cell.attrs.underline || cell.attrs.isClicked, x, y,
+                          m_charW, m_charH, cell.attrs.fgColor);
+  }
+}
+
+void wxTerminalViewCtrl::OnPaintGL() {
+  LogFunction function_logger{"TerminalView::OnPaintGL",
+                              TerminalLogLevel::kTrace};
+
+  // A GL canvas must consume the paint event with a wxPaintDC even though we
+  // render with OpenGL.
+  wxPaintDC paintDc{this};
+
+  if (!m_glContext || !IsShownOnScreen()) {
+    return;
+  }
+  m_glContext->SetCurrent(*this);
+
+  // Lazily initialize the renderer once a context is current.
+  if (!m_glInitialized) {
+    m_glInitialized = m_glRenderer.Init();
+    if (!m_glInitialized) {
+      return;
+    }
+    m_glRenderer.SetFonts(m_defaultFont, m_defaultFontBold,
+                          m_defaultFontUnderlined, m_defaultFontBoldUnderlined);
+  }
+
+  // Measure the font on first paint and start the shell, matching the DC path.
+  paintDc.SetFont(m_defaultFontBold);
+  if (InitialiseAndStart(&paintDc)) {
+    return;
+  }
+
+  m_charW = paintDc.GetTextExtent("X").GetWidth();
+  m_charH = paintDc.GetTextExtent("X").GetHeight();
+
+  // If the cell size changed (theme/font/DPI), flush the atlas so glyphs are
+  // re-rasterized at the new size.
+  if (m_charW != m_glAtlasCharW || m_charH != m_glAtlasCharH) {
+    m_glRenderer.SetFonts(m_defaultFont, m_defaultFontBold,
+                          m_defaultFontUnderlined, m_defaultFontBoldUnderlined);
+    m_glRenderer.ClearGlyphCache();
+    m_glAtlasCharW = m_charW;
+    m_glAtlasCharH = m_charH;
+  }
+
+  // Invalidate selection if the view scrolled since it was created.
+  if (m_mouseSelection.HasSelection() &&
+      m_mouseSelection.viewStart != m_core.ViewStart()) {
+    m_mouseSelection.Clear();
+  }
+
+  const wxSize clientSize = GetClientSize();
+  const double scale = GetDPIScaleFactor();
+
+  const auto &theme = m_core.GetTheme();
+  m_glRenderer.BeginFrame(clientSize.x, clientSize.y, scale, theme.bg);
+
+  auto viewArea = m_core.GetViewArea();
+  const int rowCount = static_cast<int>(viewArea.size());
+
+  // Cursor screen row (same computation as the DC path).
+  auto cursor = m_core.Cursor();
+  std::size_t viewStart = m_core.ViewStart();
+  std::size_t shellStart = m_core.ShellStart();
+  int cursorScreenRow = -1;
+  if (viewStart <= shellStart &&
+      shellStart + cursor.y < viewStart + m_core.Rows()) {
+    cursorScreenRow = static_cast<int>(shellStart - viewStart + cursor.y);
+  }
+
+  // GL renders the whole visible grid each frame (no incremental backing
+  // store); the batched two-pass draw makes this cheap.
+  int y = 0;
+  for (int rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
+    RenderRowGL(y, rowIdx, *viewArea[rowIdx]);
+    y += m_charH;
+  }
+
+  // Focus border (drawn as four solid edge rectangles).
+  if (m_hasFocusBorder && clientSize.x > 1 && clientSize.y > 1) {
+#ifdef __WXMAC__
+    const int penW = 2;
+#else
+    const int penW = 1;
+#endif
+    const wxColour borderColour("#5E9ED6");
+    m_glRenderer.AddSolidRect(0, 0, clientSize.x, penW, borderColour);
+    m_glRenderer.AddSolidRect(0, clientSize.y - penW, clientSize.x, penW,
+                              borderColour);
+    m_glRenderer.AddSolidRect(0, 0, penW, clientSize.y, borderColour);
+    m_glRenderer.AddSolidRect(clientSize.x - penW, 0, penW, clientSize.y,
+                              borderColour);
+  }
+
+  // Cursor (block caret), drawn after cells so it sits on top.
+  if (cursorScreenRow >= 0) {
+    const int cx = cursor.x * m_charW;
+    const int cy = cursorScreenRow * m_charH;
+    const int cursorWidth = theme.isBlockCursor ? m_charW : 2;
+    m_glRenderer.AddSolidRect(cx, cy, cursorWidth, m_charH, theme.cursorColour);
+
+    if (theme.isBlockCursor && cursorScreenRow < rowCount) {
+      const auto &cursorRow = *viewArea[cursorScreenRow];
+      if (cursor.x >= 0 && cursor.x < static_cast<int>(cursorRow.size())) {
+        const auto &cell = cursorRow[cursor.x];
+        if (cell.ch != U' ' && cell.ch != 0) {
+          // Draw the glyph in the background colour so it reads as inverted
+          // against the cursor block.
+          m_glRenderer.AddGlyph(cell.ch, cell.IsBold(), cell.IsUnderlined(), cx,
+                                cy, m_charW, m_charH, theme.bg);
+        }
+      }
+    }
+  }
+
+  m_glRenderer.EndFrame();
+  SwapBuffers();
+  m_lastCursorScreenRow = cursorScreenRow;
+}
+#endif // USE_OPENGL
 
 void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
   SetTerminalSizeFromClient();
@@ -1446,11 +1618,11 @@ void wxTerminalViewCtrl::DrawFocusBorder(wxDC &dc) const {
   pen.SetCap(wxCAP_ROUND);
   pen.SetJoin(wxJOIN_ROUND);
 #else
-  constexpr int kFocusPenWidth = 1;
-  wxColour focusRectColour("#3DAEE9");
-  wxPen pen(focusRectColour, kFocusPenWidth);
-  pen.SetCap(wxCAP_BUTT);
-  pen.SetJoin(wxJOIN_MITER);
+    constexpr int kFocusPenWidth = 1;
+    wxColour focusRectColour("#3DAEE9");
+    wxPen pen(focusRectColour, kFocusPenWidth);
+    pen.SetCap(wxCAP_BUTT);
+    pen.SetJoin(wxJOIN_MITER);
 #endif
 
   dc.SetPen(pen);

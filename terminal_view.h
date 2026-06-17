@@ -9,6 +9,7 @@
 
 #include "pty_backend.h"
 #include "terminal_core.h"
+#include "terminal_gl_renderer.h"
 #if USE_TIMER_REFRESH
 #include <thread>
 #endif
@@ -16,6 +17,10 @@
 #include <wx/dcbuffer.h>
 #include <wx/dcgraph.h>
 #include <wx/panel.h>
+#if USE_OPENGL
+#include <memory>
+#include <wx/glcanvas.h>
+#endif
 
 #include <wx/dc.h>
 #include <wx/timer.h>
@@ -25,7 +30,16 @@
 #include <unordered_set>
 #include <wx/arrstr.h>
 
-class wxTerminalViewCtrl : public wxPanel {
+// When the OpenGL path is enabled the control is a wxGLCanvas (still a
+// wxWindow, so all event binding, scrollbars, focus, etc. behave the same);
+// otherwise it remains a plain wxPanel using the legacy wxDC renderer.
+#if USE_OPENGL
+using wxTerminalViewBase = wxGLCanvas;
+#else
+using wxTerminalViewBase = wxPanel;
+#endif
+
+class wxTerminalViewCtrl : public wxTerminalViewBase {
 public:
   using EnvironmentList = terminal::PtyBackend::EnvironmentList;
 
@@ -266,6 +280,15 @@ private:
   wxColour GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
                               bool foreground) const;
   void OnPaint(wxPaintEvent &evt);
+#if USE_OPENGL
+  // GPU paint path: renders the visible grid with the glyph-atlas renderer.
+  void OnPaintGL();
+  // Emit the geometry for a single screen row into the GL renderer.
+  void RenderRowGL(int y, int rowIdx, const std::vector<terminal::Cell> &row);
+#else
+  // Legacy wxDC paint path (backing-store incremental renderer).
+  void OnPaintDC();
+#endif
   struct PaintCounters {
     PaintCounters(size_t &draw_text, size_t &draw_rectangle,
                   size_t &grouped_rows, size_t &full_row_draws)
@@ -510,4 +533,15 @@ private:
 
   // Force a full redraw on the next paint.
   inline void InvalidateRenderCache() { m_renderCacheValid = false; }
+
+#if USE_OPENGL
+  // --- OpenGL rendering state ----------------------------------------------
+  std::unique_ptr<wxGLContext> m_glContext;
+  TerminalGLRenderer m_glRenderer;
+  bool m_glInitialized{false};
+  // Cell metrics last used to rasterize the glyph atlas; when these change the
+  // atlas must be flushed so glyphs are re-rasterized at the new size.
+  int m_glAtlasCharW{0};
+  int m_glAtlasCharH{0};
+#endif
 };

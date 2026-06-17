@@ -7,6 +7,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(BUILD_WXTERMINAL_DEMO "Build the wxterminal demo application" ON)
 
+# When ON, the terminal view renders with an OpenGL glyph-atlas renderer
+# (wxGLCanvas). When OFF (the default) it uses the legacy wxDC backing-store
+# renderer, so systems without usable OpenGL keep working unchanged.
+option(USE_OPENGL "Render the terminal with OpenGL (wxGLCanvas)" OFF)
+
 # find wxWidgets once
 if(MINGW)
   if(NOT EXISTS "${CMAKE_BINARY_DIR}/wxWidgets.cmake")
@@ -42,13 +47,18 @@ if(MINGW)
   endif()
   include(${CMAKE_BINARY_DIR}/wxWidgets.cmake)
 else()
+  if(USE_OPENGL)
+    set(WX_COMPONENTS base core net aui gl)
+  else()
+    set(WX_COMPONENTS base core net aui)
+  endif()
   find_package(
     wxWidgets
-    COMPONENTS base core net aui
+    COMPONENTS ${WX_COMPONENTS}
     REQUIRED)
   include(${wxWidgets_USE_FILE})
   # Find wxWidgets
-  find_package(wxWidgets REQUIRED COMPONENTS core base aui)
+  find_package(wxWidgets REQUIRED COMPONENTS ${WX_COMPONENTS})
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
@@ -60,7 +70,7 @@ add_subdirectory(libtsm)
 
 # Source files
 set(LIB_SOURCES terminal_core.cpp terminal_logger.cpp terminal_view.cpp
-                terminal_event.cpp)
+                terminal_event.cpp terminal_gl_renderer.cpp)
 
 set(EXAMPLE_SOURCES main.cpp app_persistence.cpp)
 if(MINGW)
@@ -85,6 +95,19 @@ if(APPLE)
   add_compile_definitions(-DwxDEBUG_LEVEL=0)
   target_link_libraries(wxterminal_lib PUBLIC "-framework CoreText"
                                               "-framework CoreGraphics")
+endif()
+
+# OpenGL rendering path: define USE_OPENGL and link the platform GL libraries.
+if(USE_OPENGL)
+  target_compile_definitions(wxterminal_lib PUBLIC USE_OPENGL=1)
+  if(APPLE)
+    target_link_libraries(wxterminal_lib PUBLIC "-framework OpenGL")
+  else()
+    find_package(OpenGL REQUIRED)
+    target_link_libraries(wxterminal_lib PUBLIC OpenGL::GL)
+  endif()
+else()
+  target_compile_definitions(wxterminal_lib PUBLIC USE_OPENGL=0)
 endif()
 
 # Build library with PIC when required (useful when linking into other
