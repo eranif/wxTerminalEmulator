@@ -1299,13 +1299,22 @@ void wxTerminalViewCtrl::OnPaintGL() {
   }
 
   // Measure the font on first paint and start the shell, matching the DC path.
+  // InitialiseAndStart uses m_defaultFontBold internally for its own measure.
   paintDc.SetFont(m_defaultFontBold);
   if (InitialiseAndStart(&paintDc)) {
     return;
   }
 
+  // Re-measure with the regular font — the DC path (line ~1138) also uses
+  // m_defaultFont for the ongoing charW/charH that drives grid layout.
+  paintDc.SetFont(m_defaultFont);
   m_charW = paintDc.GetTextExtent("X").GetWidth();
   m_charH = paintDc.GetTextExtent("X").GetHeight();
+
+  // The first real paint may arrive after the window has been laid out at its
+  // final size but before OnSize fired (or OnSize fired when charW was still 0
+  // and bailed out). Re-sync the PTY size now that we have valid metrics.
+  SetTerminalSizeFromClient();
 
   // If the cell size changed (theme/font/DPI), flush the atlas so glyphs are
   // re-rasterized at the new size.
