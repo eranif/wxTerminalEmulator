@@ -1,7 +1,7 @@
 #pragma once
 
 #include "terminal_logger.h"
-#if defined(__WXGTK__) || defined(__WXMAC__)
+#if USE_OPENGL
 #define USE_TIMER_REFRESH 0
 #else
 #define USE_TIMER_REFRESH 0

@@ -42,7 +42,11 @@ public:
 
   MyFrame(const wxCmdLineParser &parser,
           const std::optional<EnvironmentList> &environment)
+#if USE_OPENGL
+      : wxFrame(nullptr, wxID_ANY, "wxTerminalEmulator (OpenGL)") {
+#else
       : wxFrame(nullptr, wxID_ANY, "wxTerminalEmulator") {
+#endif
     wxString shellCommand;
     parser.Found("shell", &shellCommand);
     m_timer.SetOwner(this);
