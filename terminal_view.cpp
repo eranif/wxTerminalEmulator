@@ -1336,7 +1336,11 @@ void wxTerminalViewCtrl::OnPaintGL() {
   const double scale = GetDPIScaleFactor();
 
   const auto &theme = m_core.GetTheme();
+#ifdef __WXMSW__
+  m_glRenderer.BeginFrame(clientSize.x, clientSize.y, 1, theme.bg);
+#else
   m_glRenderer.BeginFrame(clientSize.x, clientSize.y, scale, theme.bg);
+#endif
 
   auto viewArea = m_core.GetViewArea();
   const int rowCount = static_cast<int>(viewArea.size());
