@@ -10,7 +10,12 @@ option(BUILD_WXTERMINAL_DEMO "Build the wxterminal demo application" ON)
 # When ON, the terminal view renders with an OpenGL glyph-atlas renderer
 # (wxGLCanvas). When OFF (the default) it uses the legacy wxDC backing-store
 # renderer, so systems without usable OpenGL keep working unchanged.
-option(USE_OPENGL "Render the terminal with OpenGL (wxGLCanvas)" OFF)
+# Can be set via -DUSE_OPENGL=ON or the environment variable USE_OPENGL=1.
+if(DEFINED ENV{USE_OPENGL} AND NOT DEFINED USE_OPENGL)
+  set(USE_OPENGL "$ENV{USE_OPENGL}" CACHE BOOL "Render the terminal with OpenGL (wxGLCanvas)")
+else()
+  option(USE_OPENGL "Render the terminal with OpenGL (wxGLCanvas)" OFF)
+endif()
 
 # find wxWidgets once
 if(MINGW)
@@ -98,6 +103,11 @@ if(APPLE)
 endif()
 
 # OpenGL rendering path: define USE_OPENGL and link the platform GL libraries.
+if(USE_OPENGL)
+  message(STATUS "🚀 OpenGL rendering enabled (wxGLCanvas glyph-atlas renderer)")
+else()
+  message(STATUS "🎨 Using legacy wxDC renderer (OpenGL disabled)")
+endif()
 if(USE_OPENGL)
   target_compile_definitions(wxterminal_lib PUBLIC USE_OPENGL=1)
   if(APPLE)
