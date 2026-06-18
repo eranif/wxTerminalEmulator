@@ -7,6 +7,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(BUILD_WXTERMINAL_DEMO "Build the wxterminal demo application" ON)
 
+# When ON, the terminal view renders with an OpenGL glyph-atlas renderer
+# (wxGLCanvas). When OFF (the default) it uses the legacy wxDC backing-store
+# renderer, so systems without usable OpenGL keep working unchanged.
+# Can be set via -DUSE_OPENGL=ON or the environment variable USE_OPENGL=1.
+if(DEFINED ENV{USE_OPENGL} AND NOT DEFINED USE_OPENGL)
+  set(USE_OPENGL "$ENV{USE_OPENGL}" CACHE BOOL "Render the terminal with OpenGL (wxGLCanvas)")
+else()
+  option(USE_OPENGL "Render the terminal with OpenGL (wxGLCanvas)" OFF)
+endif()
+
 # find wxWidgets once
 if(MINGW)
   if(NOT EXISTS "${CMAKE_BINARY_DIR}/wxWidgets.cmake")
@@ -42,13 +52,18 @@ if(MINGW)
   endif()
   include(${CMAKE_BINARY_DIR}/wxWidgets.cmake)
 else()
+  if(USE_OPENGL AND UNIX AND NOT APPLE)
+    set(WX_COMPONENTS base core net aui gl)
+  else()
+    set(WX_COMPONENTS base core net aui)
+  endif()
   find_package(
     wxWidgets
-    COMPONENTS base core net aui
+    COMPONENTS ${WX_COMPONENTS}
     REQUIRED)
   include(${wxWidgets_USE_FILE})
   # Find wxWidgets
-  find_package(wxWidgets REQUIRED COMPONENTS core base aui)
+  find_package(wxWidgets REQUIRED COMPONENTS ${WX_COMPONENTS})
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Release)
@@ -60,7 +75,7 @@ add_subdirectory(libtsm)
 
 # Source files
 set(LIB_SOURCES terminal_core.cpp terminal_logger.cpp terminal_view.cpp
-                terminal_event.cpp)
+                terminal_event.cpp terminal_gl_renderer.cpp)
 
 set(EXAMPLE_SOURCES main.cpp app_persistence.cpp)
 if(MINGW)
@@ -85,6 +100,24 @@ if(APPLE)
   add_compile_definitions(-DwxDEBUG_LEVEL=0)
   target_link_libraries(wxterminal_lib PUBLIC "-framework CoreText"
                                               "-framework CoreGraphics")
+endif()
+
+# OpenGL rendering path: define USE_OPENGL and link the platform GL libraries.
+if(USE_OPENGL)
+  message(STATUS "🚀 OpenGL rendering enabled (wxGLCanvas glyph-atlas renderer)")
+else()
+  message(STATUS "🎨 Using legacy wxDC renderer (OpenGL disabled)")
+endif()
+if(USE_OPENGL)
+  target_compile_definitions(wxterminal_lib PUBLIC USE_OPENGL=1)
+  if(APPLE)
+    target_link_libraries(wxterminal_lib PUBLIC "-framework OpenGL")
+  else()
+    find_package(OpenGL REQUIRED)
+    target_link_libraries(wxterminal_lib PUBLIC OpenGL::GL)
+  endif()
+else()
+  target_compile_definitions(wxterminal_lib PUBLIC USE_OPENGL=0)
 endif()
 
 # Build library with PIC when required (useful when linking into other
@@ -118,5 +151,63 @@ if(BUILD_WXTERMINAL_DEMO)
   elseif(NOT APPLE)
     # Linux needs libutil for forkpty
     target_link_libraries(wxterminal PRIVATE util ${wxWidgets_LIBRARIES})
+  endif()
+
+  # ---------------------------------------------------------------------------
+  # Post-build: bundle shared library dependencies so the app is self-contained.
+  # ---------------------------------------------------------------------------
+  set(BUNDLE_DEPS_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/cmake/BundleDeps.cmake")
+
+  if(APPLE)
+    set(BUNDLE_TARGET_OS "macos")
+    set(BUNDLE_DIR "$<TARGET_BUNDLE_DIR:wxterminal>")
+    set(BUNDLE_EXE "$<TARGET_FILE:wxterminal>")
+    # Determine wxWidgets library directory from the first library in the list.
+    list(GET wxWidgets_LIBRARIES 0 _WX_FIRST_LIB)
+    get_filename_component(_WX_LIB_DIR "${_WX_FIRST_LIB}" DIRECTORY)
+    add_custom_command(TARGET wxterminal POST_BUILD
+      COMMAND ${CMAKE_COMMAND}
+        -DEXECUTABLE=${BUNDLE_EXE}
+        -DBUNDLE_DIR=${BUNDLE_DIR}
+        -DTARGET_OS=${BUNDLE_TARGET_OS}
+        -DWX_LIB_DIR=${_WX_LIB_DIR}
+        -P ${BUNDLE_DEPS_SCRIPT}
+      COMMENT "Bundling dependencies into .app bundle"
+      VERBATIM)
+  elseif(NOT WIN32)
+    # Linux: set RPATH so the binary finds libs in ../lib relative to itself.
+    set_target_properties(wxterminal PROPERTIES
+      INSTALL_RPATH "$ORIGIN/../lib"
+      BUILD_RPATH "$ORIGIN/../lib")
+    set(BUNDLE_TARGET_OS "linux")
+    list(GET wxWidgets_LIBRARIES 0 _WX_FIRST_LIB)
+    get_filename_component(_WX_LIB_DIR "${_WX_FIRST_LIB}" DIRECTORY)
+    add_custom_command(TARGET wxterminal POST_BUILD
+      COMMAND ${CMAKE_COMMAND}
+        -DEXECUTABLE=$<TARGET_FILE:wxterminal>
+        -DBUNDLE_DIR=$<TARGET_FILE_DIR:wxterminal>
+        -DTARGET_OS=${BUNDLE_TARGET_OS}
+        -DWX_LIB_DIR=${_WX_LIB_DIR}
+        -P ${BUNDLE_DEPS_SCRIPT}
+      COMMENT "Bundling dependencies alongside binary"
+      VERBATIM)
+  else()
+    # Windows/MINGW: copy DLLs next to the .exe.
+    set(BUNDLE_TARGET_OS "windows")
+    if(WXWIN)
+      set(_WX_LIB_DIR "${WXWIN}/lib/${WXCFG}")
+    else()
+      list(GET wxWidgets_LIBRARIES 0 _WX_FIRST_LIB)
+      get_filename_component(_WX_LIB_DIR "${_WX_FIRST_LIB}" DIRECTORY)
+    endif()
+    add_custom_command(TARGET wxterminal POST_BUILD
+      COMMAND ${CMAKE_COMMAND}
+        -DEXECUTABLE=$<TARGET_FILE:wxterminal>
+        -DBUNDLE_DIR=$<TARGET_FILE_DIR:wxterminal>
+        -DTARGET_OS=${BUNDLE_TARGET_OS}
+        -DWX_LIB_DIR=${_WX_LIB_DIR}
+        -P ${BUNDLE_DEPS_SCRIPT}
+      COMMENT "Bundling DLLs alongside executable"
+      VERBATIM)
   endif()
 endif()
