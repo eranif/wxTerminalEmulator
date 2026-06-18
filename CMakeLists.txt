@@ -53,9 +53,9 @@ if(MINGW)
   include(${CMAKE_BINARY_DIR}/wxWidgets.cmake)
 else()
   if(USE_OPENGL AND UNIX AND NOT APPLE)
-    set(WX_COMPONENTS base core net aui gl)
+    set(WX_COMPONENTS base core net aui gl xrc)
   else()
-    set(WX_COMPONENTS base core net aui)
+    set(WX_COMPONENTS base core net aui xrc)
   endif()
   find_package(
     wxWidgets
