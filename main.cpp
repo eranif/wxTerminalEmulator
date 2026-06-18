@@ -17,6 +17,66 @@
 #include <wx/sysopt.h>
 #include <wx/textdlg.h>
 #include <wx/tokenzr.h>
+#include <wx/xrc/xmlres.h>
+
+class MyTerminal : public wxTerminalViewCtrl {
+public:
+  MyTerminal(wxAuiNotebook *parent, const wxString &shellCommand,
+             const std::optional<EnvironmentList> &environment,
+             std::optional<wxString> workingDirectory = std::nullopt,
+             bool showScrollBar = true)
+      : wxTerminalViewCtrl(parent, shellCommand, environment, workingDirectory,
+                           showScrollBar),
+        m_notebook{parent} {
+    Bind(wxEVT_TERMINAL_TITLE_CHANGED, &MyTerminal::OnTitleChanged, this);
+  }
+
+  ~MyTerminal() override = default;
+
+  void OnTitleChanged(wxTerminalEvent &event) {
+    if (!m_customLabel.empty()) {
+      return;
+    }
+
+    wxString title = event.GetTitle();
+    title.Trim().Trim(false);
+    if (title.empty()) {
+      title = _("Terminal");
+    }
+    int sel = m_notebook->FindPage(this);
+    if (sel != wxNOT_FOUND) {
+      m_notebook->SetPageText(sel, title);
+    }
+  }
+
+  void SetTabLabel(const wxString &label) {
+    wxString l = label;
+    l.Trim().Trim(false);
+    if (l.empty()) {
+      return;
+    }
+    m_customLabel = l;
+    int sel = m_notebook->FindPage(this);
+    if (sel != wxNOT_FOUND) {
+      m_notebook->SetPageText(sel, m_customLabel);
+    }
+  }
+
+  void ResetTabLabel() {
+    if (m_customLabel.empty()) {
+      return;
+    }
+    m_customLabel.clear();
+    int sel = m_notebook->FindPage(this);
+    if (sel != wxNOT_FOUND) {
+      m_notebook->SetPageText(sel, _("Terminal"));
+    }
+  }
+
+private:
+  wxAuiNotebook *m_notebook{nullptr};
+  wxString m_customLabel;
+};
 
 class MyFrame : public wxFrame {
 public:
@@ -96,6 +156,51 @@ public:
             page->SetFocus();
           }
         });
+    m_notebook->Bind(wxEVT_AUINOTEBOOK_TAB_RIGHT_UP,
+                     [this](wxAuiNotebookEvent &event) {
+                       CallAfter(&MyFrame::ShowTabMenu);
+                     });
+  }
+
+  void ShowTabMenu() {
+    wxMenu menu;
+    menu.Append(XRCID("rename-tab"), _("Set Label..."));
+    menu.Append(wxID_CLEAR, _("Reset Label..."));
+    menu.Bind(
+        wxEVT_MENU,
+        [this](wxCommandEvent &) {
+          int tabIdx = m_notebook->HitTest(::wxGetMousePosition());
+          if (tabIdx == wxNOT_FOUND) {
+            return;
+          }
+          wxString name = ::wxGetTextFromUser(_("New Tab Name:"));
+          if (name.empty()) {
+            return;
+          }
+          auto *terminal = dynamic_cast<MyTerminal *>(
+              m_notebook->GetPage(static_cast<size_t>(tabIdx)));
+          if (terminal == nullptr) {
+            return;
+          }
+          terminal->SetTabLabel(name);
+        },
+        XRCID("rename-tab"));
+    menu.Bind(
+        wxEVT_MENU,
+        [this](wxCommandEvent &) {
+          int tabIdx = m_notebook->HitTest(::wxGetMousePosition());
+          if (tabIdx == wxNOT_FOUND) {
+            return;
+          }
+          auto *terminal = dynamic_cast<MyTerminal *>(
+              m_notebook->GetPage(static_cast<size_t>(tabIdx)));
+          if (terminal == nullptr) {
+            return;
+          }
+          terminal->ResetTabLabel();
+        },
+        wxID_CLEAR);
+    m_notebook->PopupMenu(&menu);
   }
 
   static std::optional<EnvironmentList>
@@ -248,15 +353,14 @@ public:
     return dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetCurrentPage());
   }
 
-  wxTerminalViewCtrl *CreateTerminalPage(const TerminalPageConfig &config) {
-    auto *page = new wxTerminalViewCtrl(m_notebook, config.shellCommand,
-                                        config.environment);
+  MyTerminal *CreateTerminalPage(const TerminalPageConfig &config) {
+    auto *page =
+        new MyTerminal(m_notebook, config.shellCommand, config.environment);
     m_notebook->AddPage(page, "Terminal", true);
 
     ApplyThemeToTab(page);
     page->EnableSafeDrawing(m_safeDrawingEnabled);
     UpdateSafeDrawingMenuCheck();
-    page->Bind(wxEVT_TERMINAL_TITLE_CHANGED, &MyFrame::OnTitleChanged, this);
     page->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
     page->Bind(wxEVT_TERMINAL_TEXT_LINK, &MyFrame::OnTerminalLink, this);
     page->Bind(wxEVT_TERMINAL_BELL, &MyFrame::OnBell, this);
@@ -509,26 +613,6 @@ public:
     }
   }
 
-  void OnTitleChanged(wxTerminalEvent &event) {
-    wxString title = event.GetTitle();
-    title.Trim().Trim(false);
-    if (title.empty()) {
-      title = _("Terminal");
-    }
-    if (auto *view =
-            dynamic_cast<wxTerminalViewCtrl *>(event.GetEventObject())) {
-      if (!m_notebook) {
-        return;
-      }
-      int sel = m_notebook->FindPage(view);
-      if (sel != wxNOT_FOUND) {
-        m_notebook->SetPageText(sel, title);
-      }
-    }
-
-    SetTitle(title);
-  }
-
   void OnTerminalLink(wxTerminalEvent &event) {
     event.Skip();
     wxString clickedText = event.GetClickedText();
@@ -607,7 +691,7 @@ public:
 
 private:
   wxAuiNotebook *m_notebook{nullptr};
-  wxTerminalViewCtrl *m_view{nullptr};
+  MyTerminal *m_view{nullptr};
   wxString m_defaultShellCommand;
   std::optional<EnvironmentList> m_defaultEnvironment;
   bool m_themeIsDark{true};
