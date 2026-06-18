@@ -9,21 +9,25 @@
 #include <wx/dcmemory.h>
 #include <wx/image.h>
 
-// On macOS the OpenGL 3.2 core profile entry points live in <OpenGL/gl3.h> and
-// link directly against the OpenGL framework, so no extension loader is needed.
-// On other platforms a loader (GLEW/glad) is normally required; we include the
-// platform GL header best-effort so the file still compiles where USE_OPENGL is
-// turned on with a loader already in the include path.
+// Platform GL headers.
+// • macOS  – OpenGL 3.2 core profile ships in the framework; no loader needed.
+// • Windows – opengl32.dll only exports OpenGL 1.1; GLEW loads the rest.
+// • Linux  – GL_GLEXT_PROTOTYPES lets the driver .so export symbols directly.
 #ifdef __APPLE__
 #define GL_SILENCE_DEPRECATION 1
 #include <OpenGL/gl3.h>
-#else
+#elif defined(_WIN32)
+// GLEW must be included before any other GL header.
+#include <GL/glew.h>
 #include <wx/glcanvas.h>
-#ifdef __WXMSW__
-#include <GL/gl.h>
 #else
-#include <GL/gl.h>
+// Linux
+#include <wx/glcanvas.h>
+#ifndef GL_GLEXT_PROTOTYPES
+#define GL_GLEXT_PROTOTYPES 1
 #endif
+#include <GL/gl.h>
+#include <GL/glext.h>
 #endif
 
 namespace {
@@ -88,6 +92,19 @@ bool TerminalGLRenderer::Init() {
   if (m_program != 0) {
     return true;
   }
+
+#ifdef _WIN32
+  // glewInit() must be called once per GL context. Requires a current context.
+  static bool s_glewInitialized = false;
+  if (!s_glewInitialized) {
+    GLenum err = glewInit();
+    if (err != GLEW_OK) {
+      TLOG_ERROR() << "glewInit failed: " << glewGetErrorString(err) << std::endl;
+      return false;
+    }
+    s_glewInitialized = true;
+  }
+#endif
 
   GLuint vs = CompileShader(GL_VERTEX_SHADER, kVertexShaderSrc);
   GLuint fs = CompileShader(GL_FRAGMENT_SHADER, kFragmentShaderSrc);

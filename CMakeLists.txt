@@ -5,54 +5,35 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/FindWxWidgetsMSYS.cmake)
+
 option(BUILD_WXTERMINAL_DEMO "Build the wxterminal demo application" ON)
+
+# Find OpenGL (required by wxWidgets)
+if(WIN32)
+  find_package(OpenGL REQUIRED)
+endif()
 
 # When ON, the terminal view renders with an OpenGL glyph-atlas renderer
 # (wxGLCanvas). When OFF (the default) it uses the legacy wxDC backing-store
-# renderer, so systems without usable OpenGL keep working unchanged.
-# Can be set via -DUSE_OPENGL=ON or the environment variable USE_OPENGL=1.
+# renderer, so systems without usable OpenGL keep working unchanged. Can be set
+# via -DUSE_OPENGL=ON or the environment variable USE_OPENGL=1.
 if(DEFINED ENV{USE_OPENGL} AND NOT DEFINED USE_OPENGL)
-  set(USE_OPENGL "$ENV{USE_OPENGL}" CACHE BOOL "Render the terminal with OpenGL (wxGLCanvas)")
+  set(USE_OPENGL
+      "$ENV{USE_OPENGL}"
+      CACHE BOOL "Render the terminal with OpenGL (wxGLCanvas)")
 else()
   option(USE_OPENGL "Render the terminal with OpenGL (wxGLCanvas)" OFF)
 endif()
 
 # find wxWidgets once
 if(MINGW)
-  if(NOT EXISTS "${CMAKE_BINARY_DIR}/wxWidgets.cmake")
-    if(NOT WXWIN)
-      message(FATAL_ERROR "Missing -DWXWIN=<wxWidgets/root/install/dir>")
-    endif()
+  find_package(wxWidgets CONFIG REQUIRED)
 
-    if(CMAKE_BUILD_TYPE MATCHES Release)
-      set(WXCFG "clang_x64_dll/mswu")
-    else()
-      set(WXCFG "clang_x64_dll/mswud")
-    endif()
-
-    if(NOT EXISTS "${WXWIN}/lib/${WXCFG}")
-      message(
-        WARNING
-          "Could not find path: ${WXWIN}/lib/${WXCFG}, defaulting to: ${WXWIN}/lib/clang_x64_dll/mswu"
-      )
-      set(WXCFG "clang_x64_dll/mswu")
-    endif()
-
-    message(STATUS "WXWIN is set to ${WXWIN}")
-    message(STATUS "WXCFG is set to ${WXCFG}")
-
-    message(
-      STATUS
-        "Running: ${CL_WX_CONFIG} --cmake --prefix=${WXWIN} --wxcfg=${WXCFG}")
-    execute_process(
-      COMMAND wx-config --cmake --prefix=${WXWIN} --wxcfg=${WXCFG}
-      OUTPUT_VARIABLE wxWidgets_USE_FILE
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    message(STATUS "wxWidgets_USE_FILE is set to: ${wxWidgets_USE_FILE}")
-  endif()
-  include(${CMAKE_BINARY_DIR}/wxWidgets.cmake)
 else()
-  if(USE_OPENGL AND UNIX AND NOT APPLE)
+  if(USE_OPENGL
+     AND UNIX
+     AND NOT APPLE)
     set(WX_COMPONENTS base core net aui gl xrc)
   else()
     set(WX_COMPONENTS base core net aui xrc)
@@ -115,6 +96,10 @@ if(USE_OPENGL)
   else()
     find_package(OpenGL REQUIRED)
     target_link_libraries(wxterminal_lib PUBLIC OpenGL::GL)
+    if(WIN32)
+      find_package(GLEW REQUIRED)
+      target_link_libraries(wxterminal_lib PUBLIC GLEW::GLEW)
+    endif()
   endif()
 else()
   target_compile_definitions(wxterminal_lib PUBLIC USE_OPENGL=0)
@@ -131,12 +116,12 @@ if(BUILD_WXTERMINAL_DEMO)
   elseif(APPLE)
     set(MACOSX_BUNDLE_ICON_FILE icon.icns)
     set(APP_ICON "${CMAKE_CURRENT_LIST_DIR}/assets/icon.icns")
-    set_source_files_properties(${APP_ICON} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    set_source_files_properties(${APP_ICON} PROPERTIES MACOSX_PACKAGE_LOCATION
+                                                       Resources)
     add_executable(wxterminal MACOSX_BUNDLE ${EXAMPLE_SOURCES} ${APP_ICON})
-    set_target_properties(wxterminal PROPERTIES
-      MACOSX_BUNDLE_ICON_FILE icon.icns
-      MACOSX_BUNDLE_BUNDLE_NAME "wxTerminalEmulator"
-    )
+    set_target_properties(
+      wxterminal PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns
+                            MACOSX_BUNDLE_BUNDLE_NAME "wxTerminalEmulator")
   else()
     add_executable(wxterminal ${EXAMPLE_SOURCES})
   endif()
@@ -146,8 +131,19 @@ if(BUILD_WXTERMINAL_DEMO)
   # Platform specific settings
   if(WIN32)
     target_compile_definitions(wxterminal PRIVATE __WXMSW__)
-    target_link_libraries(wxterminal PRIVATE shell32 ole32 user32
-                                             ${wxWidgets_LIBRARIES})
+    set_target_properties(
+      wxterminal
+      PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/install/bin"
+                 RUNTIME_OUTPUT_DIRECTORY_RELEASE
+                 "${CMAKE_BINARY_DIR}/install/bin"
+                 RUNTIME_OUTPUT_DIRECTORY_DEBUG
+                 "${CMAKE_BINARY_DIR}/install/bin")
+    set(_WIN_EXTRA_LIBS shell32 ole32 user32)
+    if(USE_OPENGL)
+      list(APPEND _WIN_EXTRA_LIBS opengl32)
+    endif()
+    target_link_libraries(wxterminal PRIVATE ${wxWidgets_LIBRARIES}
+                                             ${_WIN_EXTRA_LIBS})
   elseif(NOT APPLE)
     # Linux needs libutil for forkpty
     target_link_libraries(wxterminal PRIVATE util ${wxWidgets_LIBRARIES})
@@ -165,49 +161,58 @@ if(BUILD_WXTERMINAL_DEMO)
     # Determine wxWidgets library directory from the first library in the list.
     list(GET wxWidgets_LIBRARIES 0 _WX_FIRST_LIB)
     get_filename_component(_WX_LIB_DIR "${_WX_FIRST_LIB}" DIRECTORY)
-    add_custom_command(TARGET wxterminal POST_BUILD
-      COMMAND ${CMAKE_COMMAND}
-        -DEXECUTABLE=${BUNDLE_EXE}
-        -DBUNDLE_DIR=${BUNDLE_DIR}
-        -DTARGET_OS=${BUNDLE_TARGET_OS}
-        -DWX_LIB_DIR=${_WX_LIB_DIR}
-        -P ${BUNDLE_DEPS_SCRIPT}
+    add_custom_command(
+      TARGET wxterminal
+      POST_BUILD
+      COMMAND
+        ${CMAKE_COMMAND} -DEXECUTABLE=${BUNDLE_EXE} -DBUNDLE_DIR=${BUNDLE_DIR}
+        -DTARGET_OS=${BUNDLE_TARGET_OS} -DWX_LIB_DIR=${_WX_LIB_DIR} -P
+        ${BUNDLE_DEPS_SCRIPT}
       COMMENT "Bundling dependencies into .app bundle"
       VERBATIM)
   elseif(NOT WIN32)
     # Linux: set RPATH so the binary finds libs in ../lib relative to itself.
-    set_target_properties(wxterminal PROPERTIES
-      INSTALL_RPATH "$ORIGIN/../lib"
-      BUILD_RPATH "$ORIGIN/../lib")
+    set_target_properties(wxterminal PROPERTIES INSTALL_RPATH "$ORIGIN/../lib"
+                                                BUILD_RPATH "$ORIGIN/../lib")
     set(BUNDLE_TARGET_OS "linux")
     list(GET wxWidgets_LIBRARIES 0 _WX_FIRST_LIB)
     get_filename_component(_WX_LIB_DIR "${_WX_FIRST_LIB}" DIRECTORY)
-    add_custom_command(TARGET wxterminal POST_BUILD
-      COMMAND ${CMAKE_COMMAND}
-        -DEXECUTABLE=$<TARGET_FILE:wxterminal>
+    add_custom_command(
+      TARGET wxterminal
+      POST_BUILD
+      COMMAND
+        ${CMAKE_COMMAND} -DEXECUTABLE=$<TARGET_FILE:wxterminal>
         -DBUNDLE_DIR=$<TARGET_FILE_DIR:wxterminal>
-        -DTARGET_OS=${BUNDLE_TARGET_OS}
-        -DWX_LIB_DIR=${_WX_LIB_DIR}
-        -P ${BUNDLE_DEPS_SCRIPT}
+        -DTARGET_OS=${BUNDLE_TARGET_OS} -DWX_LIB_DIR=${_WX_LIB_DIR} -P
+        ${BUNDLE_DEPS_SCRIPT}
       COMMENT "Bundling dependencies alongside binary"
       VERBATIM)
   else()
     # Windows/MINGW: copy DLLs next to the .exe.
     set(BUNDLE_TARGET_OS "windows")
-    if(WXWIN)
-      set(_WX_LIB_DIR "${WXWIN}/lib/${WXCFG}")
-    else()
-      list(GET wxWidgets_LIBRARIES 0 _WX_FIRST_LIB)
-      get_filename_component(_WX_LIB_DIR "${_WX_FIRST_LIB}" DIRECTORY)
-    endif()
-    add_custom_command(TARGET wxterminal POST_BUILD
-      COMMAND ${CMAKE_COMMAND}
-        -DEXECUTABLE=$<TARGET_FILE:wxterminal>
-        -DBUNDLE_DIR=$<TARGET_FILE_DIR:wxterminal>
-        -DTARGET_OS=${BUNDLE_TARGET_OS}
-        -DWX_LIB_DIR=${_WX_LIB_DIR}
-        -P ${BUNDLE_DEPS_SCRIPT}
-      COMMENT "Bundling DLLs alongside executable"
+    # Derive the MSYS2 toolchain bin directory from the compiler location so the
+    # bundler can resolve MinGW runtime and GLEW DLLs automatically.
+    get_filename_component(_TOOLCHAIN_BIN "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    set(_WIN_INSTALL_BIN "${CMAKE_BINARY_DIR}/install/bin")
+
+    add_custom_command(
+      TARGET wxterminal
+      POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:wx::wxmono>"
+              "$<TARGET_FILE_DIR:wxterminal>/"
+      COMMENT "Copying wxWidgets DLL next to wxterminal executable"
+      VERBATIM)
+
+    # Step 2: copy all transitive toolchain DLLs (MinGW runtime, GLEW, etc.) by
+    # walking the import table of the exe against the toolchain bin dir.
+    add_custom_command(
+      TARGET wxterminal
+      POST_BUILD
+      COMMAND
+        ${CMAKE_COMMAND} -DEXECUTABLE=$<TARGET_FILE:wxterminal>
+        -DBUNDLE_DIR=${_WIN_INSTALL_BIN} -DTARGET_OS=${BUNDLE_TARGET_OS}
+        -DCLANG64_BIN=${_TOOLCHAIN_BIN} -P ${BUNDLE_DEPS_SCRIPT}
+      COMMENT "Bundling toolchain DLLs alongside executable"
       VERBATIM)
   endif()
 endif()

@@ -244,21 +244,44 @@ elseif(TARGET_OS STREQUAL "windows")
   # On Windows (MINGW), copy DLLs next to the executable.
   get_filename_component(BIN_DIR "${EXECUTABLE}" DIRECTORY)
 
-  if(NOT WX_LIB_DIR OR NOT EXISTS "${WX_LIB_DIR}")
-    message(WARNING "BundleDeps: WX_LIB_DIR not set or does not exist, skipping Windows bundling")
-    return()
+  file(MAKE_DIRECTORY "${BIN_DIR}")
+
+  # Build the list of directories to search for DLLs.
+  # Search the MSYS2 toolchain bin dir for MinGW runtime, GLEW, etc.
+  set(_SEARCH_DIRS "")
+  if(CLANG64_BIN AND EXISTS "${CLANG64_BIN}")
+    list(APPEND _SEARCH_DIRS "${CLANG64_BIN}")
   endif()
 
-  # wxWidgets DLLs are typically in the same directory or a sibling bin/ dir.
-  set(SEARCH_DIRS "${WX_LIB_DIR}" "${WX_LIB_DIR}/../bin")
-  foreach(SEARCH_DIR ${SEARCH_DIRS})
-    file(GLOB WX_DLLS "${SEARCH_DIR}/wx*.dll")
-    foreach(DLL ${WX_DLLS})
-      get_filename_component(DLL_NAME "${DLL}" NAME)
-      file(COPY "${DLL}" DESTINATION "${BIN_DIR}")
-      message(STATUS "Bundled: ${DLL_NAME}")
-    endforeach()
+  # Walk all transitive runtime dependencies of the executable.
+  # PRE_INCLUDE_REGEXES / PRE_EXCLUDE_REGEXES filter which DLL names are even
+  # considered before path resolution.
+  # POST_EXCLUDE_REGEXES drops Windows system DLLs after resolution.
+  file(GET_RUNTIME_DEPENDENCIES
+    EXECUTABLES "${EXECUTABLE}"
+    RESOLVED_DEPENDENCIES_VAR   _RESOLVED
+    UNRESOLVED_DEPENDENCIES_VAR _UNRESOLVED
+    DIRECTORIES ${_SEARCH_DIRS}
+    PRE_EXCLUDE_REGEXES
+      "^api-ms-win-.*"        # API sets — always system
+      "^ext-ms-win-.*"        # Extension API sets
+      "^wx.*\\.dll$"          # wxWidgets DLLs — copied explicitly in Step 1
+    POST_EXCLUDE_REGEXES
+      ".*[Ss]ystem32/.*\\.dll$"   # C:\Windows\System32\*
+      ".*[Ww]in[Ss][Xx][Ss]/.*"   # WinSxS
+  )
+
+  foreach(_DLL ${_RESOLVED})
+    get_filename_component(_DLL_NAME "${_DLL}" NAME)
+    file(COPY "${_DLL}" DESTINATION "${BIN_DIR}")
+    message(STATUS "Bundled: ${_DLL_NAME}")
   endforeach()
+
+  if(_UNRESOLVED)
+    foreach(_U ${_UNRESOLVED})
+      message(WARNING "BundleDeps: could not resolve ${_U}")
+    endforeach()
+  endif()
 
   message(STATUS "BundleDeps: Windows bundle complete (${BIN_DIR})")
 endif()
