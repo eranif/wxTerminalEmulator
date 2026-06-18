@@ -47,7 +47,7 @@ if(MINGW)
   endif()
   include(${CMAKE_BINARY_DIR}/wxWidgets.cmake)
 else()
-  if(USE_OPENGL)
+  if(USE_OPENGL AND UNIX AND NOT APPLE)
     set(WX_COMPONENTS base core net aui gl)
   else()
     set(WX_COMPONENTS base core net aui)
@@ -141,5 +141,63 @@ if(BUILD_WXTERMINAL_DEMO)
   elseif(NOT APPLE)
     # Linux needs libutil for forkpty
     target_link_libraries(wxterminal PRIVATE util ${wxWidgets_LIBRARIES})
+  endif()
+
+  # ---------------------------------------------------------------------------
+  # Post-build: bundle shared library dependencies so the app is self-contained.
+  # ---------------------------------------------------------------------------
+  set(BUNDLE_DEPS_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/cmake/BundleDeps.cmake")
+
+  if(APPLE)
+    set(BUNDLE_TARGET_OS "macos")
+    set(BUNDLE_DIR "$<TARGET_BUNDLE_DIR:wxterminal>")
+    set(BUNDLE_EXE "$<TARGET_FILE:wxterminal>")
+    # Determine wxWidgets library directory from the first library in the list.
+    list(GET wxWidgets_LIBRARIES 0 _WX_FIRST_LIB)
+    get_filename_component(_WX_LIB_DIR "${_WX_FIRST_LIB}" DIRECTORY)
+    add_custom_command(TARGET wxterminal POST_BUILD
+      COMMAND ${CMAKE_COMMAND}
+        -DEXECUTABLE=${BUNDLE_EXE}
+        -DBUNDLE_DIR=${BUNDLE_DIR}
+        -DTARGET_OS=${BUNDLE_TARGET_OS}
+        -DWX_LIB_DIR=${_WX_LIB_DIR}
+        -P ${BUNDLE_DEPS_SCRIPT}
+      COMMENT "Bundling dependencies into .app bundle"
+      VERBATIM)
+  elseif(NOT WIN32)
+    # Linux: set RPATH so the binary finds libs in ../lib relative to itself.
+    set_target_properties(wxterminal PROPERTIES
+      INSTALL_RPATH "$ORIGIN/../lib"
+      BUILD_RPATH "$ORIGIN/../lib")
+    set(BUNDLE_TARGET_OS "linux")
+    list(GET wxWidgets_LIBRARIES 0 _WX_FIRST_LIB)
+    get_filename_component(_WX_LIB_DIR "${_WX_FIRST_LIB}" DIRECTORY)
+    add_custom_command(TARGET wxterminal POST_BUILD
+      COMMAND ${CMAKE_COMMAND}
+        -DEXECUTABLE=$<TARGET_FILE:wxterminal>
+        -DBUNDLE_DIR=$<TARGET_FILE_DIR:wxterminal>
+        -DTARGET_OS=${BUNDLE_TARGET_OS}
+        -DWX_LIB_DIR=${_WX_LIB_DIR}
+        -P ${BUNDLE_DEPS_SCRIPT}
+      COMMENT "Bundling dependencies alongside binary"
+      VERBATIM)
+  else()
+    # Windows/MINGW: copy DLLs next to the .exe.
+    set(BUNDLE_TARGET_OS "windows")
+    if(WXWIN)
+      set(_WX_LIB_DIR "${WXWIN}/lib/${WXCFG}")
+    else()
+      list(GET wxWidgets_LIBRARIES 0 _WX_FIRST_LIB)
+      get_filename_component(_WX_LIB_DIR "${_WX_FIRST_LIB}" DIRECTORY)
+    endif()
+    add_custom_command(TARGET wxterminal POST_BUILD
+      COMMAND ${CMAKE_COMMAND}
+        -DEXECUTABLE=$<TARGET_FILE:wxterminal>
+        -DBUNDLE_DIR=$<TARGET_FILE_DIR:wxterminal>
+        -DTARGET_OS=${BUNDLE_TARGET_OS}
+        -DWX_LIB_DIR=${_WX_LIB_DIR}
+        -P ${BUNDLE_DEPS_SCRIPT}
+      COMMENT "Bundling DLLs alongside executable"
+      VERBATIM)
   endif()
 endif()
