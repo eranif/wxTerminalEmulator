@@ -15,15 +15,20 @@ if(WIN32)
 endif()
 
 # When ON, the terminal view renders with an OpenGL glyph-atlas renderer
-# (wxGLCanvas). When OFF (the default) it uses the legacy wxDC backing-store
-# renderer, so systems without usable OpenGL keep working unchanged. Can be set
-# via -DUSE_OPENGL=ON or the environment variable USE_OPENGL=1.
+# (wxGLCanvas). When OFF it uses the legacy wxDC backing-store renderer, so
+# systems without usable OpenGL keep working unchanged. Default is ON on Windows
+# and macOS, OFF on Linux. Can be set via -DUSE_OPENGL=ON/OFF or the
+# environment variable USE_OPENGL=1/0.
 if(DEFINED ENV{USE_OPENGL} AND NOT DEFINED USE_OPENGL)
   set(USE_OPENGL
       "$ENV{USE_OPENGL}"
       CACHE BOOL "Render the terminal with OpenGL (wxGLCanvas)")
 else()
-  option(USE_OPENGL "Render the terminal with OpenGL (wxGLCanvas)" OFF)
+  if(WIN32 OR APPLE)
+    option(USE_OPENGL "Render the terminal with OpenGL (wxGLCanvas)" ON)
+  else()
+    option(USE_OPENGL "Render the terminal with OpenGL (wxGLCanvas)" OFF)
+  endif()
 endif()
 
 if(USE_OPENGL

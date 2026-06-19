@@ -136,6 +136,10 @@ public:
     AppPersistence::Load(persistedSafeDrawing);
     m_safeDrawingEnabled = persistedSafeDrawing;
 
+#if USE_OPENGL
+    m_safeDrawingEnabled = true;
+#endif
+
     ApplyNativeAppTheme();
 
     BuildMenuBar();
@@ -359,6 +363,8 @@ public:
     m_notebook->AddPage(page, "Terminal", true);
 
     ApplyThemeToTab(page);
+    // OpenGL always uses Safe-Drawing (Per Cell Rendering)
+    m_safeDrawingEnabled = m_safeDrawingEnabled || page->IsOpenGLEnabled();
     page->EnableSafeDrawing(m_safeDrawingEnabled);
     UpdateSafeDrawingMenuCheck();
     page->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
@@ -385,7 +391,12 @@ public:
     if (auto *menuBar = GetMenuBar()) {
       auto *optionsMenu = menuBar->GetMenu(1);
       if (optionsMenu && optionsMenu->FindItem(ID_SafeDrawing)) {
+#if USE_OPENGL
+        optionsMenu->Enable(ID_SafeDrawing, false);
+        optionsMenu->Check(ID_SafeDrawing, true);
+#else
         optionsMenu->Check(ID_SafeDrawing, m_safeDrawingEnabled);
+#endif
       }
     }
   }

@@ -22,8 +22,12 @@
 #include <wx/msgdlg.h>
 #include <wx/settings.h>
 #include <wx/window.h>
+
 #if USE_OPENGL
 #include <wx/glcanvas.h>
+constexpr bool kOpenGLEnabled{true};
+#else
+constexpr bool kOpenGLEnabled{false};
 #endif
 
 using terminal::ColourSpec;
@@ -269,6 +273,8 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   }
 #endif
 }
+
+bool wxTerminalViewCtrl::IsOpenGLEnabled() const { return kOpenGLEnabled; }
 
 wxRect wxTerminalViewCtrl::GetTerminalRect() const {
   static int kScrollbarWidth{wxNOT_FOUND};

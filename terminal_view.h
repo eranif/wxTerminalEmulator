@@ -66,6 +66,8 @@ public:
   // Get the entire screen content
   wxString GetText() const;
 
+  bool IsOpenGLEnabled() const;
+
   // Helper methods for sending special characters
   void SendEnter();
   void SendTab();
