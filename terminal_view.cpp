@@ -116,21 +116,32 @@ static const std::unordered_map<int, int> shiftMap = {
     {'=', '+'},
     {'`', '~'}};
 
+#if USE_OPENGL
+auto kOpenGLAttributes = []() -> wxGLAttributes {
+  wxGLAttributes attr;
+  attr.PlatformDefaults().RGBA().DoubleBuffer().EndList();
+  return attr;
+}();
+#endif
+
 wxTerminalViewCtrl::wxTerminalViewCtrl(
     wxWindow *parent, const wxString &shellCommand,
     const std::optional<EnvironmentList> &environment,
     std::optional<wxString> workingDirectory, bool showScrollBar)
-    : m_showScrollBar{showScrollBar} {
+#if USE_OPENGL
+    : wxGLCanvas(parent, kOpenGLAttributes, wxID_ANY, wxDefaultPosition,
+                 wxDefaultSize,
+                 wxTAB_TRAVERSAL | (showScrollBar ? wxVSCROLL : 0)),
+      m_showScrollBar{showScrollBar}
+#else
+    : m_showScrollBar{showScrollBar}
+#endif
+{
   long style = wxTAB_TRAVERSAL;
   if (m_showScrollBar) {
     style |= wxVSCROLL;
   }
 #if USE_OPENGL
-  // RGBA, double-buffered display attributes for the GL canvas.
-  wxGLAttributes dispAttrs;
-  dispAttrs.PlatformDefaults().RGBA().DoubleBuffer().EndList();
-  wxGLCanvas::Create(parent, dispAttrs, wxID_ANY, wxDefaultPosition,
-                     wxDefaultSize, style);
   // Request a 3.2 core profile context (the highest core profile macOS
   // exposes; equivalent to "modern core" with GLSL 150).
   wxGLContextAttrs ctxAttrs;
