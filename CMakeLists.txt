@@ -26,6 +26,12 @@ else()
   option(USE_OPENGL "Render the terminal with OpenGL (wxGLCanvas)" OFF)
 endif()
 
+if(USE_OPENGL
+   AND UNIX
+   AND NOT APPLE)
+  message(FATAL_ERROR "OpenGL is not supported on Linux")
+endif()
+
 # find wxWidgets once
 if(MINGW)
   find_package(wxWidgets CONFIG REQUIRED)
