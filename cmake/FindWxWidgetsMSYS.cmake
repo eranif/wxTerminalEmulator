@@ -12,7 +12,8 @@ if(WIN32)
   message(STATUS "WXWIN is set to : ${_WXWIN_PATH}")
 
   # Look for wxWidgets cmake config directories under lib/cmake/
-  file(GLOB _WXWIDGETS_CMAKE_DIRS "${_WXWIN_PATH}/lib/cmake/wxWidgets-*")
+  # Matches both unversioned (wxWidgets) and versioned (wxWidgets-3.2.0) dirs
+  file(GLOB _WXWIDGETS_CMAKE_DIRS "${_WXWIN_PATH}/lib/cmake/wxWidgets*")
 
   if(_WXWIDGETS_CMAKE_DIRS)
     # Sort to get the latest version (assuming semantic versioning)
