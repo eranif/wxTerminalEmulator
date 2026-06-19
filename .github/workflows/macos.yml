@@ -38,9 +38,9 @@ jobs:
 
     - name: Build and install wxWidgets
       run: |
-        mkdir wxWidgets/build-release
+        mkdir -p wxWidgets/build-release
         cd wxWidgets/build-release
-        ../configure --enable-shared --enable-monolithic --with-osx_cocoa CXX='clang++ -std=c++17 -stdlib=libc++ -I../src/tiff/libtiff' CC=clang --disable-debug --disable-mediactrl ${{ matrix.wx-options }}
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DwxBUILD_DEBUG_LEVEL=0  -DwxBUILD_MONOLITHIC=1 -DwxUSE_SYS_LIBS=OFF -DwxUSE_LUNASVG=OFF ${{ matrix.wx-options }}
         make -j$(sysctl -n hw.physicalcpu)
         sudo make install
 
