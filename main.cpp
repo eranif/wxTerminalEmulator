@@ -364,7 +364,8 @@ public:
 
     ApplyThemeToTab(page);
     // OpenGL always uses Safe-Drawing (Per Cell Rendering)
-    m_safeDrawingEnabled = m_safeDrawingEnabled || page->IsOpenGLEnabled();
+    m_safeDrawingEnabled =
+        m_safeDrawingEnabled || wxTerminalViewCtrl::IsOpenGLEnabled();
     page->EnableSafeDrawing(m_safeDrawingEnabled);
     UpdateSafeDrawingMenuCheck();
     page->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);

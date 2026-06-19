@@ -285,7 +285,7 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
 #endif
 }
 
-bool wxTerminalViewCtrl::IsOpenGLEnabled() const { return kOpenGLEnabled; }
+bool wxTerminalViewCtrl::IsOpenGLEnabled() { return kOpenGLEnabled; }
 
 wxRect wxTerminalViewCtrl::GetTerminalRect() const {
   static int kScrollbarWidth{wxNOT_FOUND};
