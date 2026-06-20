@@ -26,6 +26,27 @@ All you need is **wxWidgets** and **CMake** — no third-party libraries are req
 - wxWidgets 3.2.x
 - Platform-specific requirements:
   - **Windows**: MinGW with Windows 10+ (for `ConPTY` support)
+  - **macOS**: macOS 10.10+ with CoreText and OpenGL support
+  - **Linux**: libutil for PTY support (OpenGL disabled on Linux)
+
+### Rendering
+
+#### **🚀 OpenGL Acceleration (Windows & macOS)**
+- **High-performance GPU-accelerated rendering** using a glyph-atlas renderer on Windows and macOS
+- **wxGLCanvas-based implementation** with batched draw calls
+- **Lazy glyph rasterization** with per-frame caching for optimal performance
+- **DPI-aware scaling** for crisp text on high-resolution displays
+- **Configurable rendering backend**: Enable/disable via `-DUSE_OPENGL=ON/OFF` at build time
+- **Legacy wxDC fallback** available for compatibility (default on Linux)
+
+#### **Display & Theming**
+- **Dark and light themes** via `terminal_theme.h`
+- **Native appearance support** with CLI option `--appearance=<light|dark|auto>` (platform-native look)
+- **Custom font selection** in the demo application
+- **Mouse selection, copy/paste, and programmatic selection**
+- **Clickable text/links** with Ctrl+click to detect tokens and emit link events
+- **Double-click word selection** with configurable delimiter characters
+- **Resize overlay visualization** showing terminal dimensions while resizing
 
 ### Terminal Emulation
 - **VT100/ANSI escape sequence handling** in `terminal_core.cpp`
@@ -35,25 +56,18 @@ All you need is **wxWidgets** and **CMake** — no third-party libraries are req
 - **Scroll regions** and cursor save/restore handling
 - **OSC/CSI processing**, including title updates and terminal responses
 
-### Display Features
-- **Dark and light themes** via `terminal_theme.h`
-- **Custom font selection** in the demo application
-- **Mouse selection, copy/paste, and programmatic selection**
-- **Buffered rendering** with wxWidgets drawing APIs
-- **Clickable text/links** with Ctrl+click to detect tokens and emit link events
-- **Double-click word selection** with configurable delimiter characters
-- **Cross-platform view implementation** in `terminal_view.cpp`
-
 ### Platform Support
-- **Windows**: ConPTY-based backend in `pty_backend_windows.cpp`
-- **POSIX platforms**: PTY backend in `pty_backend_posix.cpp`
-- The build links platform-specific system libraries as needed
+- **Windows**: ConPTY-based backend with OpenGL rendering support
+- **macOS**: PTY backend with OpenGL acceleration and native appearance integration
+- **Linux**: PTY backend with legacy wxDC rendering (OpenGL not supported)
+- The build automatically selects the appropriate PTY implementation and rendering backend
 
 ### Input Handling
 - **Printable character input**
 - **Special key translation** for navigation, insert/delete, page keys, and function keys
 - **Common terminal shortcuts** such as Ctrl+C, Ctrl+L, Ctrl+U, Ctrl+K, Ctrl+W, Ctrl+Z, Ctrl+R, Ctrl+D, Ctrl+A, Ctrl+E
 - **Clipboard integration** through the terminal view
+- **Working directory support** for launched processes
 
 ## Architecture
 
@@ -116,6 +130,16 @@ Debugging and diagnostics support:
 - Function timing support with `LogFunction` helper
 - Counter tracking for performance analysis
 
+#### Terminal OpenGL Renderer (`terminal_gl_renderer.h/cpp`)
+GPU-accelerated rendering path (Windows & macOS only, enabled by default):
+- **Glyph atlas renderer** using a single-channel texture for efficient rasterization
+- **Batched draw calls** (solid quads + textured glyphs) for minimal GPU overhead
+- **Lazy glyph rasterization** on first sighting using wxWidgets font engine
+- **DPI-aware scaling** for crisp rendering on high-resolution displays
+- **Performance optimized** with efficient vertex buffer management
+- **Metrics alignment** with legacy wxDC path for consistent appearance
+- Compiles to no-op on Linux and when `USE_OPENGL=OFF`
+
 ## Building
 
 ### Build Targets
@@ -141,7 +165,10 @@ cmake --build .
 ### CMake Options
 - `WXWIN`: Path to wxWidgets installation (required on Windows with MinGW)
 - `WXCFG`: wxWidgets configuration string (Windows MinGW only, default: `clang_x64_dll/mswu`)
-- `BUILD_WXTERMINAL_DEMO`: Enable/disable the demo executable
+- `BUILD_WXTERMINAL_DEMO`: Enable/disable the demo executable (default: ON)
+- `USE_OPENGL`: Enable OpenGL rendering on Windows/macOS (default: ON on Windows/macOS, OFF on Linux)
+  - Provide via environment variable: `USE_OPENGL=1 cmake ..`
+  - Or CMake option: `cmake -DUSE_OPENGL=ON ..`
 
 ## Usage
 
@@ -273,16 +300,17 @@ The included demo application (`main.cpp`) showcases the library features:
 ### Running the Demo
 
 ```bash
-./wxterminal [--log-level=<level>] [--appearance=<mode>] [--working-directory=<path>]
+./wxterminal [--log-level=<level>] [--appearance=<mode>] [--working-directory=<path>] [--shell=<command>]
 ```
 
-Log levels: `trace`, `debug`, `warn`, `error`
+**Log Levels**: `trace`, `debug`, `warn`, `error`
 
-Additional options:
-- `--appearance=<mode>` to control native app appearance: `light`, `dark`, or `auto`
-- `--shell=<command>` to launch a specific shell or command
-- `--working-directory=<path>` to start the shell in a specific directory
-- `--env=<list>` to pass environment variables to the launched process
+**Command-Line Options**:
+- `--appearance=<mode>`: Control native app appearance: `light`, `dark`, or `auto` (platform-native)
+- `--shell=<command>`: Launch a specific shell or command (default: platform default shell)
+- `--working-directory=<path>`: Start the shell in a specific directory
+- `--env=<list>`: Pass environment variables to the launched process
+- `--log-level=<level>`: Set logging verbosity (default: `warn`)
 
 ## API Reference
 
@@ -362,29 +390,48 @@ This is an open-source project. Contributions are welcome via pull requests.
 
 ### Windows
 - Requires Windows 10+ for ConPTY support
-- Uses GCDC (Graphics Context DC) for proper Unicode rendering
+- **OpenGL rendering enabled by default** with GLEW for GL extension management
+- Uses glyph-atlas renderer (GPU-accelerated) for high performance
+- Falls back to wxDC rendering if OpenGL unavailable
 - Default font: Consolas
-
-### Linux
-- Requires `libutil` for PTY support
-- Default font: System teletype font
-- Link with `-lutil` flag
+- Native appearance option integrates with Windows 11+ dark/light theme
 
 ### macOS
 - Uses BSD-style PTY functions from `util.h`
+- **OpenGL rendering enabled by default** using native macOS OpenGL framework
+- Uses glyph-atlas renderer for smooth, efficient rendering
+- Optimized for Retina displays with DPI-aware scaling
 - Default font: Menlo
-- Optimized font size for Retina displays
+- Native appearance option integrates with system dark/light theme preference
+
+### Linux
+- Requires `libutil` for PTY support
+- **OpenGL rendering disabled by default** (not supported)
+- Uses legacy wxDC rendering path (buffered, still performant)
+- Link with `-lutil` flag
+- Default font: System teletype font
+- To enable OpenGL (not recommended): Use `-DUSE_OPENGL=ON` (will fail with fatal error)
 
 ## Performance
 
-The library is optimized for performance:
+The library is optimized for high-performance terminal rendering:
+
+### OpenGL Path (Windows & macOS)
+- **GPU-accelerated rendering** with glyph atlas caching
+- **Minimal CPU overhead** via batched draw calls
+- **Low-latency updates** with efficient vertex buffer management
+- **Smooth 60 FPS rendering** even with large scrollback buffers
+- **High-throughput output** capable of keeping up with compilation logs and streaming data
+
+### Legacy wxDC Path (Linux & OpenGL disabled)
 - Batched text rendering reduces draw calls
 - Font caching minimizes object creation
 - Timer-based refresh prevents excessive redraws (only when needed)
 - Efficient buffer management with deque structure
 - Minimal allocations in hot paths
 
-Typical performance:
+### Typical Performance
 - Handles high-throughput output (compilation logs, etc.)
 - Smooth scrolling even with large scrollback buffers
 - Responsive input handling with sub-frame latency
+- Resize overlay provides visual feedback during window resizing
