@@ -163,6 +163,17 @@ public:
     SetIcons(LoadAppIcons());
     wxString shellCommand;
     parser.Found("shell", &shellCommand);
+
+    wxString title;
+    parser.Found("title", &title);
+
+    if (!title.empty()) {
+      SetLabel(title);
+    }
+
+    wxString command;
+    parser.Found("command", &command);
+
     m_timer.SetOwner(this);
     Bind(wxEVT_TIMER, &MyFrame::OnTimer, this, m_timer.GetId());
     m_timer.StartOnce(1000);
@@ -220,6 +231,9 @@ public:
                      [this](wxAuiNotebookEvent &event) {
                        CallAfter(&MyFrame::ShowTabMenu);
                      });
+    if (m_view && !command.empty()) {
+      m_view->SendCommand(command);
+    }
   }
 
   void ShowTabMenu() {
@@ -822,6 +836,10 @@ public:
          wxCMD_LINE_VAL_STRING, 0},
         {wxCMD_LINE_OPTION, nullptr, "working-directory",
          "working directory for the launched shell", wxCMD_LINE_VAL_STRING, 0},
+        {wxCMD_LINE_OPTION, nullptr, "command", "command to execute",
+         wxCMD_LINE_VAL_STRING, 0},
+        {wxCMD_LINE_OPTION, nullptr, "title", "set a title for the terminal",
+         wxCMD_LINE_VAL_STRING, 0},
         {wxCMD_LINE_OPTION, nullptr, "env",
          "environment list (Windows: A=B;C=D, POSIX: A=B:C=D)",
          wxCMD_LINE_VAL_STRING, 0},
@@ -887,6 +905,22 @@ public:
     }
 
     ApplyAppearanceSetting(appearanceSetting);
+
+    wxString command;
+    if (parser.Found("command", &command)) {
+      if (command.empty()) {
+        wxLogError("--command requires a non-empty command");
+        return false;
+      }
+    }
+
+    wxString title;
+    if (parser.Found("title", &title)) {
+      if (title.empty()) {
+        wxLogError("--title requires a non-empty string");
+        return false;
+      }
+    }
 
     auto frame = new MyFrame(parser, environment, std::move(workingDirectory));
     frame->Show();
