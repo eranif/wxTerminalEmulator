@@ -148,10 +148,12 @@ public:
   struct TerminalPageConfig {
     wxString shellCommand;
     std::optional<EnvironmentList> environment;
+    std::optional<wxString> workingDirectory;
   };
 
   MyFrame(const wxCmdLineParser &parser,
-          const std::optional<EnvironmentList> &environment)
+          const std::optional<EnvironmentList> &environment,
+          std::optional<wxString> workingDirectory = std::nullopt)
 #if USE_OPENGL
       : wxFrame(nullptr, wxID_ANY, "wxTerminalEmulator (OpenGL)") {
 #else
@@ -199,7 +201,9 @@ public:
                           wxAUI_NB_DEFAULT_STYLE | wxAUI_NB_CLOSE_ON_ALL_TABS);
     m_defaultShellCommand = shellCommand;
     m_defaultEnvironment = environment;
-    m_view = CreateTerminalPage({shellCommand, environment});
+    m_defaultWorkingDirectory = std::move(workingDirectory);
+    m_view = CreateTerminalPage(
+        {shellCommand, environment, m_defaultWorkingDirectory});
     m_notebook->Bind(
         wxEVT_AUINOTEBOOK_PAGE_CHANGED, [this](wxAuiNotebookEvent &event) {
           event.Skip();
@@ -410,7 +414,8 @@ public:
 
   MyTerminal *CreateTerminalPage(const TerminalPageConfig &config) {
     auto *page =
-        new MyTerminal(m_notebook, config.shellCommand, config.environment);
+        new MyTerminal(m_notebook, config.shellCommand, config.environment,
+                       config.workingDirectory);
     m_notebook->AddPage(page, "Terminal", true);
 
     ApplyThemeToTab(page);
@@ -468,7 +473,8 @@ public:
 
   void OnNewTerminal(wxCommandEvent &event) {
     wxUnusedVar(event);
-    CreateTerminalPage({m_defaultShellCommand, m_defaultEnvironment});
+    CreateTerminalPage({m_defaultShellCommand, m_defaultEnvironment,
+                        m_defaultWorkingDirectory});
     m_notebook->SetSelection(m_notebook->GetPageCount() - 1);
   }
 
@@ -757,6 +763,7 @@ private:
   MyTerminal *m_view{nullptr};
   wxString m_defaultShellCommand;
   std::optional<EnvironmentList> m_defaultEnvironment;
+  std::optional<wxString> m_defaultWorkingDirectory;
   bool m_themeIsDark{true};
   wxFont m_persistedFont;
   bool m_safeDrawingEnabled{false};
@@ -774,6 +781,9 @@ public:
          "set log level: trace, debug, warn, error", wxCMD_LINE_VAL_STRING, 0},
         {wxCMD_LINE_OPTION, "s", "shell",
          "shell command to launch instead of the default shell",
+         wxCMD_LINE_VAL_STRING, 0},
+        {wxCMD_LINE_OPTION, nullptr, "working-directory",
+         "working directory for the launched shell",
          wxCMD_LINE_VAL_STRING, 0},
         {wxCMD_LINE_OPTION, nullptr, "env",
          "environment list (Windows: A=B;C=D, POSIX: A=B:C=D)",
@@ -814,11 +824,26 @@ public:
       environment = MyFrame::ParseEnvironmentList(envStr);
     }
 
+    std::optional<wxString> workingDirectory{std::nullopt};
+    wxString workingDirectoryStr;
+    if (parser.Found("working-directory", &workingDirectoryStr)) {
+      if (workingDirectoryStr.empty()) {
+        wxLogError("--working-directory requires a non-empty path");
+        return false;
+      }
+      if (!wxDirExists(workingDirectoryStr)) {
+        wxLogError("Working directory does not exist: %s",
+                   workingDirectoryStr);
+        return false;
+      }
+      workingDirectory = workingDirectoryStr;
+    }
+
 #if defined(__WXMSW__) && wxCHECK_VERSION(3, 3, 0)
     SetAppearance(wxAppBase::Appearance::System);
 #endif
 
-    auto frame = new MyFrame(parser, environment);
+    auto frame = new MyFrame(parser, environment, std::move(workingDirectory));
     frame->Show();
     SetTopWindow(frame);
     return true;

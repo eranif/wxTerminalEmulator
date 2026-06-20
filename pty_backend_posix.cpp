@@ -97,7 +97,9 @@ bool PosixPtyBackend::Start(const std::string &command,
     // Child process — async-signal-safe calls only.
     if (workingDirectory) {
       // Set working directory before launching the process.
-      ::wxSetWorkingDirectory(wxString::FromUTF8(*workingDirectory));
+      if (::chdir(workingDirectory->c_str()) != 0) {
+        _exit(127);
+      }
     }
 
     if (hasEnv) {
