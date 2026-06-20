@@ -1440,11 +1440,13 @@ void wxTerminalViewCtrl::OnPaintGL() {
 void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
   SetTerminalSizeFromClient();
   UpdateScrollbar();
-  m_resizing = true;
-  if (m_resizeEndTimer.IsRunning())
-    m_resizeEndTimer.Stop();
-  m_resizeEndTimer.StartOnce(150);
-  Refresh();
+  if (::wxGetMouseState().LeftIsDown()) {
+    m_resizing = true;
+    if (m_resizeEndTimer.IsRunning())
+      m_resizeEndTimer.Stop();
+    m_resizeEndTimer.StartOnce(150);
+    Refresh();
+  }
   evt.Skip();
 }
 
