@@ -4,22 +4,23 @@
 #include "terminal_view.h"
 #include <deque>
 #include <optional>
-#include <wx/bmpbndl.h>
+#include <stdexcept>
 #include <wx/app.h>
 #include <wx/aui/auibook.h>
+#include <wx/bmpbndl.h>
 #include <wx/cmdline.h>
 #include <wx/display.h>
 #include <wx/filefn.h>
 #include <wx/filename.h>
-#include <wx/icon.h>
-#include <wx/iconbndl.h>
 #include <wx/fontdlg.h>
 #include <wx/frame.h>
+#include <wx/icon.h>
+#include <wx/iconbndl.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
 #include <wx/settings.h>
-#include <wx/string.h>
 #include <wx/stdpaths.h>
+#include <wx/string.h>
 #include <wx/sysopt.h>
 #include <wx/textdlg.h>
 #include <wx/tokenzr.h>
@@ -413,9 +414,8 @@ public:
   }
 
   MyTerminal *CreateTerminalPage(const TerminalPageConfig &config) {
-    auto *page =
-        new MyTerminal(m_notebook, config.shellCommand, config.environment,
-                       config.workingDirectory);
+    auto *page = new MyTerminal(m_notebook, config.shellCommand,
+                                config.environment, config.workingDirectory);
     m_notebook->AddPage(page, "Terminal", true);
 
     ApplyThemeToTab(page);
@@ -744,7 +744,7 @@ public:
   }
 
   void ApplyNativeAppTheme(std::optional<bool> darkMode = std::nullopt) {
-#if defined(__WXMSW__) && wxCHECK_VERSION(3, 3, 0)
+#if wxCHECK_VERSION(3, 3, 0)
     const bool enableDark = darkMode.value_or(m_themeIsDark);
     if (enableDark) {
       // force dark
@@ -773,18 +773,55 @@ private:
 
 class MyApp : public wxApp {
 public:
+  enum class AppearanceSetting { Auto, Light, Dark };
+
+  static AppearanceSetting ParseAppearanceSetting(const wxString &value) {
+    const wxString lowered = value.Lower();
+    if (lowered == "auto") {
+      return AppearanceSetting::Auto;
+    }
+    if (lowered == "light") {
+      return AppearanceSetting::Light;
+    }
+    if (lowered == "dark") {
+      return AppearanceSetting::Dark;
+    }
+
+    throw std::invalid_argument("invalid appearance value");
+  }
+
+  void ApplyAppearanceSetting(AppearanceSetting appearance) {
+#if wxCHECK_VERSION(3, 3, 0)
+    switch (appearance) {
+    case AppearanceSetting::Auto:
+      SetAppearance(wxAppBase::Appearance::System);
+      break;
+    case AppearanceSetting::Light:
+      SetAppearance(wxAppBase::Appearance::Light);
+      break;
+    case AppearanceSetting::Dark:
+      SetAppearance(wxAppBase::Appearance::Dark);
+      break;
+    }
+#else
+    wxUnusedVar(appearance);
+#endif
+  }
+
   bool OnInit() override {
     static const wxCmdLineEntryDesc cmdLineDesc[] = {
         {wxCMD_LINE_SWITCH, "h", "help", "show help", wxCMD_LINE_VAL_NONE,
          wxCMD_LINE_OPTION_HELP},
+        {wxCMD_LINE_OPTION, nullptr, "appearance",
+         "native app appearance: light, dark, or auto", wxCMD_LINE_VAL_STRING,
+         0},
         {wxCMD_LINE_OPTION, "l", "log-level",
          "set log level: trace, debug, warn, error", wxCMD_LINE_VAL_STRING, 0},
         {wxCMD_LINE_OPTION, "s", "shell",
          "shell command to launch instead of the default shell",
          wxCMD_LINE_VAL_STRING, 0},
         {wxCMD_LINE_OPTION, nullptr, "working-directory",
-         "working directory for the launched shell",
-         wxCMD_LINE_VAL_STRING, 0},
+         "working directory for the launched shell", wxCMD_LINE_VAL_STRING, 0},
         {wxCMD_LINE_OPTION, nullptr, "env",
          "environment list (Windows: A=B;C=D, POSIX: A=B:C=D)",
          wxCMD_LINE_VAL_STRING, 0},
@@ -832,16 +869,24 @@ public:
         return false;
       }
       if (!wxDirExists(workingDirectoryStr)) {
-        wxLogError("Working directory does not exist: %s",
-                   workingDirectoryStr);
+        wxLogError("Working directory does not exist: %s", workingDirectoryStr);
         return false;
       }
       workingDirectory = workingDirectoryStr;
     }
 
-#if defined(__WXMSW__) && wxCHECK_VERSION(3, 3, 0)
-    SetAppearance(wxAppBase::Appearance::System);
-#endif
+    AppearanceSetting appearanceSetting = AppearanceSetting::Auto;
+    wxString appearanceStr;
+    if (parser.Found("appearance", &appearanceStr)) {
+      try {
+        appearanceSetting = ParseAppearanceSetting(appearanceStr);
+      } catch (const std::invalid_argument &) {
+        wxLogError("Unknown appearance value: %s", appearanceStr);
+        return false;
+      }
+    }
+
+    ApplyAppearanceSetting(appearanceSetting);
 
     auto frame = new MyFrame(parser, environment, std::move(workingDirectory));
     frame->Show();

@@ -273,12 +273,13 @@ The included demo application (`main.cpp`) showcases the library features:
 ### Running the Demo
 
 ```bash
-./wxterminal [--log-level=<level>] [--working-directory=<path>]
+./wxterminal [--log-level=<level>] [--appearance=<mode>] [--working-directory=<path>]
 ```
 
 Log levels: `trace`, `debug`, `warn`, `error`
 
 Additional options:
+- `--appearance=<mode>` to control native app appearance: `light`, `dark`, or `auto`
 - `--shell=<command>` to launch a specific shell or command
 - `--working-directory=<path>` to start the shell in a specific directory
 - `--env=<list>` to pass environment variables to the launched process
