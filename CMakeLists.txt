@@ -169,6 +169,15 @@ if(BUILD_WXTERMINAL_DEMO)
   elseif(NOT APPLE)
     # Linux needs libutil for forkpty
     target_link_libraries(wxterminal PRIVATE util ${wxWidgets_LIBRARIES})
+    # Copy SVG asset next to binary (Linux only)
+    add_custom_command(
+      TARGET wxterminal
+      POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${CMAKE_CURRENT_SOURCE_DIR}/assets/wxterminal.svg"
+              "$<TARGET_FILE_DIR:wxterminal>/"
+      COMMENT "Copying wxterminal.svg asset file next to Linux binary"
+      VERBATIM)
   else()
     # Copy SVG asset next to binary (macOS bundle)
     message(STATUS "Copying wxterminal.svg asset file to macOS bundle...")
