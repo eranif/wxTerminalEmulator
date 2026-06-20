@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SVG="$SCRIPT_DIR/icon.svg"
+SVG="$SCRIPT_DIR/wxterminal.svg"
 ICONSET="$SCRIPT_DIR/icon.iconset"
 ICNS="$SCRIPT_DIR/icon.icns"
 
@@ -16,7 +16,7 @@ elif command -v inkscape &>/dev/null; then
 else
     # Fall back to qlmanage (slower but always present on macOS)
     qlmanage -t -s 1024 -o "$SCRIPT_DIR" "$SVG" >/dev/null 2>&1
-    mv "$SCRIPT_DIR/icon.svg.png" "$tmp_png"
+    mv "$SCRIPT_DIR/wxterminal.svg.png" "$tmp_png"
 fi
 
 mkdir -p "$ICONSET"

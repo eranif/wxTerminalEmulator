@@ -17,8 +17,8 @@ endif()
 # When ON, the terminal view renders with an OpenGL glyph-atlas renderer
 # (wxGLCanvas). When OFF it uses the legacy wxDC backing-store renderer, so
 # systems without usable OpenGL keep working unchanged. Default is ON on Windows
-# and macOS, OFF on Linux. Can be set via -DUSE_OPENGL=ON/OFF or the
-# environment variable USE_OPENGL=1/0.
+# and macOS, OFF on Linux. Can be set via -DUSE_OPENGL=ON/OFF or the environment
+# variable USE_OPENGL=1/0.
 if(DEFINED ENV{USE_OPENGL} AND NOT DEFINED USE_OPENGL)
   set(USE_OPENGL
       "$ENV{USE_OPENGL}"
@@ -150,6 +150,17 @@ if(BUILD_WXTERMINAL_DEMO)
                  RUNTIME_OUTPUT_DIRECTORY_DEBUG
                  "${CMAKE_BINARY_DIR}/install/bin")
     set(_WIN_EXTRA_LIBS shell32 ole32 user32)
+
+    # Copy SVG asset next to binary (Windows only)
+    message(
+      STATUS "Copying wxterminal-msw.svg asset file to binary directory...")
+    file(
+      COPY "C:/msys64/home/eran/devl/wxTerminalEmulator/assets/wxterminal-msw.svg"
+      DESTINATION "${CMAKE_BINARY_DIR}/install/bin/"
+    )
+    file(RENAME "${CMAKE_BINARY_DIR}/install/bin/wxterminal-msw.svg"
+         "${CMAKE_BINARY_DIR}/install/bin/wxterminal.svg")
+
     if(USE_OPENGL)
       list(APPEND _WIN_EXTRA_LIBS opengl32)
     endif()
@@ -158,6 +169,12 @@ if(BUILD_WXTERMINAL_DEMO)
   elseif(NOT APPLE)
     # Linux needs libutil for forkpty
     target_link_libraries(wxterminal PRIVATE util ${wxWidgets_LIBRARIES})
+  else()
+    # Copy SVG asset next to binary (macOS bundle)
+    message(STATUS "Copying wxterminal.svg asset file to macOS bundle...")
+    file(
+      COPY "C:/msys64/home/eran/devl/wxTerminalEmulator/assets/wxterminal.svg"
+      DESTINATION "$<TARGET_BUNDLE_DIR:wxterminal>/Contents/Resources/")
   endif()
 
   # ---------------------------------------------------------------------------

@@ -4,20 +4,30 @@
 #include "terminal_view.h"
 #include <deque>
 #include <optional>
+#include <wx/bmpbndl.h>
 #include <wx/app.h>
 #include <wx/aui/auibook.h>
 #include <wx/cmdline.h>
 #include <wx/display.h>
+#include <wx/filefn.h>
+#include <wx/filename.h>
+#include <wx/icon.h>
+#include <wx/iconbndl.h>
 #include <wx/fontdlg.h>
 #include <wx/frame.h>
 #include <wx/menu.h>
 #include <wx/msgdlg.h>
 #include <wx/settings.h>
 #include <wx/string.h>
+#include <wx/stdpaths.h>
 #include <wx/sysopt.h>
 #include <wx/textdlg.h>
 #include <wx/tokenzr.h>
 #include <wx/xrc/xmlres.h>
+
+#ifndef WXTERMINAL_SVG_SOURCE_PATH
+#define WXTERMINAL_SVG_SOURCE_PATH ""
+#endif
 
 class MyTerminal : public wxTerminalViewCtrl {
 public:
@@ -78,6 +88,46 @@ private:
   wxString m_customLabel;
 };
 
+static wxString GetAppIconPath() {
+  wxString sourcePath = wxString::FromUTF8(WXTERMINAL_SVG_SOURCE_PATH);
+  if (!sourcePath.empty() && wxFileExists(sourcePath)) {
+    return sourcePath;
+  }
+
+  wxFileName iconPath(wxStandardPaths::Get().GetExecutablePath());
+#if defined(__WXMAC__)
+  wxFileName bundleIconPath = iconPath;
+  bundleIconPath.RemoveLastDir();
+  bundleIconPath.AppendDir("Resources");
+  bundleIconPath.SetFullName("wxterminal.svg");
+  if (wxFileExists(bundleIconPath.GetFullPath())) {
+    return bundleIconPath.GetFullPath();
+  }
+#endif
+  iconPath.SetFullName("wxterminal.svg");
+  return iconPath.GetFullPath();
+}
+
+static wxIconBundle LoadAppIcons() {
+  const wxBitmapBundle svgBundle =
+      wxBitmapBundle::FromSVGFile(GetAppIconPath(), wxSize(256, 256));
+  wxIconBundle icons;
+
+  if (!svgBundle.IsOk()) {
+    return icons;
+  }
+
+  for (int size : {16, 32, 48, 64, 128, 256}) {
+    wxIcon icon;
+    icon.CopyFromBitmap(svgBundle.GetBitmap(wxSize(size, size)));
+    if (icon.IsOk()) {
+      icons.AddIcon(icon);
+    }
+  }
+
+  return icons;
+}
+
 class MyFrame : public wxFrame {
 public:
   enum {
@@ -107,6 +157,7 @@ public:
 #else
       : wxFrame(nullptr, wxID_ANY, "wxTerminalEmulator") {
 #endif
+    SetIcons(LoadAppIcons());
     wxString shellCommand;
     parser.Found("shell", &shellCommand);
     m_timer.SetOwner(this);
