@@ -155,7 +155,7 @@ if(BUILD_WXTERMINAL_DEMO)
     message(
       STATUS "Copying wxterminal-msw.svg asset file to binary directory...")
     file(
-      COPY "C:/msys64/home/eran/devl/wxTerminalEmulator/assets/wxterminal-msw.svg"
+      COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/wxterminal-msw.svg"
       DESTINATION "${CMAKE_BINARY_DIR}/install/bin/"
     )
     file(RENAME "${CMAKE_BINARY_DIR}/install/bin/wxterminal-msw.svg"
@@ -169,20 +169,11 @@ if(BUILD_WXTERMINAL_DEMO)
   elseif(NOT APPLE)
     # Linux needs libutil for forkpty
     target_link_libraries(wxterminal PRIVATE util ${wxWidgets_LIBRARIES})
-    # Copy SVG asset next to binary (Linux only)
-    add_custom_command(
-      TARGET wxterminal
-      POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
-              "${CMAKE_CURRENT_SOURCE_DIR}/assets/wxterminal.svg"
-              "$<TARGET_FILE_DIR:wxterminal>/"
-      COMMENT "Copying wxterminal.svg asset file next to Linux binary"
-      VERBATIM)
   else()
     # Copy SVG asset next to binary (macOS bundle)
     message(STATUS "Copying wxterminal.svg asset file to macOS bundle...")
     file(
-      COPY "C:/msys64/home/eran/devl/wxTerminalEmulator/assets/wxterminal.svg"
+      COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/wxterminal.svg"
       DESTINATION "$<TARGET_BUNDLE_DIR:wxterminal>/Contents/Resources/")
   endif()
 
