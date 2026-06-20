@@ -154,10 +154,8 @@ if(BUILD_WXTERMINAL_DEMO)
     # Copy SVG asset next to binary (Windows only)
     message(
       STATUS "Copying wxterminal-msw.svg asset file to binary directory...")
-    file(
-      COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/wxterminal-msw.svg"
-      DESTINATION "${CMAKE_BINARY_DIR}/install/bin/"
-    )
+    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/wxterminal-msw.svg"
+         DESTINATION "${CMAKE_BINARY_DIR}/install/bin/")
     file(RENAME "${CMAKE_BINARY_DIR}/install/bin/wxterminal-msw.svg"
          "${CMAKE_BINARY_DIR}/install/bin/wxterminal.svg")
 
@@ -171,10 +169,12 @@ if(BUILD_WXTERMINAL_DEMO)
     target_link_libraries(wxterminal PRIVATE util ${wxWidgets_LIBRARIES})
   else()
     # Copy SVG asset next to binary (macOS bundle)
-    message(STATUS "Copying wxterminal.svg asset file to macOS bundle...")
-    file(
-      COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/wxterminal.svg"
-      DESTINATION "$<TARGET_BUNDLE_DIR:wxterminal>/Contents/Resources/")
+    message(
+      STATUS
+        "Copying wxterminal.svg asset file to ${CMAKE_BINARY_DIR}/wxterminal.app/Contents/Resources/"
+    )
+    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/wxterminal.svg"
+         DESTINATION "${CMAKE_BINARY_DIR}/wxterminal.app/Contents/Resources/")
   endif()
 
   # ---------------------------------------------------------------------------
