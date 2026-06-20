@@ -288,9 +288,11 @@ private:
   void OnPaintGL();
   // Emit the geometry for a single screen row into the GL renderer.
   void RenderRowGL(int y, int rowIdx, const std::vector<terminal::Cell> &row);
+  void PaintResizeOverlayGL();
 #else
   // Legacy wxDC paint path (backing-store incremental renderer).
   void OnPaintDC();
+  void PaintResizeOverlay(wxDC &dc);
 #endif
   struct PaintCounters {
     PaintCounters(size_t &draw_text, size_t &draw_rectangle,
@@ -317,7 +319,6 @@ private:
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);
   void OnMouseLeftDown(wxMouseEvent &evt);
-  void OnMouseLeftUp(wxMouseEvent &evt);
   void OnMouseLeftDoubleClick(wxMouseEvent &evt);
   void OnMouseMove(wxMouseEvent &evt);
   void OnMouseUp(wxMouseEvent &evt);
@@ -548,12 +549,6 @@ private:
   int m_glAtlasCharW{0};
   int m_glAtlasCharH{0};
 #endif
-  bool m_resizing{false};
   wxTimer m_resizeEndTimer;
   void OnResizeEndTimer(wxTimerEvent &evt);
-#if USE_OPENGL
-  void PaintResizeOverlayGL();
-#else
-  void PaintResizeOverlay(wxDC &dc);
-#endif
 };

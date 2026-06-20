@@ -177,7 +177,6 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   Bind(wxEVT_CHAR_HOOK, &wxTerminalViewCtrl::OnCharHook, this);
   Bind(wxEVT_KEY_DOWN, &wxTerminalViewCtrl::OnKeyDown, this);
   Bind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
-  Bind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseLeftUp, this);
   Bind(wxEVT_LEFT_DCLICK, &wxTerminalViewCtrl::OnMouseLeftDoubleClick, this);
   Bind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseUp, this);
   Bind(wxEVT_MOTION, &wxTerminalViewCtrl::OnMouseMove, this);
@@ -250,7 +249,6 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   Unbind(wxEVT_CHAR_HOOK, &wxTerminalViewCtrl::OnCharHook, this);
   Unbind(wxEVT_KEY_DOWN, &wxTerminalViewCtrl::OnKeyDown, this);
   Unbind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
-  Unbind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseLeftUp, this);
   Unbind(wxEVT_LEFT_DCLICK, &wxTerminalViewCtrl::OnMouseLeftDoubleClick, this);
   Unbind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseUp, this);
   Unbind(wxEVT_MOTION, &wxTerminalViewCtrl::OnMouseMove, this);
@@ -1092,7 +1090,7 @@ bool wxTerminalViewCtrl::InitialiseAndStart(wxDC *pdc) {
 }
 
 void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
-  if (m_resizing) {
+  if (m_resizeEndTimer.IsRunning()) {
 #if USE_OPENGL
     PaintResizeOverlayGL();
 #else
@@ -1441,7 +1439,6 @@ void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
   SetTerminalSizeFromClient();
   UpdateScrollbar();
   if (::wxGetMouseState().LeftIsDown()) {
-    m_resizing = true;
     if (m_resizeEndTimer.IsRunning())
       m_resizeEndTimer.Stop();
     m_resizeEndTimer.StartOnce(150);
@@ -1455,7 +1452,6 @@ void wxTerminalViewCtrl::OnResizeEndTimer(wxTimerEvent &) {
     m_resizeEndTimer.StartOnce(50);
     return;
   }
-  m_resizing = false;
   InvalidateRenderCache();
   Refresh();
 }
@@ -1508,8 +1504,6 @@ void wxTerminalViewCtrl::PaintResizeOverlay(wxDC &dc) {
   dc.DrawText(sizeText, x, y);
 }
 #endif
-
-void wxTerminalViewCtrl::OnMouseLeftUp(wxMouseEvent &evt) { evt.Skip(); }
 
 void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
   evt.Skip();
