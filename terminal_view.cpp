@@ -177,6 +177,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   Bind(wxEVT_CHAR_HOOK, &wxTerminalViewCtrl::OnCharHook, this);
   Bind(wxEVT_KEY_DOWN, &wxTerminalViewCtrl::OnKeyDown, this);
   Bind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
+  Bind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseLeftUp, this);
   Bind(wxEVT_LEFT_DCLICK, &wxTerminalViewCtrl::OnMouseLeftDoubleClick, this);
   Bind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseUp, this);
   Bind(wxEVT_MOTION, &wxTerminalViewCtrl::OnMouseMove, this);
@@ -194,6 +195,9 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   Bind(wxEVT_SCROLLWIN_THUMBRELEASE, &wxTerminalViewCtrl::OnScroll, this);
   Bind(wxEVT_LEAVE_WINDOW, &wxTerminalViewCtrl::OnLeaveWindow, this);
   Bind(wxEVT_ERASE_BACKGROUND, &wxTerminalViewCtrl::OnEraseBg, this);
+  m_resizeEndTimer.SetOwner(this);
+  Bind(wxEVT_TIMER, &wxTerminalViewCtrl::OnResizeEndTimer, this,
+       m_resizeEndTimer.GetId());
 
   m_shell_command = shellCommand;
   m_environment = std::move(environment);
@@ -246,6 +250,7 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   Unbind(wxEVT_CHAR_HOOK, &wxTerminalViewCtrl::OnCharHook, this);
   Unbind(wxEVT_KEY_DOWN, &wxTerminalViewCtrl::OnKeyDown, this);
   Unbind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
+  Unbind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseLeftUp, this);
   Unbind(wxEVT_LEFT_DCLICK, &wxTerminalViewCtrl::OnMouseLeftDoubleClick, this);
   Unbind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseUp, this);
   Unbind(wxEVT_MOTION, &wxTerminalViewCtrl::OnMouseMove, this);
@@ -1087,6 +1092,15 @@ bool wxTerminalViewCtrl::InitialiseAndStart(wxDC *pdc) {
 }
 
 void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
+  if (m_resizing) {
+#if USE_OPENGL
+    PaintResizeOverlayGL();
+#else
+    wxPaintDC dc{this};
+    PaintResizeOverlay(dc);
+#endif
+    return;
+  }
 #if USE_OPENGL
   OnPaintGL();
 }
@@ -1426,8 +1440,74 @@ void wxTerminalViewCtrl::OnPaintGL() {
 void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
   SetTerminalSizeFromClient();
   UpdateScrollbar();
+  m_resizing = true;
+  if (m_resizeEndTimer.IsRunning())
+    m_resizeEndTimer.Stop();
+  m_resizeEndTimer.StartOnce(150);
+  Refresh();
   evt.Skip();
 }
+
+void wxTerminalViewCtrl::OnResizeEndTimer(wxTimerEvent &) {
+  if (::wxGetMouseState().LeftIsDown()) {
+    m_resizeEndTimer.StartOnce(50);
+    return;
+  }
+  m_resizing = false;
+  InvalidateRenderCache();
+  Refresh();
+}
+
+#if USE_OPENGL
+void wxTerminalViewCtrl::PaintResizeOverlayGL() {
+  wxPaintDC paintDc{this};
+  if (!m_glContext || !IsShownOnScreen())
+    return;
+  m_glContext->SetCurrent(*this);
+  if (!m_glInitialized || m_charW == 0 || m_charH == 0)
+    return;
+
+  const auto &theme = m_core.GetTheme();
+  wxSize clientSize = GetClientSize();
+
+#ifdef __WXMSW__
+  m_glRenderer.BeginFrame(clientSize.x, clientSize.y, 1, theme.bg);
+#else
+  double scale = GetDPIScaleFactor();
+  m_glRenderer.BeginFrame(clientSize.x, clientSize.y, scale, theme.bg);
+#endif
+
+  wxString sizeText = wxString::Format("%zux%zu", m_core.Cols(), m_core.Rows());
+  int textW = static_cast<int>(sizeText.length()) * m_charW;
+  int x = (clientSize.x - textW) / 2;
+  int y = (clientSize.y - m_charH) / 2;
+  for (size_t i = 0; i < sizeText.length(); ++i) {
+    int cx = x + static_cast<int>(i) * m_charW;
+    m_glRenderer.AddSolidRect(cx, y, m_charW, m_charH, theme.bg);
+    m_glRenderer.AddGlyph(static_cast<char32_t>(sizeText[i].GetValue()), false,
+                          false, cx, y, m_charW, m_charH, theme.fg);
+  }
+  m_glRenderer.EndFrame();
+  SwapBuffers();
+}
+#else
+void wxTerminalViewCtrl::PaintResizeOverlay(wxDC &dc) {
+  const auto &theme = m_core.GetTheme();
+  dc.SetBackground(wxBrush(theme.bg));
+  dc.Clear();
+
+  wxString sizeText = wxString::Format("%zux%zu", m_core.Cols(), m_core.Rows());
+  dc.SetFont(m_defaultFont);
+  dc.SetTextForeground(theme.fg);
+  wxSize textSize = dc.GetTextExtent(sizeText);
+  wxSize clientSize = GetClientSize();
+  int x = (clientSize.x - textSize.x) / 2;
+  int y = (clientSize.y - textSize.y) / 2;
+  dc.DrawText(sizeText, x, y);
+}
+#endif
+
+void wxTerminalViewCtrl::OnMouseLeftUp(wxMouseEvent &evt) { evt.Skip(); }
 
 void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
   evt.Skip();

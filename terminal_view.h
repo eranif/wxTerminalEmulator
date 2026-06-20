@@ -29,6 +29,7 @@
 #include <optional>
 #include <unordered_set>
 #include <wx/arrstr.h>
+#include <wx/wupdlock.h>
 
 // When the OpenGL path is enabled the control is a wxGLCanvas (still a
 // wxWindow, so all event binding, scrollbars, focus, etc. behave the same);
@@ -316,6 +317,7 @@ private:
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);
   void OnMouseLeftDown(wxMouseEvent &evt);
+  void OnMouseLeftUp(wxMouseEvent &evt);
   void OnMouseLeftDoubleClick(wxMouseEvent &evt);
   void OnMouseMove(wxMouseEvent &evt);
   void OnMouseUp(wxMouseEvent &evt);
@@ -545,5 +547,13 @@ private:
   // atlas must be flushed so glyphs are re-rasterized at the new size.
   int m_glAtlasCharW{0};
   int m_glAtlasCharH{0};
+#endif
+  bool m_resizing{false};
+  wxTimer m_resizeEndTimer;
+  void OnResizeEndTimer(wxTimerEvent &evt);
+#if USE_OPENGL
+  void PaintResizeOverlayGL();
+#else
+  void PaintResizeOverlay(wxDC &dc);
 #endif
 };
