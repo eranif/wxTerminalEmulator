@@ -1517,6 +1517,7 @@ void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
     return;
   }
 
+  ClearUserSelection();
   if (m_charW == 0 || m_charH == 0) {
     ClearMouseSelection();
     return;
@@ -2103,6 +2104,116 @@ const wxFont &wxTerminalViewCtrl::GetCachedFont(bool bold,
   } else [[likely]] {
     return m_defaultFont;
   }
+}
+
+void wxTerminalViewCtrl::FindText(const wxString &text, size_t flags) {
+  if (text.IsEmpty()) {
+    return;
+  }
+
+  std::size_t startRow = 0;
+  std::size_t startCol = 0;
+  const std::size_t totalLines = m_core.TotalLines();
+
+  if (m_userSelection.active) {
+    startRow = m_userSelection.row;
+    startCol = m_userSelection.endCol;
+  }
+
+  bool forward = (flags & SearchFlags::kForward);
+  bool caseInSensitive = (flags & SearchFlags::kCaseInSensitive);
+
+  if (!forward) {
+    startCol = m_userSelection.col;
+  }
+
+  wxString searchText = caseInSensitive ? text.Lower() : text;
+  if (forward) {
+    for (std::size_t row = startRow; row < totalLines; ++row) {
+      wxString line = m_core.GetBufferRowCopyString(row);
+      if (caseInSensitive) {
+        line.MakeLower();
+      }
+      std::size_t pos = 0;
+      if (row == startRow) {
+        pos = line.find(searchText, startCol);
+      } else {
+        pos = line.find(searchText);
+      }
+
+      if (pos != wxNOT_FOUND) {
+        SetUserSelection(row, pos, text.length());
+        CenterLine(row);
+        return;
+      }
+    }
+    // Wrap around to start
+    for (std::size_t row = 0; row <= startRow && row < totalLines; ++row) {
+      wxString line = m_core.GetBufferRowCopyString(row);
+      if (caseInSensitive) {
+        line.MakeLower();
+      }
+      std::size_t pos =
+          (row == startRow) ? line.find(searchText, 0) : line.find(searchText);
+      if (pos != wxNOT_FOUND) {
+        SetUserSelection(row, pos, text.length());
+        CenterLine(row);
+        return;
+      }
+    }
+  } else {
+    // Backward search
+    for (int row = static_cast<int>(startRow); row >= 0; --row) {
+      wxString line = m_core.GetBufferRowCopyString(row);
+      if (caseInSensitive) {
+        line.MakeLower();
+      }
+      std::size_t limit =
+          (row == static_cast<int>(startRow)) ? startCol : line.length();
+      std::size_t lastBefore = wxNOT_FOUND;
+      std::size_t currentPos = 0;
+      while ((currentPos = line.find(searchText, currentPos)) != wxNOT_FOUND &&
+             currentPos < limit) {
+        lastBefore = currentPos;
+        currentPos += 1;
+      }
+      if (lastBefore != wxNOT_FOUND) {
+        SetUserSelection(row, lastBefore, text.length());
+        CenterLine(row);
+        return;
+      }
+    }
+
+    // Wrap around to end: search from the bottom of the buffer back to the
+    // original starting row, excluding the current match position.
+    for (int row = static_cast<int>(totalLines) - 1;
+         row >= static_cast<int>(startRow); --row) {
+      wxString line = m_core.GetBufferRowCopyString(row);
+      if (caseInSensitive) {
+        line.MakeLower();
+      }
+
+      std::size_t limit =
+          (row == static_cast<int>(startRow)) ? startCol : line.length();
+      std::size_t lastBefore = wxNOT_FOUND;
+      std::size_t currentPos = 0;
+      while ((currentPos = line.find(searchText, currentPos)) != wxNOT_FOUND &&
+             currentPos < limit) {
+        lastBefore = currentPos;
+        currentPos += 1;
+      }
+
+      if (lastBefore != wxNOT_FOUND) {
+        SetUserSelection(row, lastBefore, text.length());
+        CenterLine(row);
+        return;
+      }
+    }
+  }
+}
+
+bool wxTerminalViewCtrl::HasActiveSearch() const {
+  return m_userSelection.active;
 }
 
 void wxTerminalViewCtrl::Copy() {

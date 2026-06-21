@@ -200,6 +200,7 @@ public:
   // window (e.g. when a selection was extended past the viewport via
   // auto-scroll); such rows are read directly from the scrollback store.
   std::vector<Cell> GetBufferRowCopy(std::size_t absRow) const;
+  wxString GetBufferRowCopyString(std::size_t absRow) const;
 
   // Access a row by its view index
   const std::vector<Cell> &ViewBufferRow(std::size_t absRow) const;

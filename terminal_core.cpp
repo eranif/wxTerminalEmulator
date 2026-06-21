@@ -237,6 +237,16 @@ std::vector<Cell> TerminalCore::GetBufferRowCopy(std::size_t absRow) const {
   return {};
 }
 
+wxString TerminalCore::GetBufferRowCopyString(std::size_t absRow) const {
+  auto copy = GetBufferRowCopy(absRow);
+  wxString out;
+  out.reserve(copy.size());
+  for (const auto &cell : copy) {
+    out << wxString(wxUniChar(cell.ch));
+  }
+  return out;
+}
+
 std::vector<const std::vector<Cell> *> TerminalCore::GetViewArea() const {
   std::vector<const std::vector<Cell> *> view(m_rows);
   for (std::size_t r = 0; r < m_rows; ++r)

@@ -116,6 +116,15 @@ public:
   void Paste();
   void PasteFromPrimarySelection();
 
+  enum SearchFlags {
+    kForward = 1 << 0,
+    kBackward = 1 << 1,
+    kCaseInSensitive = 1 << 2,
+  };
+
+  void FindText(const wxString &text, size_t flags = SearchFlags::kForward);
+  bool HasActiveSearch() const;
+
   inline void EnableSafeDrawing(bool b) {
     m_safeDrawing = b;
     InvalidateRenderCache();

@@ -10,6 +10,7 @@
 #include <wx/bmpbndl.h>
 #include <wx/cmdline.h>
 #include <wx/display.h>
+#include <wx/fdrepdlg.h>
 #include <wx/filefn.h>
 #include <wx/filename.h>
 #include <wx/fontdlg.h>
@@ -141,6 +142,7 @@ public:
     ID_PrintLine,
     ID_SendInput,
     ID_NewTerminal,
+    ID_FindText,
     ID_Exit
   };
 
@@ -319,6 +321,8 @@ public:
     auto *searchMenu = new wxMenu();
     searchMenu->Append(wxID_FORWARD, _("Next Tab\tCtrl-RIGHT"));
     searchMenu->Append(wxID_BACKWARD, _("Previous Tab\tCtrl-LEFT"));
+    searchMenu->AppendSeparator();
+    searchMenu->Append(ID_FindText, "Find Text...\tCtrl-F");
     menuBar->Append(searchMenu, "Search");
 
     SetMenuBar(menuBar);
@@ -336,6 +340,7 @@ public:
     Bind(wxEVT_MENU, &MyFrame::OnSetSelection, this, ID_SetSelection);
     Bind(wxEVT_MENU, &MyFrame::OnPrintLine, this, ID_PrintLine);
     Bind(wxEVT_MENU, &MyFrame::OnSendInput, this, ID_SendInput);
+    Bind(wxEVT_MENU, &MyFrame::OnFindText, this, ID_FindText);
     Bind(wxEVT_UPDATE_UI, &MyFrame::OnNextTabUI, this, wxID_FORWARD);
     Bind(wxEVT_UPDATE_UI, &MyFrame::OnPreviousTabUI, this, wxID_BACKWARD);
   }
@@ -668,6 +673,47 @@ public:
     activeView->SendCommand(input);
   }
 
+  void OnFindText(wxCommandEvent &event) {
+    wxTerminalViewCtrl *activeView = GetActiveTerminalView();
+    if (!activeView) {
+      return;
+    }
+
+    if (m_findDialog != nullptr) {
+      m_findDialog->Destroy();
+      m_findDialog = nullptr;
+    }
+
+    if (m_findDialog == nullptr) {
+      m_findReplaceData.SetFlags(wxFindReplaceFlags::wxFR_DOWN);
+      m_findDialog =
+          new wxFindReplaceDialog(this, &m_findReplaceData, _("Find Text"));
+      m_findDialog->Bind(wxEVT_FIND_NEXT, &MyFrame::OnFindNext, this);
+    }
+    m_findDialog->Show();
+  }
+
+  void OnFindNext(wxFindDialogEvent &event) {
+    wxUnusedVar(event);
+    wxTerminalViewCtrl *activeView = GetActiveTerminalView();
+    if (!activeView) {
+      return;
+    }
+
+    size_t flags{0};
+    if (event.GetFlags() & wxFindReplaceFlags::wxFR_DOWN) {
+      flags |= wxTerminalViewCtrl::kForward;
+    } else {
+      flags |= wxTerminalViewCtrl::kBackward;
+    }
+
+    if (!(event.GetFlags() & wxFindReplaceFlags::wxFR_MATCHCASE)) {
+      flags |= wxTerminalViewCtrl::kCaseInSensitive;
+    }
+
+    activeView->FindText(event.GetFindString(), flags);
+  }
+
   void OnTerminated(wxTerminalEvent &event) {
     auto *view = dynamic_cast<wxTerminalViewCtrl *>(event.GetEventObject());
     if (!view || !m_notebook) {
@@ -780,9 +826,12 @@ private:
   std::optional<wxString> m_defaultWorkingDirectory;
   bool m_themeIsDark{true};
   wxFont m_persistedFont;
+  wxString m_currentSearchText;
   bool m_safeDrawingEnabled{false};
   wxTimer m_timer;
   std::deque<std::function<void()>> m_timerCallbacks;
+  wxFindReplaceDialog *m_findDialog{nullptr};
+  wxFindReplaceData m_findReplaceData;
 };
 
 class MyApp : public wxApp {
