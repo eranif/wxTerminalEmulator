@@ -688,6 +688,7 @@ public:
       m_findReplaceData.SetFlags(wxFindReplaceFlags::wxFR_DOWN);
       m_findDialog =
           new wxFindReplaceDialog(this, &m_findReplaceData, _("Find Text"));
+      m_findDialog->Bind(wxEVT_FIND, &MyFrame::OnFindNext, this);
       m_findDialog->Bind(wxEVT_FIND_NEXT, &MyFrame::OnFindNext, this);
     }
     m_findDialog->Show();
