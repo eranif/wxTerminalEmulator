@@ -64,7 +64,7 @@ public:
   void SendInput(const std::string &text);
   void SetTerminalSizeFromClient();
 
-  // Get the entire screen content
+  // Get the terminal screen (including scrollbuf lines)
   wxString GetText() const;
 
   static bool IsOpenGLEnabled();

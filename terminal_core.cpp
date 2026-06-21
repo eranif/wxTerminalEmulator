@@ -7,6 +7,7 @@
 
 #include "libtsm.h"
 #include "terminal_logger.h"
+#include "wx/arrstr.h"
 
 namespace terminal {
 
@@ -508,16 +509,22 @@ int TerminalCore::TsmDrawCb(struct tsm_screen * /*con*/, uint64_t /*id*/,
 // --- Selection / Clicked Range ---
 
 wxString TerminalCore::Flatten() const {
-  wxString out;
-  out.reserve(m_rows * m_cols * 2);
-  for (std::size_t r = 0; r < m_rows; ++r) {
-    const auto &row = BufferRow(m_viewStart + r);
-    for (const auto &cell : row) {
-      out << wxString(wxUniChar(cell.ch));
-    }
-    out << "\n";
+  wxArrayString lines;
+  lines.reserve(m_rows);
+  for (std::size_t r = 0; r < TotalLines(); ++r) {
+    wxString line = GetBufferRowCopyString(r);
+    line.Trim();
+    lines.emplace_back(line);
   }
-  return out;
+
+  // Trim trailing empty lines
+  while (!lines.empty()) {
+    if (!lines.back().empty()) {
+      break;
+    }
+    lines.pop_back();
+  }
+  return wxJoin(lines, '\n');
 }
 
 void TerminalCore::DoSetClickedRange(bool b) {

@@ -8,6 +8,7 @@
 #include <wx/app.h>
 #include <wx/aui/auibook.h>
 #include <wx/bmpbndl.h>
+#include <wx/clipbrd.h>
 #include <wx/cmdline.h>
 #include <wx/display.h>
 #include <wx/fdrepdlg.h>
@@ -143,6 +144,7 @@ public:
     ID_SendInput,
     ID_NewTerminal,
     ID_FindText,
+    ID_CopyAll,
     ID_Exit
   };
 
@@ -325,6 +327,10 @@ public:
     searchMenu->Append(ID_FindText, "Find Text...\tCtrl-F");
     menuBar->Append(searchMenu, "Search");
 
+    auto *editMenu = new wxMenu();
+    editMenu->Append(ID_CopyAll, _("Copy All Text"));
+    menuBar->Append(editMenu, "Edit");
+
     SetMenuBar(menuBar);
 
     Bind(wxEVT_MENU, &MyFrame::OnNewTerminal, this, wxID_NEW);
@@ -341,6 +347,7 @@ public:
     Bind(wxEVT_MENU, &MyFrame::OnPrintLine, this, ID_PrintLine);
     Bind(wxEVT_MENU, &MyFrame::OnSendInput, this, ID_SendInput);
     Bind(wxEVT_MENU, &MyFrame::OnFindText, this, ID_FindText);
+    Bind(wxEVT_MENU, &MyFrame::OnCopyAll, this, ID_CopyAll);
     Bind(wxEVT_UPDATE_UI, &MyFrame::OnNextTabUI, this, wxID_FORWARD);
     Bind(wxEVT_UPDATE_UI, &MyFrame::OnPreviousTabUI, this, wxID_BACKWARD);
   }
@@ -671,6 +678,24 @@ public:
       return;
     }
     activeView->SendCommand(input);
+  }
+
+  void OnCopyAll(wxCommandEvent &event) {
+    wxTerminalViewCtrl *activeView = GetActiveTerminalView();
+    if (!activeView) {
+      return;
+    }
+
+    // Copy to clipboard
+    if (wxTheClipboard->Open()) {
+      wxTheClipboard->SetData(new wxTextDataObject(activeView->GetText()));
+      wxTheClipboard->Flush();
+      wxTheClipboard->Close();
+
+      if (GetStatusBar()) {
+        GetStatusBar()->SetStatusText(_("Text Copied!"));
+      }
+    }
   }
 
   void OnFindText(wxCommandEvent &event) {

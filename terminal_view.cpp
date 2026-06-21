@@ -575,13 +575,9 @@ wxString wxTerminalViewCtrl::GetViewLine(std::size_t line) const {
 }
 
 wxString wxTerminalViewCtrl::GetLine(std::size_t line) const {
-  const auto &row = m_core.BufferRow(line);
-  wxString result;
-  result.reserve(row.size());
-  for (const auto &cell : row)
-    result += static_cast<wxChar>(cell.ch);
-  result.Trim();
-  return result;
+  wxString row = m_core.GetBufferRowCopyString(line);
+  row.Trim();
+  return row;
 }
 
 void wxTerminalViewCtrl::SetUserSelection(std::size_t row, std::size_t col,
