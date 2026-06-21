@@ -178,6 +178,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   Bind(wxEVT_KEY_DOWN, &wxTerminalViewCtrl::OnKeyDown, this);
   Bind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
   Bind(wxEVT_LEFT_DCLICK, &wxTerminalViewCtrl::OnMouseLeftDoubleClick, this);
+  Bind(wxEVT_MIDDLE_DOWN, &wxTerminalViewCtrl::OnMiddleClickPaste, this);
   Bind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseUp, this);
   Bind(wxEVT_MOTION, &wxTerminalViewCtrl::OnMouseMove, this);
   Bind(wxEVT_CONTEXT_MENU, &wxTerminalViewCtrl::OnContextMenu, this);
@@ -250,6 +251,7 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   Unbind(wxEVT_KEY_DOWN, &wxTerminalViewCtrl::OnKeyDown, this);
   Unbind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
   Unbind(wxEVT_LEFT_DCLICK, &wxTerminalViewCtrl::OnMouseLeftDoubleClick, this);
+  Unbind(wxEVT_MIDDLE_DOWN, &wxTerminalViewCtrl::OnMiddleClickPaste, this);
   Unbind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseUp, this);
   Unbind(wxEVT_MOTION, &wxTerminalViewCtrl::OnMouseMove, this);
   Unbind(wxEVT_CONTEXT_MENU, &wxTerminalViewCtrl::OnContextMenu, this);
@@ -1090,20 +1092,20 @@ bool wxTerminalViewCtrl::InitialiseAndStart(wxDC *pdc) {
 }
 
 void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
-  if (m_resizeEndTimer.IsRunning()) {
 #if USE_OPENGL
+  if (m_resizeEndTimer.IsRunning()) {
     PaintResizeOverlayGL();
-#else
-    wxPaintDC dc{this};
-    PaintResizeOverlay(dc);
-#endif
     return;
   }
-#if USE_OPENGL
   OnPaintGL();
-}
 #else
+  if (m_resizeEndTimer.IsRunning()) {
+    wxAutoBufferedPaintDC dc{this};
+    PaintResizeOverlay(dc);
+    return;
+  }
   OnPaintDC();
+#endif
 }
 
 void wxTerminalViewCtrl::OnPaintDC() {
@@ -1287,7 +1289,6 @@ void wxTerminalViewCtrl::OnPaintDC() {
   dc.SelectObject(wxNullBitmap);
   paintDc.DrawBitmap(m_backingStore, 0, 0);
 }
-#endif // !USE_OPENGL
 
 #if USE_OPENGL
 void wxTerminalViewCtrl::RenderRowGL(int y, int rowIdx,
@@ -1433,30 +1434,7 @@ void wxTerminalViewCtrl::OnPaintGL() {
   SwapBuffers();
   m_lastCursorScreenRow = cursorScreenRow;
 }
-#endif // USE_OPENGL
 
-void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
-  SetTerminalSizeFromClient();
-  UpdateScrollbar();
-  if (::wxGetMouseState().LeftIsDown()) {
-    if (m_resizeEndTimer.IsRunning())
-      m_resizeEndTimer.Stop();
-    m_resizeEndTimer.StartOnce(150);
-    Refresh();
-  }
-  evt.Skip();
-}
-
-void wxTerminalViewCtrl::OnResizeEndTimer(wxTimerEvent &) {
-  if (::wxGetMouseState().LeftIsDown()) {
-    m_resizeEndTimer.StartOnce(50);
-    return;
-  }
-  InvalidateRenderCache();
-  Refresh();
-}
-
-#if USE_OPENGL
 void wxTerminalViewCtrl::PaintResizeOverlayGL() {
   wxPaintDC paintDc{this};
   if (!m_glContext || !IsShownOnScreen())
@@ -1488,7 +1466,30 @@ void wxTerminalViewCtrl::PaintResizeOverlayGL() {
   m_glRenderer.EndFrame();
   SwapBuffers();
 }
-#else
+
+#endif // USE_OPENGL
+
+void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
+  SetTerminalSizeFromClient();
+  UpdateScrollbar();
+  if (::wxGetMouseState().LeftIsDown()) {
+    if (m_resizeEndTimer.IsRunning())
+      m_resizeEndTimer.Stop();
+    m_resizeEndTimer.StartOnce(150);
+    Refresh();
+  }
+  evt.Skip();
+}
+
+void wxTerminalViewCtrl::OnResizeEndTimer(wxTimerEvent &) {
+  if (::wxGetMouseState().LeftIsDown()) {
+    m_resizeEndTimer.StartOnce(50);
+    return;
+  }
+  InvalidateRenderCache();
+  Refresh();
+}
+
 void wxTerminalViewCtrl::PaintResizeOverlay(wxDC &dc) {
   const auto &theme = m_core.GetTheme();
   dc.SetBackground(wxBrush(theme.bg));
@@ -1503,7 +1504,6 @@ void wxTerminalViewCtrl::PaintResizeOverlay(wxDC &dc) {
   int y = (clientSize.y - textSize.y) / 2;
   dc.DrawText(sizeText, x, y);
 }
-#endif
 
 void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
   evt.Skip();
@@ -1673,6 +1673,11 @@ void wxTerminalViewCtrl::OnCopy(wxCommandEvent &evt) {
   Copy();
 }
 
+void wxTerminalViewCtrl::OnMiddleClickPaste(wxMouseEvent &evt) {
+  evt.Skip();
+  PasteFromPrimarySelection();
+}
+
 void wxTerminalViewCtrl::OnClearBuffer(wxCommandEvent &evt) {
   wxUnusedVar(evt);
   ClearAll();
@@ -1724,11 +1729,11 @@ void wxTerminalViewCtrl::DrawFocusBorder(wxDC &dc) const {
   pen.SetCap(wxCAP_ROUND);
   pen.SetJoin(wxJOIN_ROUND);
 #else
-    constexpr int kFocusPenWidth = 1;
-    wxColour focusRectColour("#3DAEE9");
-    wxPen pen(focusRectColour, kFocusPenWidth);
-    pen.SetCap(wxCAP_BUTT);
-    pen.SetJoin(wxJOIN_MITER);
+  constexpr int kFocusPenWidth = 1;
+  wxColour focusRectColour("#3DAEE9");
+  wxPen pen(focusRectColour, kFocusPenWidth);
+  pen.SetCap(wxCAP_BUTT);
+  pen.SetJoin(wxJOIN_MITER);
 #endif
 
   dc.SetPen(pen);
@@ -2162,6 +2167,48 @@ void wxTerminalViewCtrl::Paste() {
     SendInput(text);
     // Clamp view to bottom after paste
     ScrollToLastLine();
+  }
+
+  wxTheClipboard->Close();
+}
+
+void wxTerminalViewCtrl::PasteFromPrimarySelection() {
+  TLOG_DEBUG() << "PasteFromPrimarySelection is called!" << std::endl;
+  if (HasActiveSelection()) {
+    wxString selected;
+    wxPoint s, e;
+    m_mouseSelection.GetAbsNormalized(s, e);
+    for (std::size_t row = static_cast<std::size_t>(s.y);
+         row <= static_cast<std::size_t>(e.y) && row < m_core.TotalLines();
+         ++row) {
+      std::size_t startCol = (row == static_cast<std::size_t>(s.y))
+                                 ? static_cast<std::size_t>(s.x)
+                                 : 0;
+      std::size_t endCol = (row == static_cast<std::size_t>(e.y))
+                               ? static_cast<std::size_t>(e.x)
+                               : (m_core.Cols() > 0 ? m_core.Cols() - 1 : 0);
+      selected += GetRange(row, startCol, endCol - startCol + 1);
+      if (row != static_cast<std::size_t>(e.y))
+        selected += "\n";
+    }
+    if (!selected.empty()) {
+      SendInput(selected.ToStdString(wxConvUTF8));
+      ScrollToLastLine();
+      return;
+    }
+  }
+
+  if (!wxTheClipboard->Open())
+    return;
+
+  wxTextDataObject data;
+  if (wxTheClipboard->IsSupported(wxDF_UNICODETEXT) ||
+      wxTheClipboard->IsSupported(wxDF_TEXT)) {
+    if (wxTheClipboard->GetData(data)) {
+      std::string text = data.GetText().ToStdString(wxConvUTF8);
+      SendInput(text);
+      ScrollToLastLine();
+    }
   }
 
   wxTheClipboard->Close();

@@ -114,6 +114,7 @@ public:
 
   void Copy();
   void Paste();
+  void PasteFromPrimarySelection();
 
   inline void EnableSafeDrawing(bool b) {
     m_safeDrawing = b;
@@ -289,11 +290,10 @@ private:
   // Emit the geometry for a single screen row into the GL renderer.
   void RenderRowGL(int y, int rowIdx, const std::vector<terminal::Cell> &row);
   void PaintResizeOverlayGL();
-#else
+#endif
   // Legacy wxDC paint path (backing-store incremental renderer).
   void OnPaintDC();
   void PaintResizeOverlay(wxDC &dc);
-#endif
   struct PaintCounters {
     PaintCounters(size_t &draw_text, size_t &draw_rectangle,
                   size_t &grouped_rows, size_t &full_row_draws)
@@ -328,6 +328,7 @@ private:
   void OnLostFocus(wxFocusEvent &evt);
   void OnCopy(wxCommandEvent &evt);
   void OnPaste(wxCommandEvent &evt);
+  void OnMiddleClickPaste(wxMouseEvent &evt);
   void OnClearBuffer(wxCommandEvent &evt);
   void DrawFocusBorder(wxDC &dc) const;
   void DebugDumpViewArea(TerminalLogLevel log_level, int viewLine = -1);

@@ -9,7 +9,7 @@ Windows:
 
 ```bash
 cd .build-debug
-cmake -DCMAKE_BUILD_TYPE=Debug -DWXWIN=C:/msys64/home/eran/root ..  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake -DCMAKE_BUILD_TYPE=Release -DWXWIN=$HOME/root ..  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 make -j32
 ```
 
@@ -17,7 +17,7 @@ Linux:
 
 ```bash
 cd .build-debug
-cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 make -j32
 ```
 
