@@ -514,7 +514,7 @@ wxString TerminalCore::Flatten() const {
   for (std::size_t r = 0; r < TotalLines(); ++r) {
     wxString line = GetBufferRowCopyString(r);
     line.Trim();
-    lines.emplace_back(line);
+    lines.push_back(line);
   }
 
   // Trim trailing empty lines

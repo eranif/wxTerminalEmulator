@@ -204,8 +204,12 @@ private:
   wxFont m_persistedFont;
   wxString m_currentSearchText;
   bool m_safeDrawingEnabled{false};
+  bool m_bellCallbackInstalled{false};
   wxTimer m_timer;
-  std::deque<std::function<void()>> m_timerCallbacks;
+  // queue of commands to run in the timer handler. If a callback returns false
+  // it is executed and then re-installed in the queue, else it is discarded
+  // (after being executed).
+  std::deque<std::function<bool()>> m_timerCallbacks;
   wxFindReplaceDialog *m_findDialog{nullptr};
   wxFindReplaceData m_findReplaceData;
 };

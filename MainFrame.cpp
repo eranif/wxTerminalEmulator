@@ -516,6 +516,16 @@ void MyFrame::OnCopyAll(wxCommandEvent &event) {
     wxTheClipboard->Close();
     if (GetStatusBar()) {
       GetStatusBar()->SetStatusText(_("Text Copied!"));
+      auto clearStatusTextCB = [this]() {
+        static size_t counter{0};
+        counter++;
+        if (counter == 3) {
+          GetStatusBar()->SetStatusText(wxEmptyString);
+          return true;
+        }
+        return false;
+      };
+      m_timerCallbacks.push_back(std::move(clearStatusTextCB));
     }
   }
 }
@@ -595,34 +605,47 @@ void MyFrame::OnTerminalLink(wxTerminalEvent &event) {
 }
 
 void MyFrame::OnBell(wxTerminalEvent &event) {
+  if (m_bellCallbackInstalled) {
+    return;
+  }
+
   auto view = dynamic_cast<wxTerminalViewCtrl *>(event.GetEventObject());
   if (!view || !m_notebook) {
     return;
   }
+
   int sel = m_notebook->FindPage(view);
-  if (sel != wxNOT_FOUND) {
+  if (sel == wxNOT_FOUND) {
     return;
   }
+
   wxString page_title = m_notebook->GetPageText(sel);
   m_notebook->SetPageText(sel, page_title + wxT(" 🚨 "));
   auto restore_title = [view, page_title, this]() {
+    m_bellCallbackInstalled = false;
     int where = m_notebook->FindPage(view);
     if (where == wxNOT_FOUND) {
-      return;
+      return true;
     }
     m_notebook->SetPageText(where, page_title);
+    return true;
   };
+  m_bellCallbackInstalled = true;
   m_timerCallbacks.push_back(std::move(restore_title));
 }
 
 void MyFrame::OnTimer(wxTimerEvent &event) {
   wxUnusedVar(event);
+  std::deque<std::function<bool()>> tempQueue;
   while (!m_timerCallbacks.empty()) {
     auto cb = std::move(m_timerCallbacks.front());
     m_timerCallbacks.pop_front();
-    cb();
+    if (!cb()) {
+      tempQueue.push_back(std::move(cb));
+    }
   }
   m_timer.StartOnce(1000);
+  m_timerCallbacks.swap(tempQueue);
 }
 
 void MyFrame::Terminate() { Close(true); }
