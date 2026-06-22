@@ -185,6 +185,9 @@ public:
   // Cursor position relative to viewport
   wxPoint Cursor() const;
 
+  // Whether the terminal cursor is currently visible (DECTCEM)
+  bool IsCursorVisible() const;
+
   // View into the buffer: returns rows [viewStart .. viewStart+m_rows)
   std::size_t ViewStart() const { return m_viewStart; }
   std::size_t ShellStart() const;

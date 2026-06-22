@@ -2,7 +2,7 @@
 
 #include "terminal_logger.h"
 #if USE_OPENGL
-#define USE_TIMER_REFRESH 0
+#define USE_TIMER_REFRESH 1
 #else
 #define USE_TIMER_REFRESH 0
 #endif

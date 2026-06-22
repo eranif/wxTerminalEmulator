@@ -160,9 +160,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   // This is more accurate then using wxTimer.
   m_drawingTimerThread = std::make_unique<std::thread>([this]() {
     while (!m_shutdownFlag.load()) {
-      // Check for paint event every 10ms, as best this will render the screen
-      // at a 100HZ rate.
-      std::this_thread::sleep_for(std::chrono::milliseconds{10});
+      std::this_thread::sleep_for(std::chrono::milliseconds{17}); // ~60fps
       if (m_needsRepaint.load()) {
         m_needsRepaint.store(false);
         CallAfter(&wxTerminalViewCtrl::Refresh, true, nullptr);
@@ -534,7 +532,7 @@ void wxTerminalViewCtrl::SetTheme(const wxTerminalTheme &theme) {
   m_core.SetTheme(theme);
   UpdateFontCache();
   m_charH = m_charW = 0; // This needs to be recalculated based on the new font.
-  Refresh();
+  RefreshView();
   PostSizeEvent();
 }
 
@@ -1083,7 +1081,7 @@ bool wxTerminalViewCtrl::InitialiseAndStart(wxDC *pdc) {
               m_environment);
   }
   // Now that the char width is known, do another paint.
-  CallAfter(&wxTerminalViewCtrl::Refresh, true, nullptr);
+  CallAfter(&wxTerminalViewCtrl::RefreshView, false);
   return true;
 }
 
@@ -1245,7 +1243,7 @@ void wxTerminalViewCtrl::OnPaintDC() {
 
   // Draw cursor (block caret) — only if shell
   // viewport is visible
-  if (cursorScreenRow >= 0) {
+  if (cursorScreenRow >= 0 && m_core.IsCursorVisible()) {
     int screenRow = cursorScreenRow;
     int cx = cursor.x * m_charW;
     int cy = screenRow * m_charH;
@@ -1406,7 +1404,7 @@ void wxTerminalViewCtrl::OnPaintGL() {
   }
 
   // Cursor (block caret), drawn after cells so it sits on top.
-  if (cursorScreenRow >= 0) {
+  if (cursorScreenRow >= 0 && m_core.IsCursorVisible()) {
     const int cx = cursor.x * m_charW;
     const int cy = cursorScreenRow * m_charH;
     const int cursorWidth = theme.isBlockCursor ? m_charW : 2;
@@ -1472,7 +1470,7 @@ void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
     if (m_resizeEndTimer.IsRunning())
       m_resizeEndTimer.Stop();
     m_resizeEndTimer.StartOnce(150);
-    Refresh();
+    RefreshView();
   }
   evt.Skip();
 }
@@ -1483,7 +1481,7 @@ void wxTerminalViewCtrl::OnResizeEndTimer(wxTimerEvent &) {
     return;
   }
   InvalidateRenderCache();
-  Refresh();
+  RefreshView();
 }
 
 void wxTerminalViewCtrl::PaintResizeOverlay(wxDC &dc) {
@@ -1691,7 +1689,7 @@ void wxTerminalViewCtrl::OnFocus(wxFocusEvent &evt) {
   m_hasFocusBorder = true;
   InvalidateRenderCache();
   SetCursor(wxCursor(wxCURSOR_IBEAM));
-  Refresh();
+  RefreshView();
 }
 
 void wxTerminalViewCtrl::OnLostFocus(wxFocusEvent &evt) {
@@ -1700,7 +1698,7 @@ void wxTerminalViewCtrl::OnLostFocus(wxFocusEvent &evt) {
   InvalidateRenderCache();
   SetCursor(wxCursor(wxCURSOR_ARROW));
   ClearMouseSelection();
-  Refresh();
+  RefreshView();
 }
 
 void wxTerminalViewCtrl::DrawFocusBorder(wxDC &dc) const {
