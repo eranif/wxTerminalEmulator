@@ -618,7 +618,7 @@ void MyFrame::OnBell(wxTerminalEvent &event) {
   }
 
   wxString page_title = m_notebook->GetPageText(sel);
-  m_notebook->SetPageText(sel, page_title + wxT(" 🚨 "));
+  m_notebook->SetPageText(sel, page_title + wxT(" \U0001F514 "));
   auto restore_title = [view, page_title, this]() {
     m_bellCallbackInstalled = false;
     int where = m_notebook->FindPage(view);
