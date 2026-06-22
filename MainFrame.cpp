@@ -516,10 +516,8 @@ void MyFrame::OnCopyAll(wxCommandEvent &event) {
     wxTheClipboard->Close();
     if (GetStatusBar()) {
       GetStatusBar()->SetStatusText(_("Text Copied!"));
-      auto clearStatusTextCB = [this]() {
-        static size_t counter{0};
-        counter++;
-        if (counter == 3) {
+      auto clearStatusTextCB = [this, count = size_t{0}]() mutable {
+        if (++count >= 3) {
           GetStatusBar()->SetStatusText(wxEmptyString);
           return true;
         }
