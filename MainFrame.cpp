@@ -55,6 +55,7 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
 
   ApplyNativeAppTheme();
 
+  CreateStatusBar();
   BuildMenuBar();
   m_notebook =
       new wxAuiNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
