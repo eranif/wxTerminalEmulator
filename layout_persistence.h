@@ -2,8 +2,17 @@
 
 #include <optional>
 #include <vector>
-#include <wx/aui/serializer.h>
 #include <wx/string.h>
+#include <wx/version.h>
+
+// wxAuiNotebook layout serialization (SaveLayout/LoadLayout and the
+// wxAuiBookSerializer / wxAuiBookDeserializer interfaces) is only available in
+// wxWidgets 3.3.0 and later.
+#define WXTERMINAL_HAS_AUI_SERIALIZATION wxCHECK_VERSION(3, 3, 0)
+
+#if WXTERMINAL_HAS_AUI_SERIALIZATION
+#include <wx/aui/serializer.h>
+#endif
 
 // Persists the terminal notebook layout across application runs.
 //
@@ -32,6 +41,7 @@ public:
   static void Clear();
 };
 
+#if WXTERMINAL_HAS_AUI_SERIALIZATION
 // Serializer that captures the wxAuiNotebook tab-control layout into the
 // line-based format understood by LayoutDeserializer.
 //
@@ -62,6 +72,7 @@ public:
 private:
   std::vector<wxString> m_lines;
 };
+#endif // WXTERMINAL_HAS_AUI_SERIALIZATION
 
 // Parsed contents of a layout file.
 struct LayoutFile {

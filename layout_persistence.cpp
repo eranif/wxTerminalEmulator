@@ -56,6 +56,7 @@ wxString Decode(const wxString &value) {
   return out;
 }
 
+#if WXTERMINAL_HAS_AUI_SERIALIZATION
 // Render an int vector as a comma separated list ("" for an empty vector).
 wxString JoinInts(const std::vector<int> &values) {
   wxString out;
@@ -79,6 +80,7 @@ std::vector<int> SplitInts(const wxString &s) {
   }
   return result;
 }
+#endif // WXTERMINAL_HAS_AUI_SERIALIZATION
 
 } // namespace
 
@@ -95,6 +97,7 @@ void LayoutPersistence::Clear() {
   }
 }
 
+#if WXTERMINAL_HAS_AUI_SERIALIZATION
 // ---------------------------------------------------------------------------
 // LayoutSerializer
 // ---------------------------------------------------------------------------
@@ -156,6 +159,7 @@ LayoutDeserializer::LoadNotebookTabs(const wxString &name) {
   }
   return tabs;
 }
+#endif // WXTERMINAL_HAS_AUI_SERIALIZATION
 
 // ---------------------------------------------------------------------------
 // File IO

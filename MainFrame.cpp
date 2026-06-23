@@ -1,7 +1,8 @@
 #include "MainFrame.h"
-#include <wx/aui/serializer.h>
 #include <wx/msgdlg.h>
 #include <wx/xrc/xmlres.h>
+// The wxAUI layout serializer header (wx/aui/serializer.h) is pulled in
+// conditionally by layout_persistence.h on wxWidgets 3.3.0+.
 
 static const wxString kDefaultTerminalLabel = _("Terminal");
 
@@ -137,14 +138,19 @@ void MyFrame::SaveLayout() {
   }
 
   // Capture the AUI tab-control arrangement (split tab controls, ordering and
-  // active page) on top of the metadata.
+  // active page) on top of the metadata. This requires the wxWidgets 3.3.0
+  // layout serialization API; on older versions only the tab metadata is saved.
+  std::vector<wxString> tabControlLines;
+#if WXTERMINAL_HAS_AUI_SERIALIZATION
   LayoutSerializer serializer;
   try {
     m_notebook->SaveLayout(wxString{}, serializer);
+    tabControlLines = serializer.GetLines();
   } catch (...) {
     // SaveLayout() propagates serializer exceptions; ours never throw, but be
     // defensive and still persist the tab metadata.
   }
+#endif
 
   // Remember the active tab by its title so it can be reselected on restore.
   wxString activeTitle;
@@ -153,7 +159,7 @@ void MyFrame::SaveLayout() {
     activeTitle = m_notebook->GetPageText(static_cast<size_t>(sel));
   }
 
-  SaveLayoutFile(tabs, serializer.GetLines(), activeTitle);
+  SaveLayoutFile(tabs, tabControlLines, activeTitle);
 }
 
 bool MyFrame::RestoreLayout() {
@@ -192,7 +198,9 @@ bool MyFrame::RestoreLayout() {
     }
   }
 
-  // Re-apply the saved tab-control arrangement now that all pages exist.
+  // Re-apply the saved tab-control arrangement now that all pages exist. Only
+  // available with the wxWidgets 3.3.0 layout serialization API.
+#if WXTERMINAL_HAS_AUI_SERIALIZATION
   if (!layout->tabControlLines.empty()) {
     LayoutDeserializer deserializer(layout->tabControlLines);
     try {
@@ -201,6 +209,7 @@ bool MyFrame::RestoreLayout() {
       // Keep the freshly created tabs even if the arrangement can't be applied.
     }
   }
+#endif
 
   if (m_notebook->GetPageCount()) {
     m_notebook->SetSelection(0);
