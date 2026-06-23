@@ -1243,7 +1243,7 @@ void wxTerminalViewCtrl::OnPaintDC() {
 
   // Draw cursor (block caret) — only if shell
   // viewport is visible
-  if (cursorScreenRow >= 0 && m_core.IsCursorVisible()) {
+  if (cursorScreenRow >= 0) {
     int screenRow = cursorScreenRow;
     int cx = cursor.x * m_charW;
     int cy = screenRow * m_charH;
@@ -1404,7 +1404,7 @@ void wxTerminalViewCtrl::OnPaintGL() {
   }
 
   // Cursor (block caret), drawn after cells so it sits on top.
-  if (cursorScreenRow >= 0 && m_core.IsCursorVisible()) {
+  if (cursorScreenRow >= 0) {
     const int cx = cursor.x * m_charW;
     const int cy = cursorScreenRow * m_charH;
     const int cursorWidth = theme.isBlockCursor ? m_charW : 2;
