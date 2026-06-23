@@ -69,7 +69,8 @@ add_subdirectory(libtsm)
 set(LIB_SOURCES terminal_core.cpp terminal_logger.cpp terminal_view.cpp
                 terminal_event.cpp terminal_gl_renderer.cpp)
 
-set(EXAMPLE_SOURCES main.cpp app_persistence.cpp MainFrame.cpp)
+set(EXAMPLE_SOURCES main.cpp app_persistence.cpp layout_persistence.cpp
+                    MainFrame.cpp)
 if(MINGW)
   list(APPEND EXAMPLE_SOURCES wx.rc)
 endif()

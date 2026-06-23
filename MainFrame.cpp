@@ -1,6 +1,9 @@
 #include "MainFrame.h"
+#include <wx/aui/serializer.h>
 #include <wx/msgdlg.h>
 #include <wx/xrc/xmlres.h>
+
+static const wxString kDefaultTerminalLabel = _("Terminal");
 
 MyFrame::MyFrame(const wxCmdLineParser &parser,
                  const std::optional<EnvironmentList> &environment,
@@ -63,8 +66,23 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   m_defaultShellCommand = shellCommand;
   m_defaultEnvironment = environment;
   m_defaultWorkingDirectory = std::move(workingDirectory);
-  m_view = CreateTerminalPage(
-      {shellCommand, environment, m_defaultWorkingDirectory});
+
+  // When the user launches with explicit options (a specific shell, command or
+  // working directory) honour those and start a single fresh terminal.
+  // Otherwise try to restore the previously saved layout.
+  const bool hasExplicitLaunch = !shellCommand.empty() || !command.empty() ||
+                                 m_defaultWorkingDirectory.has_value();
+  bool restored = false;
+  if (!hasExplicitLaunch) {
+    restored = RestoreLayout();
+  }
+
+  if (!restored) {
+    CreateTerminalPage({shellCommand, environment, m_defaultWorkingDirectory},
+                       true);
+  }
+
+  Bind(wxEVT_CLOSE_WINDOW, &MyFrame::OnClose, this);
   m_notebook->Bind(
       wxEVT_AUINOTEBOOK_PAGE_CHANGED, [this](wxAuiNotebookEvent &event) {
         event.Skip();
@@ -79,9 +97,115 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   m_notebook->Bind(
       wxEVT_AUINOTEBOOK_TAB_RIGHT_UP,
       [this](wxAuiNotebookEvent &event) { CallAfter(&MyFrame::ShowTabMenu); });
-  if (m_view && !command.empty()) {
-    m_view->SendCommand(command);
+  if (GetActiveTerminalView() && !command.empty()) {
+    GetActiveTerminalView()->SendCommand(command);
   }
+}
+
+MyFrame::~MyFrame() {}
+
+void MyFrame::OnClose(wxCloseEvent &event) {
+  SaveLayout();
+  event.Skip();
+}
+
+void MyFrame::SaveLayout() {
+  if (!m_notebook) {
+    return;
+  }
+
+  // Collect per-tab metadata in page order. wxAuiNotebook page indices used by
+  // the AUI serializer below match this same order.
+  std::vector<LayoutPersistence::TabInfo> tabs;
+  for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
+    auto *terminal = dynamic_cast<MyTerminal *>(m_notebook->GetPage(i));
+    if (!terminal) {
+      continue;
+    }
+    LayoutPersistence::TabInfo info;
+    info.shellCommand = terminal->GetShellCommand();
+    info.workingDirectory = terminal->GetWorkingDirectory();
+    info.customLabel = terminal->GetCustomLabel().empty()
+                           ? kDefaultTerminalLabel
+                           : terminal->GetCustomLabel();
+    tabs.push_back(std::move(info));
+  }
+
+  if (tabs.empty()) {
+    LayoutPersistence::Clear();
+    return;
+  }
+
+  // Capture the AUI tab-control arrangement (split tab controls, ordering and
+  // active page) on top of the metadata.
+  LayoutSerializer serializer;
+  try {
+    m_notebook->SaveLayout(wxString{}, serializer);
+  } catch (...) {
+    // SaveLayout() propagates serializer exceptions; ours never throw, but be
+    // defensive and still persist the tab metadata.
+  }
+
+  // Remember the active tab by its title so it can be reselected on restore.
+  wxString activeTitle;
+  const int sel = m_notebook->GetSelection();
+  if (sel != wxNOT_FOUND) {
+    activeTitle = m_notebook->GetPageText(static_cast<size_t>(sel));
+  }
+
+  SaveLayoutFile(tabs, serializer.GetLines(), activeTitle);
+}
+
+bool MyFrame::RestoreLayout() {
+  std::optional<LayoutFile> layout = LoadLayoutFile();
+  if (!layout || layout->IsEmpty()) {
+    return false;
+  }
+
+  for (const auto &tab : layout->tabs) {
+    std::optional<wxString> cwd;
+    if (!tab.workingDirectory.empty() && wxDirExists(tab.workingDirectory)) {
+      cwd = tab.workingDirectory;
+    }
+    MyTerminal *page = CreateTerminalPage(
+        {tab.shellCommand, m_defaultEnvironment, cwd}, false);
+    if (page && !tab.customLabel.empty()) {
+      page->SetTabLabel(tab.customLabel);
+    }
+  }
+
+  for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
+    m_notebook->GetPage(i)->SetFocus();
+  }
+
+  // Reselect the previously active tab by title. When several tabs share the
+  // same title the first match wins.
+  wxTerminalViewCtrl *activeTab{nullptr};
+  if (!layout->activeTitle.empty()) {
+    for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
+      auto page = m_notebook->GetPage(i);
+      if (m_notebook->GetPageText(i) == layout->activeTitle) {
+        page->CallAfter(&wxWindow::SetFocus);
+        activeTab = dynamic_cast<MyTerminal *>(page);
+        break;
+      }
+    }
+  }
+
+  // Re-apply the saved tab-control arrangement now that all pages exist.
+  if (!layout->tabControlLines.empty()) {
+    LayoutDeserializer deserializer(layout->tabControlLines);
+    try {
+      m_notebook->LoadLayout(wxString{}, deserializer);
+    } catch (...) {
+      // Keep the freshly created tabs even if the arrangement can't be applied.
+    }
+  }
+
+  if (m_notebook->GetPageCount()) {
+    m_notebook->SetSelection(0);
+  }
+  return m_notebook->GetPageCount() > 0;
 }
 
 void MyFrame::ShowTabMenu() {
@@ -284,10 +408,11 @@ wxTerminalViewCtrl *MyFrame::GetActiveTerminalView() const {
   return dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetCurrentPage());
 }
 
-MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config) {
+MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
+                                        bool selectIt) {
   auto *page = new MyTerminal(m_notebook, config.shellCommand,
                               config.environment, config.workingDirectory);
-  m_notebook->AddPage(page, "Terminal", true);
+  m_notebook->AddPage(page, kDefaultTerminalLabel, selectIt);
   ApplyThemeToTab(page);
   m_safeDrawingEnabled =
       m_safeDrawingEnabled || wxTerminalViewCtrl::IsOpenGLEnabled();
@@ -341,7 +466,8 @@ void MyFrame::ApplyThemeToTab(wxTerminalViewCtrl *view) {
 void MyFrame::OnNewTerminal(wxCommandEvent &event) {
   wxUnusedVar(event);
   CreateTerminalPage(
-      {m_defaultShellCommand, m_defaultEnvironment, m_defaultWorkingDirectory});
+      {m_defaultShellCommand, m_defaultEnvironment, m_defaultWorkingDirectory},
+      true);
   m_notebook->SetSelection(m_notebook->GetPageCount() - 1);
 }
 
@@ -652,9 +778,11 @@ void MyFrame::PersistSettings() {
   if (!m_notebook)
     return;
   const wxString themeName = m_themeIsDark ? "dark" : "light";
-  const wxFont font = m_persistedFont.IsOk()
-                          ? m_persistedFont
-                          : (m_view ? m_view->GetTheme().font : wxFont{});
+  const wxFont font =
+      m_persistedFont.IsOk()
+          ? m_persistedFont
+          : (GetActiveTerminalView() ? GetActiveTerminalView()->GetTheme().font
+                                     : wxFont{});
   AppPersistence::Save(themeName, font, m_safeDrawingEnabled);
 }
 

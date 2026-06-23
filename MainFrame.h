@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app_persistence.h"
+#include "layout_persistence.h"
 #include "terminal_event.h"
 #include "terminal_logger.h"
 #include "terminal_view.h"
@@ -126,6 +127,9 @@ public:
     }
   }
 
+  // The user-assigned tab label, or empty if the title is driven by the shell.
+  const wxString &GetCustomLabel() const { return m_customLabel; }
+
 private:
   wxAuiNotebook *m_notebook{nullptr};
   wxString m_customLabel;
@@ -157,6 +161,7 @@ public:
   MyFrame(const wxCmdLineParser &parser,
           const std::optional<EnvironmentList> &environment,
           std::optional<wxString> workingDirectory = std::nullopt);
+  ~MyFrame() override;
 
   void ShowTabMenu();
   static std::optional<EnvironmentList> ParseEnvironmentList(const wxString &s);
@@ -169,7 +174,8 @@ public:
   void ApplyThemeToAllTabs(const wxTerminalTheme &theme);
   void ApplyFontToAllTabs(const wxFont &font);
   wxTerminalViewCtrl *GetActiveTerminalView() const;
-  MyTerminal *CreateTerminalPage(const TerminalPageConfig &config);
+  MyTerminal *CreateTerminalPage(const TerminalPageConfig &config,
+                                 bool selectIt);
   void ApplySafeDrawingToAllTabs(bool enabled);
   void UpdateSafeDrawingMenuCheck();
   void ApplyThemeToTab(wxTerminalViewCtrl *view);
@@ -194,9 +200,15 @@ public:
   void PersistSettings();
   void ApplyNativeAppTheme(std::optional<bool> darkMode = std::nullopt);
 
+  // Serialize the open tabs and their AUI arrangement to disk. Called on exit.
+  void SaveLayout();
+  // Recreate the tabs saved by SaveLayout(). Returns true if a layout was
+  // restored (at least one tab created).
+  bool RestoreLayout();
+  void OnClose(wxCloseEvent &event);
+
 private:
   wxAuiNotebook *m_notebook{nullptr};
-  MyTerminal *m_view{nullptr};
   wxString m_defaultShellCommand;
   std::optional<EnvironmentList> m_defaultEnvironment;
   std::optional<wxString> m_defaultWorkingDirectory;

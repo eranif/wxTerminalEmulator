@@ -67,6 +67,14 @@ public:
   // Get the terminal screen (including scrollbuf lines)
   wxString GetText() const;
 
+  // Launch parameters this view was created with. Used to serialize/restore
+  // the terminal layout so the same shells can be recreated on startup.
+  const wxString &GetShellCommand() const { return m_shell_command; }
+  wxString GetWorkingDirectory() const {
+    return m_workingDirectory ? wxString::FromUTF8(m_workingDirectory->c_str())
+                              : wxString{};
+  }
+
   static bool IsOpenGLEnabled();
 
   // Helper methods for sending special characters

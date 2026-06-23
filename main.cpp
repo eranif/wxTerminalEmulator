@@ -1,10 +1,6 @@
-#include "app_persistence.h"
-#include "terminal_event.h"
-#include "terminal_logger.h"
-#include "terminal_view.h"
 #include "MainFrame.h"
+#include "terminal_logger.h"
 
-#include <deque>
 #include <optional>
 #include <stdexcept>
 #include <wx/app.h>
