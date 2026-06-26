@@ -1228,6 +1228,16 @@ void tsm_screen_reset_all_tabstops(struct tsm_screen *con)
 		con->tab_ruler[i] = false;
 }
 
+/* Return true if the codepoint is an emoji candidate that becomes wide when
+ * followed by VS16 (U+FE0F). This covers Misc Symbols, Dingbats, Transport,
+ * and all Supplemental Pictographic blocks. */
+static bool is_emoji_candidate(uint32_t ucs4)
+{
+	return (ucs4 >= 0x2600 && ucs4 <= 0x27BF) ||
+	       (ucs4 >= 0x2B50 && ucs4 <= 0x2B55) ||
+	       (ucs4 >= 0x1F000 && ucs4 <= 0x1FFFF);
+}
+
 SHL_EXPORT
 void tsm_screen_write(struct tsm_screen *con, tsm_symbol_t ch,
 			  const struct tsm_screen_attr *attr)
@@ -1238,8 +1248,29 @@ void tsm_screen_write(struct tsm_screen *con, tsm_symbol_t ch,
 		return;
 
 	len = tsm_symbol_get_width(con->sym_table, ch);
-	if (!len)
+	if (!len) {
+		/* VS16 (U+FE0F) triggers emoji presentation: expand the
+		 * preceding cell to width 2 if it is an emoji candidate. */
+		if (ch == 0xFE0F && con->cursor_x > 0 &&
+		    con->cursor_y < con->size_y) {
+			struct line *line = con->lines[con->cursor_y];
+			unsigned int prev_x = con->cursor_x - 1;
+			struct cell *prev = &line->cells[prev_x];
+			if (prev->width == 1 && is_emoji_candidate(prev->ch) &&
+			    prev_x + 1 < con->size_x) {
+				screen_inc_age(con);
+				prev->width = 2;
+				prev->age = con->age_cnt;
+				/* Turn the next cell into a filler */
+				line->cells[prev_x + 1].ch = 0;
+				line->cells[prev_x + 1].width = 0;
+				line->cells[prev_x + 1].age = con->age_cnt;
+				move_cursor(con, con->cursor_x + 1,
+					    con->cursor_y);
+			}
+		}
 		return;
+	}
 
 	screen_inc_age(con);
 

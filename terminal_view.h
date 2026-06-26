@@ -277,11 +277,7 @@ private:
       return true; // middle row — fully selected
     }
 
-    bool HasSelection() const {
-      if (!active)
-        return false;
-      return anchor != current;
-    }
+    bool HasSelection() const { return active; }
 
     /// Scroll the viewport by `delta` lines (negative=up, positive=down)
     /// and adjust the anchor so the selection stays consistent.

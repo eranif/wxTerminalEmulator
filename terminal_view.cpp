@@ -723,12 +723,6 @@ wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
       continue;
     }
 
-    // Skip filler cells for wide characters — their content is drawn by the
-    // preceding wide cell which spans multiple columns.
-    if (cell.width == 0) {
-      continue;
-    }
-
     // Determine colors
     wxColour bgColor = GetColourFromTheme(
         cell.colours ? cell.colours->bg : std::nullopt, false);
@@ -742,7 +736,7 @@ wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
     CellInfo info;
     info.colIdx = colIdx;
     info.ch = static_cast<wxChar>(cell.ch);
-    info.cellWidth = cell.width > 0 ? cell.width : 1;
+    info.cellWidth = cell.width;
     if (isMouseSelected) {
       info.attrs.bgColor = theme.selectionBg;
       info.attrs.fgColor = theme.selectionFg;
@@ -1006,16 +1000,21 @@ void wxTerminalViewCtrl::RenderRowNoGrouping(
       prev_cell = cell.attrs;
     }
 
-    wxString cell_content(wxUniChar(cell.ch));
-    const int w = static_cast<int>(cell.cellWidth) * m_charW;
-    wxRect cell_rect{x, y, w, m_charH};
+    wxRect cell_rect{x, y, m_charW, m_charH};
     dc.DrawRectangle(cell_rect);
+    counters.draw_rectangle_++;
+    // Filler cells for wide chars have no glyph to draw.
+    if (cell.cellWidth == 0) {
+      continue;
+    }
+    wxString cell_content(wxUniChar(cell.ch));
     if (theme.isMonospaced) {
-      counters.draw_rectangle_++;
       dc.DrawText(cell_content, x, y);
     } else {
+      const int w = static_cast<int>(cell.cellWidth) * m_charW;
+      wxRect glyph_rect{x, y, w, m_charH};
       wxRect text_rect{wxPoint{x, y}, dc.GetTextExtent(cell_content)};
-      text_rect = text_rect.CentreIn(cell_rect, wxHORIZONTAL);
+      text_rect = text_rect.CentreIn(glyph_rect, wxHORIZONTAL);
       dc.DrawText(cell_content, text_rect.GetTopLeft());
     }
     counters.draw_text_++;
@@ -1296,13 +1295,18 @@ void wxTerminalViewCtrl::RenderRowGL(int y, int rowIdx,
   auto result = PrepareRowForDrawing(row, rowIdx);
   for (const auto &cell : result.cells) {
     const int x = cell.colIdx * m_charW;
-    const int w = static_cast<int>(cell.cellWidth) * m_charW;
-    // Background rectangle spanning all columns this cell occupies.
-    m_glRenderer.AddSolidRect(x, y, w, m_charH, cell.attrs.bgColor);
-    // Glyph drawn into the full width so wide chars aren't clipped.
+    // Each cell gets its own single-column background.
+    m_glRenderer.AddSolidRect(x, y, m_charW, m_charH, cell.attrs.bgColor);
+    // Filler cells (width==0) for the trailing half of a wide char have no
+    // glyph — the preceding wide cell's glyph already covers this space.
+    if (cell.cellWidth == 0) {
+      continue;
+    }
+    // Wide chars get a glyph spanning multiple columns.
+    const int glyphW = static_cast<int>(cell.cellWidth) * m_charW;
     m_glRenderer.AddGlyph(static_cast<char32_t>(cell.ch), cell.attrs.bold,
                           cell.attrs.underline || cell.attrs.isClicked, x, y,
-                          w, m_charH, cell.attrs.fgColor);
+                          glyphW, m_charH, cell.attrs.fgColor);
   }
 }
 
@@ -2246,6 +2250,11 @@ void wxTerminalViewCtrl::Copy() {
     int startCol = std::clamp((absY == s.y) ? s.x : 0, 0, rowSize - 1);
     int endCol = std::clamp((absY == e.y) ? e.x : cols - 1, 0, rowSize - 1);
     for (int x = startCol; x <= endCol; ++x) {
+      // Skip filler cells for wide characters — the actual character was
+      // already copied from the preceding primary cell.
+      if (row[x].width == 0) {
+        continue;
+      }
       selection += wxUniChar(row[x].ch);
     }
     if (absY != e.y) {
