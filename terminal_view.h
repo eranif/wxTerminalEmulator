@@ -301,7 +301,8 @@ private:
   // GPU paint path: renders the visible grid with the glyph-atlas renderer.
   void OnPaintGL();
   // Emit the geometry for a single screen row into the GL renderer.
-  void RenderRowGL(int y, int rowIdx, const std::vector<terminal::Cell> &row);
+  void RenderRowGL(int y, int rowIdx, const std::vector<terminal::Cell> &row,
+                   const wxColour &clearBg);
   void PaintResizeOverlayGL();
 #endif
   // Legacy wxDC paint path (backing-store incremental renderer).
@@ -563,6 +564,7 @@ private:
   // atlas must be flushed so glyphs are re-rasterized at the new size.
   int m_glAtlasCharW{0};
   int m_glAtlasCharH{0};
+  wxSize m_glLastClientSize{0, 0};
 #endif
   wxTimer m_resizeEndTimer;
   void OnResizeEndTimer(wxTimerEvent &evt);

@@ -1292,12 +1292,14 @@ void wxTerminalViewCtrl::OnPaintDC() {
 
 #if USE_OPENGL
 void wxTerminalViewCtrl::RenderRowGL(int y, int rowIdx,
-                                     const std::vector<terminal::Cell> &row) {
+                                     const std::vector<terminal::Cell> &row,
+                                     const wxColour &clearBg) {
   auto result = PrepareRowForDrawing(row, rowIdx);
   for (const auto &cell : result.cells) {
     const int x = cell.colIdx * m_charW;
-    // Each cell gets its own single-column background.
-    m_glRenderer.AddSolidRect(x, y, m_charW, m_charH, cell.attrs.bgColor);
+    if (cell.attrs.bgColor != clearBg) {
+      m_glRenderer.AddSolidRect(x, y, m_charW, m_charH, cell.attrs.bgColor);
+    }
     // Filler cells (width==0) for the trailing half of a wide char have no
     // glyph — the preceding wide cell's glyph already covers this space.
     if (cell.cellWidth == 0) {
@@ -1350,7 +1352,11 @@ void wxTerminalViewCtrl::OnPaintGL() {
   // The first real paint may arrive after the window has been laid out at its
   // final size but before OnSize fired (or OnSize fired when charW was still 0
   // and bailed out). Re-sync the PTY size now that we have valid metrics.
-  SetTerminalSizeFromClient();
+  const wxSize clientSize = GetClientSize();
+  if (clientSize != m_glLastClientSize) {
+    m_glLastClientSize = clientSize;
+    SetTerminalSizeFromClient();
+  }
 
   // If the cell size changed (theme/font/DPI), flush the atlas so glyphs are
   // re-rasterized at the new size.
@@ -1368,7 +1374,6 @@ void wxTerminalViewCtrl::OnPaintGL() {
     m_mouseSelection.Clear();
   }
 
-  const wxSize clientSize = GetClientSize();
   const double scale = GetDPIScaleFactor();
 
   const auto &theme = m_core.GetTheme();
@@ -1395,7 +1400,7 @@ void wxTerminalViewCtrl::OnPaintGL() {
   // store); the batched two-pass draw makes this cheap.
   int y = 0;
   for (int rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
-    RenderRowGL(y, rowIdx, *viewArea[rowIdx]);
+    RenderRowGL(y, rowIdx, *viewArea[rowIdx], theme.bg);
     y += m_charH;
   }
 
