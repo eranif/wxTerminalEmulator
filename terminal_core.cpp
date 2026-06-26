@@ -56,6 +56,7 @@ ConvertBgColor(const struct tsm_screen_attr *attr) {
 static Cell ConvertTsmCell(const struct tsm_screen_cell &tsmCell) {
   Cell cell;
   cell.ch = (tsmCell.ch != 0) ? static_cast<char32_t>(tsmCell.ch) : U' ';
+  cell.width = tsmCell.width;
 
   if (tsmCell.attr.bold)
     cell.SetBold(true);
@@ -479,7 +480,7 @@ void TerminalCore::TsmBellCb(struct tsm_vte * /*vte*/, void *data) {
 
 int TerminalCore::TsmDrawCb(struct tsm_screen * /*con*/, uint64_t /*id*/,
                             const uint32_t *ch, size_t len,
-                            unsigned int /*width*/, unsigned int posx,
+                            unsigned int width, unsigned int posx,
                             unsigned int posy,
                             const struct tsm_screen_attr *attr,
                             tsm_age_t /*age*/, void *data) {
@@ -490,6 +491,7 @@ int TerminalCore::TsmDrawCb(struct tsm_screen * /*con*/, uint64_t /*id*/,
 
   Cell cell;
   cell.ch = (len > 0) ? static_cast<char32_t>(ch[0]) : U' ';
+  cell.width = width;
 
   if (attr->bold)
     cell.SetBold(true);

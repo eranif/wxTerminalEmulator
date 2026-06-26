@@ -436,6 +436,7 @@ private:
   struct CellInfo {
     int colIdx{wxNOT_FOUND};
     wxChar ch{' '};
+    unsigned int cellWidth{1}; // terminal columns spanned (2 for wide chars like emoji)
     CellAttributes attrs;
     inline bool IsUnicode() const { return ch >= 0x80; }
     inline bool HasSameAttributes(const CellInfo &other) const {

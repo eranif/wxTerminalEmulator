@@ -723,6 +723,12 @@ wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
       continue;
     }
 
+    // Skip filler cells for wide characters — their content is drawn by the
+    // preceding wide cell which spans multiple columns.
+    if (cell.width == 0) {
+      continue;
+    }
+
     // Determine colors
     wxColour bgColor = GetColourFromTheme(
         cell.colours ? cell.colours->bg : std::nullopt, false);
@@ -736,6 +742,7 @@ wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
     CellInfo info;
     info.colIdx = colIdx;
     info.ch = static_cast<wxChar>(cell.ch);
+    info.cellWidth = cell.width > 0 ? cell.width : 1;
     if (isMouseSelected) {
       info.attrs.bgColor = theme.selectionBg;
       info.attrs.fgColor = theme.selectionFg;
@@ -1000,11 +1007,10 @@ void wxTerminalViewCtrl::RenderRowNoGrouping(
     }
 
     wxString cell_content(wxUniChar(cell.ch));
-    wxRect cell_rect{x, y, m_charW, m_charH};
+    const int w = static_cast<int>(cell.cellWidth) * m_charW;
+    wxRect cell_rect{x, y, w, m_charH};
     dc.DrawRectangle(cell_rect);
     if (theme.isMonospaced) {
-      // Incase of non-monospced font, draw each character at the center of the
-      // cell rect.
       counters.draw_rectangle_++;
       dc.DrawText(cell_content, x, y);
     } else {
@@ -1290,12 +1296,13 @@ void wxTerminalViewCtrl::RenderRowGL(int y, int rowIdx,
   auto result = PrepareRowForDrawing(row, rowIdx);
   for (const auto &cell : result.cells) {
     const int x = cell.colIdx * m_charW;
-    // Background rectangle for the cell.
-    m_glRenderer.AddSolidRect(x, y, m_charW, m_charH, cell.attrs.bgColor);
-    // Glyph (skips blanks internally).
+    const int w = static_cast<int>(cell.cellWidth) * m_charW;
+    // Background rectangle spanning all columns this cell occupies.
+    m_glRenderer.AddSolidRect(x, y, w, m_charH, cell.attrs.bgColor);
+    // Glyph drawn into the full width so wide chars aren't clipped.
     m_glRenderer.AddGlyph(static_cast<char32_t>(cell.ch), cell.attrs.bold,
                           cell.attrs.underline || cell.attrs.isClicked, x, y,
-                          m_charW, m_charH, cell.attrs.fgColor);
+                          w, m_charH, cell.attrs.fgColor);
   }
 }
 

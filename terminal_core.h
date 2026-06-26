@@ -105,6 +105,7 @@ enum class CellFlags {
 
 struct Cell {
   char32_t ch{U' '};
+  unsigned int width{1}; // number of terminal columns this cell spans (0 = filler for wide char)
   std::optional<CellColours> colours{std::nullopt};
   CellFlags flags{CellFlags::kNone};
 
