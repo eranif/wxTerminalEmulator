@@ -22,6 +22,7 @@
 #include <wx/msgdlg.h>
 #include <wx/settings.h>
 #include <wx/window.h>
+#include <wx/xrc/xmlres.h>
 
 #if USE_OPENGL
 #include <wx/glcanvas.h>
@@ -1658,15 +1659,15 @@ void wxTerminalViewCtrl::OnContextMenu(wxContextMenuEvent &evt) {
   wxMenu menu;
 
   if (m_mouseSelection.HasSelection()) {
-    menu.Append(wxID_COPY, _("Copy"));
+    menu.Append(XRCID("wxterminal-copy"), _("Copy"));
   }
-  menu.Append(wxID_PASTE, _("Paste"));
+  menu.Append(XRCID("wxterminal-paste"), _("Paste"));
   menu.AppendSeparator();
-  menu.Append(wxID_CLEAR, _("Clear buffer"));
+  menu.Append(XRCID("wxterminal-clear-buffer"), _("Clear buffer"));
 
-  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnCopy, this, wxID_COPY);
-  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnPaste, this, wxID_PASTE);
-  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnClearBuffer, this, wxID_CLEAR);
+  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnCopy, this, XRCID("wxterminal-copy"));
+  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnPaste, this, XRCID("wxterminal-paste"));
+  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnClearBuffer, this, XRCID("wxterminal-clear-buffer"));
 
   m_contextMenuShowing = true;
   PopupMenu(&menu);
