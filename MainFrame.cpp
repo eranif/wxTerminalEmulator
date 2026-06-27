@@ -465,7 +465,6 @@ void MyFrame::OnExit(wxCommandEvent &event) {
   Close(true);
 }
 
-
 void MyFrame::OnCenterLine(wxCommandEvent &event) {
   wxUnusedVar(event);
   wxTerminalViewCtrl *activeView = GetActiveTerminalView();
@@ -741,8 +740,6 @@ void MyFrame::ApplyNativeAppTheme() {
   } else {
     wxTheApp->SetAppearance(wxAppBase::Appearance::Light);
   }
-#else
-  wxUnusedVar(darkMode);
 #endif
 }
 
