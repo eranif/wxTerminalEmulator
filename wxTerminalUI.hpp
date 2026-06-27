@@ -20,6 +20,7 @@
 #include <wx/imaglist.h>
 #include <wx/stattext.h>
 #include <wx/textctrl.h>
+#include <wx/fontpicker.h>
 #include <wx/checkbox.h>
 #include <wx/statbox.h>
 #include <wx/choice.h>
@@ -52,6 +53,8 @@ protected:
   wxPanel *m_panel171;
   wxStaticText *m_staticText173;
   wxTextCtrl *m_textCtrlTitle;
+  wxStaticText *m_staticText180;
+  wxFontPickerCtrl *m_fontPickerFont;
   wxCheckBox *m_checkBoxCloseButton;
   wxCheckBox *m_checkBoxBlockCursor;
   wxPanel *m_panel133;
@@ -100,6 +103,8 @@ protected:
 public:
   wxStaticText *GetStaticText173() { return m_staticText173; }
   wxTextCtrl *GetTextCtrlTitle() { return m_textCtrlTitle; }
+  wxStaticText *GetStaticText180() { return m_staticText180; }
+  wxFontPickerCtrl *GetFontPickerFont() { return m_fontPickerFont; }
   wxCheckBox *GetCheckBoxCloseButton() { return m_checkBoxCloseButton; }
   wxCheckBox *GetCheckBoxBlockCursor() { return m_checkBoxBlockCursor; }
   wxPanel *GetPanel171() { return m_panel171; }

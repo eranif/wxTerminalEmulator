@@ -284,7 +284,6 @@ void MyFrame::BuildMenuBar() {
   menuBar->Append(fileMenu, "File");
 
   auto *optionsMenu = new wxMenu();
-  optionsMenu->Append(ID_ChangeFont, "Change Font...");
   optionsMenu->Append(ID_CenterLine, "Center Line...");
   optionsMenu->AppendCheckItem(ID_SafeDrawing, "Safe Drawing");
   optionsMenu->Append(ID_SetSelection, "Set Selection...");
@@ -310,7 +309,6 @@ void MyFrame::BuildMenuBar() {
   Bind(wxEVT_MENU, &MyFrame::OnNextTab, this, wxID_FORWARD);
   Bind(wxEVT_MENU, &MyFrame::OnPreviousTab, this, wxID_BACKWARD);
   Bind(wxEVT_MENU, &MyFrame::OnExit, this, ID_Exit);
-  Bind(wxEVT_MENU, &MyFrame::OnChangeFont, this, ID_ChangeFont);
   Bind(wxEVT_MENU, &MyFrame::OnCenterLine, this, ID_CenterLine);
   Bind(wxEVT_MENU, &MyFrame::OnSafeDrawing, this, ID_SafeDrawing);
   Bind(wxEVT_MENU, &MyFrame::OnSetSelection, this, ID_SetSelection);
@@ -467,25 +465,6 @@ void MyFrame::OnExit(wxCommandEvent &event) {
   Close(true);
 }
 
-void MyFrame::OnChangeFont(wxCommandEvent &event) {
-  wxUnusedVar(event);
-  wxTerminalViewCtrl *activeView = GetActiveTerminalView();
-  if (!activeView) {
-    return;
-  }
-  wxFontData fontData;
-  fontData.EnableEffects(false);
-  fontData.SetInitialFont(m_config.GetFont().IsOk()
-                              ? m_config.GetFont()
-                              : activeView->GetTheme().font);
-  wxFontDialog dlg(this, fontData);
-  if (dlg.ShowModal() != wxID_OK) {
-    return;
-  }
-  m_config.SetFont(dlg.GetFontData().GetChosenFont());
-  ApplySettings();
-  PersistSettings();
-}
 
 void MyFrame::OnCenterLine(wxCommandEvent &event) {
   wxUnusedVar(event);
@@ -776,6 +755,7 @@ void MyFrame::OnSettings(wxCommandEvent &event) {
     m_config.SetNewTabTitle(dlg.GetNewTabTitle());
     m_config.SetShowCloseButton(dlg.GetShowCloseButton());
     m_config.SetBlockCursor(dlg.GetBlockCursor());
+    m_config.SetFont(dlg.GetFont());
     ApplySettings();
     PersistSettings();
   }

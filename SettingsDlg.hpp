@@ -14,6 +14,7 @@ public:
   wxString GetNewTabTitle() const { return m_textCtrlTitle->GetValue(); }
   bool GetShowCloseButton() const { return m_checkBoxCloseButton->GetValue(); }
   bool GetBlockCursor() const { return m_checkBoxBlockCursor->GetValue(); }
+  wxFont GetFont() const { return m_fontPickerFont->GetSelectedFont(); }
 
 protected:
   void OnBackgroundColour(wxColourPickerEvent &event) override;

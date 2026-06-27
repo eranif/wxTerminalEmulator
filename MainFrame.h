@@ -138,8 +138,7 @@ private:
 class MyFrame : public wxFrame {
 public:
   enum {
-    ID_ChangeFont = wxID_HIGHEST + 1,
-    ID_CenterLine,
+    ID_CenterLine = wxID_HIGHEST + 1,
     ID_SafeDrawing,
     ID_SetSelection,
     ID_PrintLine,
@@ -177,7 +176,6 @@ public:
   void ApplyThemeToTab(wxTerminalViewCtrl *view);
   void OnNewTerminal(wxCommandEvent &event);
   void OnExit(wxCommandEvent &event);
-  void OnChangeFont(wxCommandEvent &event);
   void OnCenterLine(wxCommandEvent &event);
   void OnSafeDrawing(wxCommandEvent &event);
   void OnSetSelection(wxCommandEvent &event);

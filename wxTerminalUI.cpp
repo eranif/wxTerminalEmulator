@@ -80,6 +80,20 @@ SettingsBaseDlg::SettingsBaseDlg(wxWindow *parent, wxWindowID id,
 
   flexGridSizer172->Add(m_textCtrlTitle, 0, wxALL | wxEXPAND, WXC_FROM_DIP(5));
 
+  m_staticText180 = new wxStaticText(m_panel171, wxID_ANY, _("Global Font:"),
+                                     wxDefaultPosition,
+                                     wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
+
+  flexGridSizer172->Add(m_staticText180, 0,
+                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
+                        WXC_FROM_DIP(5));
+
+  m_fontPickerFont = new wxFontPickerCtrl(
+      m_panel171, wxID_ANY, wxNullFont, wxDefaultPosition,
+      wxDLG_UNIT(m_panel171, wxSize(-1, -1)), wxFNTP_DEFAULT_STYLE);
+
+  flexGridSizer172->Add(m_fontPickerFont, 0, wxALL | wxEXPAND, WXC_FROM_DIP(5));
+
   flexGridSizer172->Add(0, 0, 1, wxALL, WXC_FROM_DIP(5));
 
   m_checkBoxCloseButton = new wxCheckBox(
