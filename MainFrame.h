@@ -171,24 +171,23 @@ public:
   void OnNextTab(wxCommandEvent &event);
   void OnPreviousTab(wxCommandEvent &event);
   void OnCloseTab(wxCommandEvent &event);
-  void ApplyThemeToAllTabs(const wxTerminalTheme &theme);
-  void ApplyFontToAllTabs(const wxFont &font);
+  void ApplyThemeToAllTabs();
+  void ApplyFontToAllTabs();
   wxTerminalViewCtrl *GetActiveTerminalView() const;
   MyTerminal *CreateTerminalPage(const TerminalPageConfig &config,
                                  bool selectIt);
-  void ApplySafeDrawingToAllTabs(bool enabled);
+  void ApplySafeDrawingToAllTabs();
   void UpdateSafeDrawingMenuCheck();
   void ApplyThemeToTab(wxTerminalViewCtrl *view);
   void OnNewTerminal(wxCommandEvent &event);
   void OnExit(wxCommandEvent &event);
-  void OnDarkTheme(wxCommandEvent &event);
-  void OnLightTheme(wxCommandEvent &event);
   void OnChangeFont(wxCommandEvent &event);
   void OnCenterLine(wxCommandEvent &event);
   void OnSafeDrawing(wxCommandEvent &event);
   void OnSetSelection(wxCommandEvent &event);
   void OnPrintLine(wxCommandEvent &event);
   void OnSendInput(wxCommandEvent &event);
+  void OnSettings(wxCommandEvent &event);
   void OnCopyAll(wxCommandEvent &event);
   void OnFindText(wxCommandEvent &event);
   void OnFindNext(wxFindDialogEvent &event);
@@ -198,7 +197,7 @@ public:
   void OnTimer(wxTimerEvent &event);
   void Terminate();
   void PersistSettings();
-  void ApplyNativeAppTheme(std::optional<bool> darkMode = std::nullopt);
+  void ApplyNativeAppTheme();
 
   // Serialize the open tabs and their AUI arrangement to disk. Called on exit.
   void SaveLayout();
@@ -212,10 +211,8 @@ private:
   wxString m_defaultShellCommand;
   std::optional<EnvironmentList> m_defaultEnvironment;
   std::optional<wxString> m_defaultWorkingDirectory;
-  bool m_themeIsDark{true};
-  wxFont m_persistedFont;
+  AppConfig m_config;
   wxString m_currentSearchText;
-  bool m_safeDrawingEnabled{false};
   bool m_bellCallbackInstalled{false};
   wxTimer m_timer;
   // queue of commands to run in the timer handler. If a callback returns false

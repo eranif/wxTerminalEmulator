@@ -1243,8 +1243,6 @@ void wxTerminalViewCtrl::OnPaintDC() {
                  << std::endl;
   }
 
-  DrawFocusBorder(dc);
-
   m_lastCursorScreenRow = cursorScreenRow;
 
   // Draw cursor (block caret) — only if shell
@@ -1283,6 +1281,9 @@ void wxTerminalViewCtrl::OnPaintDC() {
       }
     }
   }
+
+  // Finally, draw the focus border.
+  DrawFocusBorder(dc);
 
   // The buffer now holds the current frame; subsequent paints can reuse it.
   m_renderCacheValid = true;
@@ -1404,22 +1405,6 @@ void wxTerminalViewCtrl::OnPaintGL() {
     y += m_charH;
   }
 
-  // Focus border (drawn as four solid edge rectangles).
-  if (m_hasFocusBorder && clientSize.x > 1 && clientSize.y > 1) {
-#ifdef __WXMAC__
-    const int penW = 2;
-#else
-    const int penW = 1;
-#endif
-    const wxColour borderColour("#5E9ED6");
-    m_glRenderer.AddSolidRect(0, 0, clientSize.x, penW, borderColour);
-    m_glRenderer.AddSolidRect(0, clientSize.y - penW, clientSize.x, penW,
-                              borderColour);
-    m_glRenderer.AddSolidRect(0, 0, penW, clientSize.y, borderColour);
-    m_glRenderer.AddSolidRect(clientSize.x - penW, 0, penW, clientSize.y,
-                              borderColour);
-  }
-
   // Cursor (block caret), drawn after cells so it sits on top.
   if (cursorScreenRow >= 0) {
     const int cx = cursor.x * m_charW;
@@ -1439,6 +1424,18 @@ void wxTerminalViewCtrl::OnPaintGL() {
         }
       }
     }
+  }
+
+  // Lastly, draw a focus border (drawn as four solid edge rectangles).
+  if (m_hasFocusBorder && clientSize.x > 1 && clientSize.y > 1) {
+    const int penW = 1;
+    const wxColour borderColour("#5E9ED6");
+    m_glRenderer.AddSolidRect(0, 0, clientSize.x, penW, borderColour);
+    m_glRenderer.AddSolidRect(0, clientSize.y - penW, clientSize.x, penW,
+                              borderColour);
+    m_glRenderer.AddSolidRect(0, 0, penW, clientSize.y, borderColour);
+    m_glRenderer.AddSolidRect(clientSize.x - penW, 0, penW, clientSize.y,
+                              borderColour);
   }
 
   m_glRenderer.EndFrame();
@@ -1670,9 +1667,12 @@ void wxTerminalViewCtrl::OnContextMenu(wxContextMenuEvent &evt) {
   menu.AppendSeparator();
   menu.Append(XRCID("wxterminal-clear-buffer"), _("Clear buffer"));
 
-  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnCopy, this, XRCID("wxterminal-copy"));
-  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnPaste, this, XRCID("wxterminal-paste"));
-  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnClearBuffer, this, XRCID("wxterminal-clear-buffer"));
+  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnCopy, this,
+            XRCID("wxterminal-copy"));
+  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnPaste, this,
+            XRCID("wxterminal-paste"));
+  menu.Bind(wxEVT_MENU, &wxTerminalViewCtrl::OnClearBuffer, this,
+            XRCID("wxterminal-clear-buffer"));
 
   m_contextMenuShowing = true;
   PopupMenu(&menu);
@@ -1735,7 +1735,7 @@ void wxTerminalViewCtrl::DrawFocusBorder(wxDC &dc) const {
   pen.SetCap(wxCAP_BUTT);
   pen.SetJoin(wxJOIN_MITER);
 #elif defined(__WXMAC__)
-  constexpr int kFocusPenWidth = 2;
+  constexpr int kFocusPenWidth = 1;
   wxColour focusRectColour("#5E9ED6");
   wxPen pen(focusRectColour, kFocusPenWidth);
   pen.SetCap(wxCAP_ROUND);

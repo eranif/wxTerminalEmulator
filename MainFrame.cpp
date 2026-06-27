@@ -1,10 +1,18 @@
 #include "MainFrame.h"
+#include "SettingsDlg.hpp"
 #include <wx/msgdlg.h>
 #include <wx/xrc/xmlres.h>
 // The wxAUI layout serializer header (wx/aui/serializer.h) is pulled in
 // conditionally by layout_persistence.h on wxWidgets 3.3.0+.
 
 static const wxString kDefaultTerminalLabel = _("Terminal");
+namespace {
+bool IsDark(const wxColour &c) {
+  // Perceived luminance (ITU-R BT.601)
+  double luminance = 0.299 * c.Red() + 0.587 * c.Green() + 0.114 * c.Blue();
+  return luminance < 128.0;
+}
+} // namespace
 
 MyFrame::MyFrame(const wxCmdLineParser &parser,
                  const std::optional<EnvironmentList> &environment,
@@ -40,23 +48,7 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   SetSize(width, height);
   CentreOnScreen();
 
-  wxString persistedTheme = "dark";
-  wxFont persistedFont;
-  bool persistedSafeDrawing = false;
-  if (AppPersistence::Load(persistedTheme, persistedFont)) {
-    m_themeIsDark = (persistedTheme.Lower() != "light");
-    m_persistedFont = persistedFont;
-  } else {
-    m_themeIsDark = true;
-  }
-
-  AppPersistence::Load(persistedSafeDrawing);
-  m_safeDrawingEnabled = persistedSafeDrawing;
-
-#if USE_OPENGL
-  m_safeDrawingEnabled = true;
-#endif
-
+  AppPersistence::Load(m_config);
   ApplyNativeAppTheme();
 
   CreateStatusBar();
@@ -107,6 +99,7 @@ MyFrame::~MyFrame() {}
 
 void MyFrame::OnClose(wxCloseEvent &event) {
   SaveLayout();
+  PersistSettings();
   event.Skip();
 }
 
@@ -280,21 +273,18 @@ void MyFrame::BuildMenuBar() {
   auto *fileMenu = new wxMenu();
   fileMenu->Append(wxID_NEW, _("New Terminal\tCtrl-N"));
   fileMenu->Append(wxID_CLOSE, _("Close Terminal\tCtrl-W"));
+  fileMenu->Append(wxID_PREFERENCES);
   fileMenu->AppendSeparator();
   fileMenu->Append(ID_Exit, "Exit");
   menuBar->Append(fileMenu, "File");
 
   auto *optionsMenu = new wxMenu();
-  optionsMenu->AppendRadioItem(ID_ThemeDark, "Dark theme");
-  optionsMenu->AppendRadioItem(ID_ThemeLight, "Light theme");
-  optionsMenu->AppendSeparator();
   optionsMenu->Append(ID_ChangeFont, "Change Font...");
   optionsMenu->Append(ID_CenterLine, "Center Line...");
   optionsMenu->AppendCheckItem(ID_SafeDrawing, "Safe Drawing");
   optionsMenu->Append(ID_SetSelection, "Set Selection...");
   optionsMenu->Append(ID_PrintLine, "Print Line...");
   optionsMenu->Append(ID_SendInput, "Send Input...");
-  optionsMenu->Check(m_themeIsDark ? ID_ThemeDark : ID_ThemeLight, true);
   menuBar->Append(optionsMenu, "Options");
 
   auto *searchMenu = new wxMenu();
@@ -315,8 +305,6 @@ void MyFrame::BuildMenuBar() {
   Bind(wxEVT_MENU, &MyFrame::OnNextTab, this, wxID_FORWARD);
   Bind(wxEVT_MENU, &MyFrame::OnPreviousTab, this, wxID_BACKWARD);
   Bind(wxEVT_MENU, &MyFrame::OnExit, this, ID_Exit);
-  Bind(wxEVT_MENU, &MyFrame::OnDarkTheme, this, ID_ThemeDark);
-  Bind(wxEVT_MENU, &MyFrame::OnLightTheme, this, ID_ThemeLight);
   Bind(wxEVT_MENU, &MyFrame::OnChangeFont, this, ID_ChangeFont);
   Bind(wxEVT_MENU, &MyFrame::OnCenterLine, this, ID_CenterLine);
   Bind(wxEVT_MENU, &MyFrame::OnSafeDrawing, this, ID_SafeDrawing);
@@ -325,6 +313,7 @@ void MyFrame::BuildMenuBar() {
   Bind(wxEVT_MENU, &MyFrame::OnSendInput, this, ID_SendInput);
   Bind(wxEVT_MENU, &MyFrame::OnFindText, this, ID_FindText);
   Bind(wxEVT_MENU, &MyFrame::OnCopyAll, this, ID_CopyAll);
+  Bind(wxEVT_MENU, &MyFrame::OnSettings, this, wxID_PREFERENCES);
   Bind(wxEVT_UPDATE_UI, &MyFrame::OnNextTabUI, this, wxID_FORWARD);
   Bind(wxEVT_UPDATE_UI, &MyFrame::OnPreviousTabUI, this, wxID_BACKWARD);
 }
@@ -382,10 +371,12 @@ void MyFrame::OnCloseTab(wxCommandEvent &event) {
   m_notebook->DeletePage(static_cast<size_t>(currentTabIndex));
 }
 
-void MyFrame::ApplyThemeToAllTabs(const wxTerminalTheme &theme) {
+void MyFrame::ApplyThemeToAllTabs() {
   if (!m_notebook) {
     return;
   }
+  auto theme = m_config.GetActiveTheme();
+  theme.isBlockCursor = true;
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
     if (auto *view =
             dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetPage(i))) {
@@ -395,7 +386,7 @@ void MyFrame::ApplyThemeToAllTabs(const wxTerminalTheme &theme) {
   }
 }
 
-void MyFrame::ApplyFontToAllTabs(const wxFont &font) {
+void MyFrame::ApplyFontToAllTabs() {
   if (!m_notebook) {
     return;
   }
@@ -403,7 +394,7 @@ void MyFrame::ApplyFontToAllTabs(const wxFont &font) {
     if (auto *view =
             dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetPage(i))) {
       wxTerminalTheme theme = view->GetTheme();
-      theme.font = font;
+      theme.font = m_config.GetFont();
       view->SetTheme(theme);
       view->Refresh();
     }
@@ -423,9 +414,9 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
                               config.environment, config.workingDirectory);
   m_notebook->AddPage(page, kDefaultTerminalLabel, selectIt);
   ApplyThemeToTab(page);
-  m_safeDrawingEnabled =
-      m_safeDrawingEnabled || wxTerminalViewCtrl::IsOpenGLEnabled();
-  page->EnableSafeDrawing(m_safeDrawingEnabled);
+  m_config.SetSafeDrawingEnabled(m_config.IsSafeDrawingEnabled() ||
+                                 wxTerminalViewCtrl::IsOpenGLEnabled());
+  page->EnableSafeDrawing(m_config.IsSafeDrawingEnabled());
   UpdateSafeDrawingMenuCheck();
   page->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
   page->Bind(wxEVT_TERMINAL_TEXT_LINK, &MyFrame::OnTerminalLink, this);
@@ -433,14 +424,14 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   return page;
 }
 
-void MyFrame::ApplySafeDrawingToAllTabs(bool enabled) {
+void MyFrame::ApplySafeDrawingToAllTabs() {
   if (!m_notebook) {
     return;
   }
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
     if (auto *view =
             dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetPage(i))) {
-      view->EnableSafeDrawing(enabled);
+      view->EnableSafeDrawing(m_config.IsSafeDrawingEnabled());
       view->Refresh();
     }
   }
@@ -464,11 +455,8 @@ void MyFrame::ApplyThemeToTab(wxTerminalViewCtrl *view) {
   if (!view) {
     return;
   }
-  auto theme = m_themeIsDark ? wxTerminalTheme::MakeDarkTheme()
-                             : wxTerminalTheme::MakeLightTheme();
-  if (m_persistedFont.IsOk()) {
-    theme.font = m_persistedFont;
-  }
+  auto theme = m_config.GetActiveTheme();
+  theme.isBlockCursor = true;
   view->SetTheme(theme);
 }
 
@@ -485,30 +473,6 @@ void MyFrame::OnExit(wxCommandEvent &event) {
   Close(true);
 }
 
-void MyFrame::OnDarkTheme(wxCommandEvent &event) {
-  wxUnusedVar(event);
-  ApplyNativeAppTheme(true);
-  auto theme = wxTerminalTheme::MakeDarkTheme();
-  if (m_persistedFont.IsOk()) {
-    theme.font = m_persistedFont;
-  }
-  ApplyThemeToAllTabs(theme);
-  m_themeIsDark = true;
-  PersistSettings();
-}
-
-void MyFrame::OnLightTheme(wxCommandEvent &event) {
-  wxUnusedVar(event);
-  ApplyNativeAppTheme(false);
-  auto theme = wxTerminalTheme::MakeLightTheme();
-  if (m_persistedFont.IsOk()) {
-    theme.font = m_persistedFont;
-  }
-  ApplyThemeToAllTabs(theme);
-  m_themeIsDark = false;
-  PersistSettings();
-}
-
 void MyFrame::OnChangeFont(wxCommandEvent &event) {
   wxUnusedVar(event);
   wxTerminalViewCtrl *activeView = GetActiveTerminalView();
@@ -517,14 +481,15 @@ void MyFrame::OnChangeFont(wxCommandEvent &event) {
   }
   wxFontData fontData;
   fontData.EnableEffects(false);
-  fontData.SetInitialFont(m_persistedFont.IsOk() ? m_persistedFont
-                                                 : activeView->GetTheme().font);
+  fontData.SetInitialFont(m_config.GetFont().IsOk()
+                              ? m_config.GetFont()
+                              : activeView->GetTheme().font);
   wxFontDialog dlg(this, fontData);
   if (dlg.ShowModal() != wxID_OK) {
     return;
   }
-  m_persistedFont = dlg.GetFontData().GetChosenFont();
-  ApplyFontToAllTabs(m_persistedFont);
+  m_config.SetFont(dlg.GetFontData().GetChosenFont());
+  ApplyFontToAllTabs();
   PersistSettings();
 }
 
@@ -553,8 +518,8 @@ void MyFrame::OnCenterLine(wxCommandEvent &event) {
 }
 
 void MyFrame::OnSafeDrawing(wxCommandEvent &event) {
-  m_safeDrawingEnabled = event.IsChecked();
-  ApplySafeDrawingToAllTabs(m_safeDrawingEnabled);
+  m_config.SetSafeDrawingEnabled(event.IsChecked());
+  ApplySafeDrawingToAllTabs();
   PersistSettings();
 }
 
@@ -786,18 +751,18 @@ void MyFrame::Terminate() { Close(true); }
 void MyFrame::PersistSettings() {
   if (!m_notebook)
     return;
-  const wxString themeName = m_themeIsDark ? "dark" : "light";
-  const wxFont font =
-      m_persistedFont.IsOk()
-          ? m_persistedFont
-          : (GetActiveTerminalView() ? GetActiveTerminalView()->GetTheme().font
-                                     : wxFont{});
-  AppPersistence::Save(themeName, font, m_safeDrawingEnabled);
+  if (!m_config.GetFont().IsOk()) {
+    m_config.SetFont(GetActiveTerminalView()
+                         ? GetActiveTerminalView()->GetTheme().font
+                         : wxFont{});
+  }
+  AppPersistence::Save(m_config);
 }
 
-void MyFrame::ApplyNativeAppTheme(std::optional<bool> darkMode) {
+void MyFrame::ApplyNativeAppTheme() {
 #if wxCHECK_VERSION(3, 3, 0)
-  const bool enableDark = darkMode.value_or(m_themeIsDark);
+  auto theme = m_config.GetActiveTheme();
+  bool enableDark = IsDark(theme.bg);
   if (enableDark) {
     wxTheApp->SetAppearance(wxAppBase::Appearance::Dark);
   } else {
@@ -806,4 +771,15 @@ void MyFrame::ApplyNativeAppTheme(std::optional<bool> darkMode) {
 #else
   wxUnusedVar(darkMode);
 #endif
+}
+
+void MyFrame::OnSettings(wxCommandEvent &event) {
+  wxUnusedVar(event);
+  SettingsDlg dlg{this, m_config};
+  if (dlg.ShowModal() == wxID_OK) {
+    m_config.SetTheme(dlg.GetThemeName(), dlg.GetTheme());
+    m_config.SetThemeName(dlg.GetThemeName());
+    PersistSettings();
+    ApplyThemeToAllTabs();
+  }
 }
