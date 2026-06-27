@@ -11,6 +11,8 @@ public:
 
   const wxTerminalTheme &GetTheme() const { return m_theme; }
   wxString GetThemeName() const { return m_choiceNames->GetStringSelection(); }
+  wxString GetNewTabTitle() const { return m_textCtrlTitle->GetValue(); }
+  bool GetShowCloseButton() const { return m_checkBoxCloseButton->GetValue(); }
 
 protected:
   void OnBackgroundColour(wxColourPickerEvent &event) override;

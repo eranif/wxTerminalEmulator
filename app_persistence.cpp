@@ -178,6 +178,11 @@ bool AppPersistence::Load(AppConfig &config) {
       } else if (key == "safedrawing") {
         config.SetSafeDrawingEnabled(value == "1" || value == "true" ||
                                      value == "yes" || value == "on");
+      } else if (key == "newtabtitle") {
+        config.SetNewTabTitle(value);
+      } else if (key == "showclosebutton") {
+        config.SetShowCloseButton(value == "1" || value == "true" ||
+                                  value == "yes" || value == "on");
       }
     } else if (section == Section::kTheme) {
       if (key == "name") {
@@ -214,6 +219,9 @@ bool AppPersistence::Save(const AppConfig &config) {
   }
 
   file.AddLine("theme=" + config.GetThemeName());
+  file.AddLine("newtabtitle=" + config.GetNewTabTitle());
+  file.AddLine(wxString::Format("showclosebutton=%s",
+                                config.GetShowCloseButton() ? "true" : "false"));
   file.AddLine("font=" + config.GetFont().GetNativeFontInfoDesc());
   file.AddLine(wxString::Format(
       "safedrawing=%s", config.IsSafeDrawingEnabled() ? "true" : "false"));

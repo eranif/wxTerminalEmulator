@@ -52,6 +52,44 @@ SettingsBaseDlg::SettingsBaseDlg(wxWindow *parent, wxWindowID id,
 
   boxSizer128->Add(m_notebook132, 1, wxALL | wxEXPAND, WXC_FROM_DIP(10));
 
+  m_panel171 =
+      new wxPanel(m_notebook132, wxID_ANY, wxDefaultPosition,
+                  wxDLG_UNIT(m_notebook132, wxSize(-1, -1)), wxTAB_TRAVERSAL);
+  m_notebook132->AddPage(m_panel171, _("General"), true);
+
+  wxFlexGridSizer *flexGridSizer172 = new wxFlexGridSizer(0, 2, 0, 0);
+  flexGridSizer172->SetFlexibleDirection(wxBOTH);
+  flexGridSizer172->SetNonFlexibleGrowMode(wxFLEX_GROWMODE_SPECIFIED);
+  flexGridSizer172->AddGrowableCol(1);
+  m_panel171->SetSizer(flexGridSizer172);
+
+  m_staticText173 = new wxStaticText(m_panel171, wxID_ANY, _("New Tab Title:"),
+                                     wxDefaultPosition,
+                                     wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
+
+  flexGridSizer172->Add(m_staticText173, 0,
+                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
+                        WXC_FROM_DIP(5));
+
+  m_textCtrlTitle =
+      new wxTextCtrl(m_panel171, wxID_ANY, wxT("Terminal"), wxDefaultPosition,
+                     wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
+#if wxVERSION_NUMBER >= 3000
+  m_textCtrlTitle->SetHint(wxT(""));
+#endif
+
+  flexGridSizer172->Add(m_textCtrlTitle, 0, wxALL | wxEXPAND, WXC_FROM_DIP(5));
+
+  flexGridSizer172->Add(0, 0, 1, wxALL, WXC_FROM_DIP(5));
+
+  m_checkBoxCloseButton = new wxCheckBox(
+      m_panel171, wxID_ANY, _("Show Close Button on Tab"), wxDefaultPosition,
+      wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
+  m_checkBoxCloseButton->SetValue(true);
+
+  flexGridSizer172->Add(m_checkBoxCloseButton, 0, wxALL | wxEXPAND,
+                        WXC_FROM_DIP(5));
+
   m_panel133 =
       new wxPanel(m_notebook132, wxID_ANY, wxDefaultPosition,
                   wxDLG_UNIT(m_notebook132, wxSize(-1, -1)), wxTAB_TRAVERSAL);

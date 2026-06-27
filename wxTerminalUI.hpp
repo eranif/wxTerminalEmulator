@@ -18,13 +18,14 @@
 #include <wx/panel.h>
 #include <wx/notebook.h>
 #include <wx/imaglist.h>
-#include <wx/statbox.h>
 #include <wx/stattext.h>
+#include <wx/textctrl.h>
+#include <wx/checkbox.h>
+#include <wx/statbox.h>
 #include <wx/choice.h>
 #include <wx/arrstr.h>
 #include <wx/clrpicker.h>
 #include <wx/statline.h>
-#include <wx/checkbox.h>
 #include <wx/button.h>
 #if wxVERSION_NUMBER >= 2900
 #include <wx/persist.h>
@@ -48,6 +49,10 @@ class SettingsBaseDlg : public wxDialog {
 protected:
   wxPanel *m_panel127;
   wxNotebook *m_notebook132;
+  wxPanel *m_panel171;
+  wxStaticText *m_staticText173;
+  wxTextCtrl *m_textCtrlTitle;
+  wxCheckBox *m_checkBoxCloseButton;
   wxPanel *m_panel133;
   wxStaticText *m_staticText146;
   wxChoice *m_choiceNames;
@@ -92,6 +97,10 @@ protected:
   virtual void OnShowBrightColours(wxCommandEvent &event) { event.Skip(); }
 
 public:
+  wxStaticText *GetStaticText173() { return m_staticText173; }
+  wxTextCtrl *GetTextCtrlTitle() { return m_textCtrlTitle; }
+  wxCheckBox *GetCheckBoxCloseButton() { return m_checkBoxCloseButton; }
+  wxPanel *GetPanel171() { return m_panel171; }
   wxStaticText *GetStaticText146() { return m_staticText146; }
   wxChoice *GetChoiceNames() { return m_choiceNames; }
   wxStaticText *GetStaticText135() { return m_staticText135; }

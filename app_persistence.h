@@ -42,11 +42,21 @@ struct AppConfig {
     return safeDrawingEnabled;
   }
 
+  void SetNewTabTitle(const wxString &title) { newTabTitle = title; }
+  wxString GetNewTabTitle() const {
+    return newTabTitle.empty() ? "Terminal" : newTabTitle;
+  }
+
+  void SetShowCloseButton(bool show) { showCloseButton = show; }
+  bool GetShowCloseButton() const { return showCloseButton; }
+
 private:
   wxString themeName{"dark"};
   std::map<wxString, wxTerminalTheme> themes;
   wxFont font;
+  wxString newTabTitle{"Terminal"};
   bool safeDrawingEnabled{false};
+  bool showCloseButton{true};
 };
 
 class AppPersistence {

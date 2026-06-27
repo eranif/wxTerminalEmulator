@@ -138,9 +138,7 @@ private:
 class MyFrame : public wxFrame {
 public:
   enum {
-    ID_ThemeDark = wxID_HIGHEST + 1,
-    ID_ThemeLight,
-    ID_ChangeFont,
+    ID_ChangeFont = wxID_HIGHEST + 1,
     ID_CenterLine,
     ID_SafeDrawing,
     ID_SetSelection,
@@ -177,6 +175,7 @@ public:
   MyTerminal *CreateTerminalPage(const TerminalPageConfig &config,
                                  bool selectIt);
   void ApplySafeDrawingToAllTabs();
+  void ApplyTabCloseButton();
   void UpdateSafeDrawingMenuCheck();
   void ApplyThemeToTab(wxTerminalViewCtrl *view);
   void OnNewTerminal(wxCommandEvent &event);

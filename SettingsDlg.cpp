@@ -8,6 +8,9 @@ SettingsDlg::SettingsDlg(wxWindow *parent, const AppConfig &config)
   }
   m_choiceNames->SetStringSelection(m_config.GetThemeName());
 
+  m_textCtrlTitle->SetValue(m_config.GetNewTabTitle());
+  m_checkBoxCloseButton->SetValue(m_config.GetShowCloseButton());
+
   m_colourPickerBg->SetColour(m_theme.bg);
   m_colourPickerFg->SetColour(m_theme.fg);
   m_colourPickerBlack->SetColour(m_theme.black);

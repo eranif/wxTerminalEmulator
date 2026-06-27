@@ -53,9 +53,14 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
 
   CreateStatusBar();
   BuildMenuBar();
-  m_notebook =
-      new wxAuiNotebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-                        wxAUI_NB_DEFAULT_STYLE | wxAUI_NB_CLOSE_ON_ALL_TABS);
+  long nbStyle = wxAUI_NB_DEFAULT_STYLE &
+                 ~(wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS);
+  if (m_config.GetShowCloseButton()) {
+    nbStyle |= wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS;
+  }
+
+  m_notebook = new wxAuiNotebook(this, wxID_ANY, wxDefaultPosition,
+                                 wxDefaultSize, nbStyle);
   m_defaultShellCommand = shellCommand;
   m_defaultEnvironment = environment;
   m_defaultWorkingDirectory = std::move(workingDirectory);
@@ -412,7 +417,7 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
                                         bool selectIt) {
   auto *page = new MyTerminal(m_notebook, config.shellCommand,
                               config.environment, config.workingDirectory);
-  m_notebook->AddPage(page, kDefaultTerminalLabel, selectIt);
+  m_notebook->AddPage(page, m_config.GetNewTabTitle(), selectIt);
   ApplyThemeToTab(page);
   m_config.SetSafeDrawingEnabled(m_config.IsSafeDrawingEnabled() ||
                                  wxTerminalViewCtrl::IsOpenGLEnabled());
@@ -435,6 +440,20 @@ void MyFrame::ApplySafeDrawingToAllTabs() {
       view->Refresh();
     }
   }
+}
+
+void MyFrame::ApplyTabCloseButton() {
+  if (!m_notebook) {
+    return;
+  }
+  long style = m_notebook->GetWindowStyleFlag();
+  if (m_config.GetShowCloseButton()) {
+    style |= wxAUI_NB_CLOSE_ON_ALL_TABS;
+  } else {
+    style &= ~wxAUI_NB_CLOSE_ON_ALL_TABS;
+  }
+  m_notebook->SetWindowStyleFlag(style);
+  m_notebook->Refresh();
 }
 
 void MyFrame::UpdateSafeDrawingMenuCheck() {
@@ -779,6 +798,9 @@ void MyFrame::OnSettings(wxCommandEvent &event) {
   if (dlg.ShowModal() == wxID_OK) {
     m_config.SetTheme(dlg.GetThemeName(), dlg.GetTheme());
     m_config.SetThemeName(dlg.GetThemeName());
+    m_config.SetNewTabTitle(dlg.GetNewTabTitle());
+    m_config.SetShowCloseButton(dlg.GetShowCloseButton());
+    ApplyTabCloseButton();
     PersistSettings();
     ApplyThemeToAllTabs();
   }
