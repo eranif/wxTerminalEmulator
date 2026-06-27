@@ -5,7 +5,6 @@
 // The wxAUI layout serializer header (wx/aui/serializer.h) is pulled in
 // conditionally by layout_persistence.h on wxWidgets 3.3.0+.
 
-static const wxString kDefaultTerminalLabel = _("Terminal");
 namespace {
 bool IsDark(const wxColour &c) {
   // Perceived luminance (ITU-R BT.601)
@@ -125,7 +124,7 @@ void MyFrame::SaveLayout() {
     info.shellCommand = terminal->GetShellCommand();
     info.workingDirectory = terminal->GetWorkingDirectory();
     info.customLabel = terminal->GetCustomLabel().empty()
-                           ? kDefaultTerminalLabel
+                           ? m_config.GetNewTabTitle()
                            : terminal->GetCustomLabel();
     tabs.push_back(std::move(info));
   }
