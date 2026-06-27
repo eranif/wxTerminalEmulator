@@ -436,7 +436,7 @@ void MyFrame::UpdateSafeDrawingMenuCheck() {
       optionsMenu->Enable(ID_SafeDrawing, false);
       optionsMenu->Check(ID_SafeDrawing, true);
 #else
-      optionsMenu->Check(ID_SafeDrawing, m_safeDrawingEnabled);
+      optionsMenu->Check(ID_SafeDrawing, m_config.IsSafeDrawingEnabled());
 #endif
     }
   }
