@@ -183,6 +183,9 @@ bool AppPersistence::Load(AppConfig &config) {
       } else if (key == "showclosebutton") {
         config.SetShowCloseButton(value == "1" || value == "true" ||
                                   value == "yes" || value == "on");
+      } else if (key == "blockcursor") {
+        config.SetBlockCursor(value == "1" || value == "true" ||
+                              value == "yes" || value == "on");
       }
     } else if (section == Section::kTheme) {
       if (key == "name") {
@@ -222,6 +225,8 @@ bool AppPersistence::Save(const AppConfig &config) {
   file.AddLine("newtabtitle=" + config.GetNewTabTitle());
   file.AddLine(wxString::Format("showclosebutton=%s",
                                 config.GetShowCloseButton() ? "true" : "false"));
+  file.AddLine(wxString::Format("blockcursor=%s",
+                                config.GetBlockCursor() ? "true" : "false"));
   file.AddLine("font=" + config.GetFont().GetNativeFontInfoDesc());
   file.AddLine(wxString::Format(
       "safedrawing=%s", config.IsSafeDrawingEnabled() ? "true" : "false"));

@@ -90,10 +90,19 @@ SettingsBaseDlg::SettingsBaseDlg(wxWindow *parent, wxWindowID id,
   flexGridSizer172->Add(m_checkBoxCloseButton, 0, wxALL | wxEXPAND,
                         WXC_FROM_DIP(5));
 
+  flexGridSizer172->Add(0, 0, 1, wxALL, WXC_FROM_DIP(5));
+
+  m_checkBoxBlockCursor = new wxCheckBox(
+      m_panel171, wxID_ANY, _("Use Block Cursor"), wxDefaultPosition,
+      wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
+  m_checkBoxBlockCursor->SetValue(true);
+
+  flexGridSizer172->Add(m_checkBoxBlockCursor, 0, wxALL, WXC_FROM_DIP(5));
+
   m_panel133 =
       new wxPanel(m_notebook132, wxID_ANY, wxDefaultPosition,
                   wxDLG_UNIT(m_notebook132, wxSize(-1, -1)), wxTAB_TRAVERSAL);
-  m_notebook132->AddPage(m_panel133, _("Theme"), false);
+  m_notebook132->AddPage(m_panel133, _("Colours"), false);
 
   wxBoxSizer *boxSizer149 = new wxBoxSizer(wxVERTICAL);
   m_panel133->SetSizer(boxSizer149);

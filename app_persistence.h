@@ -50,6 +50,9 @@ struct AppConfig {
   void SetShowCloseButton(bool show) { showCloseButton = show; }
   bool GetShowCloseButton() const { return showCloseButton; }
 
+  void SetBlockCursor(bool block) { blockCursor = block; }
+  bool GetBlockCursor() const { return blockCursor; }
+
 private:
   wxString themeName{"dark"};
   std::map<wxString, wxTerminalTheme> themes;
@@ -57,6 +60,7 @@ private:
   wxString newTabTitle{"Terminal"};
   bool safeDrawingEnabled{false};
   bool showCloseButton{true};
+  bool blockCursor{true};
 };
 
 class AppPersistence {

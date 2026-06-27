@@ -53,6 +53,7 @@ protected:
   wxStaticText *m_staticText173;
   wxTextCtrl *m_textCtrlTitle;
   wxCheckBox *m_checkBoxCloseButton;
+  wxCheckBox *m_checkBoxBlockCursor;
   wxPanel *m_panel133;
   wxStaticText *m_staticText146;
   wxChoice *m_choiceNames;
@@ -100,6 +101,7 @@ public:
   wxStaticText *GetStaticText173() { return m_staticText173; }
   wxTextCtrl *GetTextCtrlTitle() { return m_textCtrlTitle; }
   wxCheckBox *GetCheckBoxCloseButton() { return m_checkBoxCloseButton; }
+  wxCheckBox *GetCheckBoxBlockCursor() { return m_checkBoxBlockCursor; }
   wxPanel *GetPanel171() { return m_panel171; }
   wxStaticText *GetStaticText146() { return m_staticText146; }
   wxChoice *GetChoiceNames() { return m_choiceNames; }

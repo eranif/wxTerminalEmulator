@@ -376,34 +376,36 @@ void MyFrame::OnCloseTab(wxCommandEvent &event) {
   m_notebook->DeletePage(static_cast<size_t>(currentTabIndex));
 }
 
-void MyFrame::ApplyThemeToAllTabs() {
+void MyFrame::ApplySettings() {
   if (!m_notebook) {
     return;
   }
-  auto theme = m_config.GetActiveTheme();
-  theme.isBlockCursor = true;
-  for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
-    if (auto *view =
-            dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetPage(i))) {
-      view->SetTheme(theme);
-      view->Refresh();
-    }
-  }
-}
 
-void MyFrame::ApplyFontToAllTabs() {
-  if (!m_notebook) {
-    return;
+  // Theme and font
+  auto theme = m_config.GetActiveTheme();
+  theme.isBlockCursor = m_config.GetBlockCursor();
+  if (m_config.GetFont().IsOk()) {
+    theme.font = m_config.GetFont();
   }
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
     if (auto *view =
             dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetPage(i))) {
-      wxTerminalTheme theme = view->GetTheme();
-      theme.font = m_config.GetFont();
       view->SetTheme(theme);
+      view->EnableSafeDrawing(m_config.IsSafeDrawingEnabled());
       view->Refresh();
     }
   }
+
+  // Tab close button
+  long style = m_notebook->GetWindowStyleFlag();
+  style &= ~(wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS);
+  if (m_config.GetShowCloseButton()) {
+    style |= wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS;
+  }
+  m_notebook->SetWindowStyleFlag(style);
+  m_notebook->Refresh();
+
+  UpdateSafeDrawingMenuCheck();
 }
 
 wxTerminalViewCtrl *MyFrame::GetActiveTerminalView() const {
@@ -429,33 +431,6 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   return page;
 }
 
-void MyFrame::ApplySafeDrawingToAllTabs() {
-  if (!m_notebook) {
-    return;
-  }
-  for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
-    if (auto *view =
-            dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetPage(i))) {
-      view->EnableSafeDrawing(m_config.IsSafeDrawingEnabled());
-      view->Refresh();
-    }
-  }
-}
-
-void MyFrame::ApplyTabCloseButton() {
-  if (!m_notebook) {
-    return;
-  }
-  long style = m_notebook->GetWindowStyleFlag();
-  if (m_config.GetShowCloseButton()) {
-    style |= wxAUI_NB_CLOSE_ON_ALL_TABS;
-  } else {
-    style &= ~wxAUI_NB_CLOSE_ON_ALL_TABS;
-  }
-  m_notebook->SetWindowStyleFlag(style);
-  m_notebook->Refresh();
-}
-
 void MyFrame::UpdateSafeDrawingMenuCheck() {
   if (auto *menuBar = GetMenuBar()) {
     auto *optionsMenu = menuBar->GetMenu(1);
@@ -475,7 +450,7 @@ void MyFrame::ApplyThemeToTab(wxTerminalViewCtrl *view) {
     return;
   }
   auto theme = m_config.GetActiveTheme();
-  theme.isBlockCursor = true;
+  theme.isBlockCursor = m_config.GetBlockCursor();
   view->SetTheme(theme);
 }
 
@@ -508,7 +483,7 @@ void MyFrame::OnChangeFont(wxCommandEvent &event) {
     return;
   }
   m_config.SetFont(dlg.GetFontData().GetChosenFont());
-  ApplyFontToAllTabs();
+  ApplySettings();
   PersistSettings();
 }
 
@@ -538,7 +513,7 @@ void MyFrame::OnCenterLine(wxCommandEvent &event) {
 
 void MyFrame::OnSafeDrawing(wxCommandEvent &event) {
   m_config.SetSafeDrawingEnabled(event.IsChecked());
-  ApplySafeDrawingToAllTabs();
+  ApplySettings();
   PersistSettings();
 }
 
@@ -800,8 +775,8 @@ void MyFrame::OnSettings(wxCommandEvent &event) {
     m_config.SetThemeName(dlg.GetThemeName());
     m_config.SetNewTabTitle(dlg.GetNewTabTitle());
     m_config.SetShowCloseButton(dlg.GetShowCloseButton());
-    ApplyTabCloseButton();
+    m_config.SetBlockCursor(dlg.GetBlockCursor());
+    ApplySettings();
     PersistSettings();
-    ApplyThemeToAllTabs();
   }
 }

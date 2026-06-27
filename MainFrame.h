@@ -169,13 +169,10 @@ public:
   void OnNextTab(wxCommandEvent &event);
   void OnPreviousTab(wxCommandEvent &event);
   void OnCloseTab(wxCommandEvent &event);
-  void ApplyThemeToAllTabs();
-  void ApplyFontToAllTabs();
+  void ApplySettings();
   wxTerminalViewCtrl *GetActiveTerminalView() const;
   MyTerminal *CreateTerminalPage(const TerminalPageConfig &config,
                                  bool selectIt);
-  void ApplySafeDrawingToAllTabs();
-  void ApplyTabCloseButton();
   void UpdateSafeDrawingMenuCheck();
   void ApplyThemeToTab(wxTerminalViewCtrl *view);
   void OnNewTerminal(wxCommandEvent &event);

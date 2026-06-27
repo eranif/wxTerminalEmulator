@@ -13,6 +13,7 @@ public:
   wxString GetThemeName() const { return m_choiceNames->GetStringSelection(); }
   wxString GetNewTabTitle() const { return m_textCtrlTitle->GetValue(); }
   bool GetShowCloseButton() const { return m_checkBoxCloseButton->GetValue(); }
+  bool GetBlockCursor() const { return m_checkBoxBlockCursor->GetValue(); }
 
 protected:
   void OnBackgroundColour(wxColourPickerEvent &event) override;
