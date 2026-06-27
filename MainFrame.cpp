@@ -449,6 +449,7 @@ void MyFrame::ApplyThemeToTab(wxTerminalViewCtrl *view) {
   }
   auto theme = m_config.GetActiveTheme();
   theme.isBlockCursor = m_config.GetBlockCursor();
+  theme.font = m_config.GetFont();
   view->SetTheme(theme);
 }
 
