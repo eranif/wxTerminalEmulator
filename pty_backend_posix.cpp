@@ -71,14 +71,23 @@ bool PosixPtyBackend::Start(const std::string &command,
   bool hasEnv = environment.has_value();
   if (hasEnv) {
     TLOG_INFO() << "Starting with env: " << *environment << std::endl;
-    envp.reserve(environment->size() + 2);
+    envp.reserve(environment->size() + 4);
+    bool hasLang = false;
+    bool hasLcCtype = false;
     for (const auto &entry : *environment) {
       if (entry.starts_with("TERM="))
         continue;
+      if (entry.starts_with("LANG="))
+        hasLang = true;
+      if (entry.starts_with("LC_CTYPE="))
+        hasLcCtype = true;
       envp.push_back(const_cast<char *>(entry.c_str()));
     }
     static constexpr char kTermEnv[] = "TERM=xterm-256color";
+    static constexpr char kLangEnv[] = "LANG=en_US.UTF-8";
     envp.push_back(const_cast<char *>(kTermEnv));
+    if (!hasLang && !hasLcCtype)
+      envp.push_back(const_cast<char *>(kLangEnv));
     envp.push_back(nullptr);
   }
 
@@ -100,6 +109,10 @@ bool PosixPtyBackend::Start(const std::string &command,
       if (::chdir(workingDirectory->c_str()) != 0) {
         _exit(127);
       }
+    }
+
+    if (!getenv("LANG") && !getenv("LC_CTYPE")) {
+      setenv("LANG", "en_US.UTF-8", 0);
     }
 
     if (hasEnv) {
