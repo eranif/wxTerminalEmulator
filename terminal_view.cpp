@@ -2281,10 +2281,9 @@ void wxTerminalViewCtrl::Copy() {
       }
       line += wxUniChar(row[x].ch);
     }
-    // A line that fills the full terminal width was likely soft-wrapped
-    // (continuation of previous line) rather than ended by a hard newline.
-    bool softWrapped = (startCol == 0 && endCol == cols - 1 &&
-                        row[cols - 1].ch != U' ');
+    // A line whose last cell (at terminal width) is non-space was likely
+    // soft-wrapped rather than ended by a hard newline.
+    bool softWrapped = (endCol == cols - 1 && row[cols - 1].ch != U' ');
     line.Trim();
     selection += line;
     if (absY != e.y && !softWrapped) {
@@ -2523,8 +2522,63 @@ void wxTerminalViewCtrl::OnMouseLeftDoubleClick(wxMouseEvent &evt) {
   // SelectionRectFromMousePoint returns a wxRect in view cell coords:
   // x=startCol, y=row, width=count, height=1
   wxRect r = res.value();
-  m_mouseSelection.anchor = {r.GetLeft(), r.GetTop()};
-  m_mouseSelection.current = {r.GetRight(), r.GetBottom()};
+  int startCol = r.GetLeft();
+  int startRow = r.GetTop();
+  int endCol = r.GetRight();
+  int endRow = r.GetBottom();
+
+  int cols = static_cast<int>(m_core.Cols());
+  int totalViewRows = static_cast<int>(m_core.TotalLines() - m_core.ViewStart());
+
+  // Expand right across soft-wrapped lines.
+  while (endCol >= cols - 1 && endRow + 1 < totalViewRows) {
+    auto curRow = m_core.ViewBufferRow(endRow);
+    if (curRow.empty() || curRow[cols - 1].ch == U' ') {
+      break;
+    }
+    auto nextRow = m_core.ViewBufferRow(endRow + 1);
+    if (nextRow.empty()) {
+      break;
+    }
+    endRow++;
+    bool advanced = false;
+    for (int x = 0; x < static_cast<int>(nextRow.size()); x++) {
+      wxUniChar ch{nextRow[x].ch};
+      if (m_selectionDelimChars.contains(ch)) {
+        break;
+      }
+      endCol = x;
+      advanced = true;
+    }
+    if (!advanced || endCol < cols - 1) {
+      break;
+    }
+  }
+
+  // Expand left across soft-wrapped lines.
+  while (startCol == 0 && startRow > 0) {
+    auto prevRow = m_core.ViewBufferRow(startRow - 1);
+    if (prevRow.empty() || static_cast<int>(prevRow.size()) < cols ||
+        prevRow[cols - 1].ch == U' ') {
+      break;
+    }
+    startRow--;
+    bool advanced = false;
+    for (int x = static_cast<int>(prevRow.size()) - 1; x >= 0; x--) {
+      wxUniChar ch{prevRow[x].ch};
+      if (m_selectionDelimChars.contains(ch)) {
+        break;
+      }
+      startCol = x;
+      advanced = true;
+    }
+    if (!advanced || startCol > 0) {
+      break;
+    }
+  }
+
+  m_mouseSelection.anchor = {startCol, startRow};
+  m_mouseSelection.current = {endCol, endRow};
   m_mouseSelection.viewStart = m_core.ViewStart();
   m_mouseSelection.active = true;
   RefreshView();
