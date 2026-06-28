@@ -349,10 +349,16 @@ TerminalGLRenderer::GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,
     return it->second;
   }
 
-  const wxFont &font = (bold && underlined)  ? m_fontBoldUnderlined
-                       : bold                ? m_fontBold
-                       : underlined          ? m_fontUnderlined
-                                             : m_fontRegular;
+  bool preferFallback = m_fontFallback.IsOk() &&
+                        (ch >= 0x10000 ||
+                         (ch >= 0x2600 && ch <= 0x27BF) ||
+                         (ch >= 0x1F300 && ch <= 0x1FAFF));
+
+  const wxFont &font = preferFallback ? m_fontFallback
+                       : (bold && underlined)  ? m_fontBoldUnderlined
+                       : bold                  ? m_fontBold
+                       : underlined            ? m_fontUnderlined
+                                               : m_fontRegular;
 
   const int cellWPhys =
       std::max(1, static_cast<int>(std::ceil(cellW * m_scale)));
@@ -361,9 +367,6 @@ TerminalGLRenderer::GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,
 
   GlyphInfo info =
       RasterizeAndPack(ch, font, cellWPhys, cellHPhys, m_scale);
-  if (!info.ok && m_fontFallback.IsOk() && ch > 0x7F) {
-    info = RasterizeAndPack(ch, m_fontFallback, cellWPhys, cellHPhys, m_scale);
-  }
   auto res = m_glyphs.emplace(key, info);
   return res.first->second;
 }

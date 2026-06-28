@@ -668,7 +668,7 @@ void wxTerminalViewCtrl::DebugDumpViewArea(TerminalLogLevel log_level,
         if (cell.IsEmpty()) {
           line.append(1, '_');
         } else {
-          line.append(1, cell.ch);
+          line += wxString(wxUniChar(cell.ch)).ToUTF8();
         }
       }
       wxString line_utf8 = wxString::FromUTF8(line);
@@ -749,7 +749,7 @@ wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
 
     CellInfo info;
     info.colIdx = colIdx;
-    info.ch = static_cast<wxChar>(cell.ch);
+    info.ch = cell.ch;
     info.cellWidth = cell.width;
     if (isMouseSelected) {
       info.attrs.bgColor = theme.selectionBg;
@@ -771,7 +771,7 @@ wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
   return result;
 }
 
-bool wxTerminalViewCtrl::IsUnicodeSingleCellSafe(wxChar ch) const {
+bool wxTerminalViewCtrl::IsUnicodeSingleCellSafe(char32_t ch) const {
   if (ch >= 0x20 && ch <= 0x7e) {
     return true;
   }
@@ -878,7 +878,7 @@ void wxTerminalViewCtrl::RenderMonotonicRow(
       current_col++;
     }
     // Add the actual cell character
-    text.Append(cell.ch);
+    text.Append(wxUniChar(cell.ch));
     current_col++;
   }
 
@@ -969,7 +969,7 @@ void wxTerminalViewCtrl::RenderRowWithGrouping(
     if (chunk_first_cell == nullptr || chunk_first_cell->HasSameAttributes(c)) {
       // Either drawing the first cell or the prev cell and the current one
       // are matching - keep collecting.
-      text.Append(c.ch);
+      text.Append(wxUniChar(c.ch));
       if (chunk_first_cell == nullptr) {
         chunk_first_cell = &c;
       }
@@ -982,7 +982,7 @@ void wxTerminalViewCtrl::RenderRowWithGrouping(
 
     // Keep batching new group
     text.Clear();
-    text.Append(c.ch);
+    text.Append(wxUniChar(c.ch));
   }
 
   if (!text.empty() && chunk_first_cell) {

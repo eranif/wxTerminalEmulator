@@ -432,7 +432,7 @@ private:
 
   struct CellInfo {
     int colIdx{wxNOT_FOUND};
-    wxChar ch{' '};
+    char32_t ch{U' '};
     unsigned int cellWidth{1}; // terminal columns spanned (2 for wide chars like emoji)
     CellAttributes attrs;
     inline bool IsUnicode() const { return ch >= 0x80; }
@@ -475,7 +475,7 @@ private:
    * points that are expected to occupy exactly one terminal cell and do not
    * require shaping across adjacent cells.
    */
-  bool IsUnicodeSingleCellSafe(wxChar ch) const;
+  bool IsUnicodeSingleCellSafe(char32_t ch) const;
 
   struct PrepareRowForDrawingResult {
     std::vector<wxTerminalViewCtrl::CellInfo> cells;
