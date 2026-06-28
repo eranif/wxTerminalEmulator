@@ -37,7 +37,7 @@ jobs:
 
     # WxWidgets
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         repository: wxWidgets/wxWidgets
         ref: ${{matrix.wx-version}}
@@ -54,7 +54,7 @@ jobs:
 
     # wx-config-msys2
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         repository: eranif/wx-config-msys2
         path: wx-config-msys2
@@ -70,7 +70,7 @@ jobs:
 
     # wxTerminalEmulator
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         submodules: recursive
 
