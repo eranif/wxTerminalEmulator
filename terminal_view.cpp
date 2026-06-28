@@ -2274,16 +2274,20 @@ void wxTerminalViewCtrl::Copy() {
     }
     int startCol = std::clamp((absY == s.y) ? s.x : 0, 0, rowSize - 1);
     int endCol = std::clamp((absY == e.y) ? e.x : cols - 1, 0, rowSize - 1);
+    wxString line;
     for (int x = startCol; x <= endCol; ++x) {
-      // Skip filler cells for wide characters — the actual character was
-      // already copied from the preceding primary cell.
       if (row[x].width == 0) {
         continue;
       }
-      selection += wxUniChar(row[x].ch);
+      line += wxUniChar(row[x].ch);
     }
-    if (absY != e.y) {
-      selection.Trim();
+    // A line that fills the full terminal width was likely soft-wrapped
+    // (continuation of previous line) rather than ended by a hard newline.
+    bool softWrapped = (startCol == 0 && endCol == cols - 1 &&
+                        row[cols - 1].ch != U' ');
+    line.Trim();
+    selection += line;
+    if (absY != e.y && !softWrapped) {
       selection += "\n";
     }
   }
