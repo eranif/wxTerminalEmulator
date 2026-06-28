@@ -515,6 +515,7 @@ private:
   wxFont m_defaultFontBold;
   wxFont m_defaultFontUnderlined;
   wxFont m_defaultFontBoldUnderlined;
+  wxFont m_fallbackFont;
   int m_charW{0};
   int m_charH{0};
   bool m_contextMenuShowing{false};

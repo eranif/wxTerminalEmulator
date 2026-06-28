@@ -210,6 +210,18 @@ void TerminalGLRenderer::SetFonts(const wxFont &regular, const wxFont &bold,
   m_fontBold = bold;
   m_fontUnderlined = underlined;
   m_fontBoldUnderlined = boldUnderlined;
+
+#ifdef __WXMSW__
+  m_fontFallback = wxFont(regular.GetPointSize(), wxFONTFAMILY_DEFAULT,
+                          wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, false,
+                          "Segoe UI Emoji");
+#elif defined(__WXGTK__)
+  m_fontFallback = wxFont(regular.GetPointSize(), wxFONTFAMILY_DEFAULT,
+                          wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, false,
+                          "Noto Color Emoji");
+#else
+  m_fontFallback = regular;
+#endif
 }
 
 void TerminalGLRenderer::ClearGlyphCache() {
@@ -349,6 +361,9 @@ TerminalGLRenderer::GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,
 
   GlyphInfo info =
       RasterizeAndPack(ch, font, cellWPhys, cellHPhys, m_scale);
+  if (!info.ok && m_fontFallback.IsOk() && ch > 0x7F) {
+    info = RasterizeAndPack(ch, m_fontFallback, cellWPhys, cellHPhys, m_scale);
+  }
   auto res = m_glyphs.emplace(key, info);
   return res.first->second;
 }
@@ -410,6 +425,16 @@ TerminalGLRenderer::RasterizeAndPack(char32_t ch, const wxFont &font,
       const size_t srcIdx = (static_cast<size_t>(py) * w + px) * 3;
       coverage[static_cast<size_t>(py) * w + px] = rgb[srcIdx]; // red == cov
     }
+  }
+
+  // If the coverage is entirely zero the font has no glyph for this codepoint.
+  bool hasPixels = false;
+  for (size_t idx = 0; idx < coverage.size() && !hasPixels; ++idx) {
+    if (coverage[idx] > 0)
+      hasPixels = true;
+  }
+  if (!hasPixels) {
+    return info;
   }
 
   // Shelf-pack into the atlas.

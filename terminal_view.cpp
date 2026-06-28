@@ -630,6 +630,19 @@ void wxTerminalViewCtrl::UpdateFontCache() {
   m_defaultFontBoldUnderlined = m_defaultFont;
   m_defaultFontBoldUnderlined.MakeBold();
   m_defaultFontBoldUnderlined.MakeUnderlined();
+
+#ifdef __WXMSW__
+  m_fallbackFont = wxFont(m_defaultFont.GetPointSize(), wxFONTFAMILY_DEFAULT,
+                          wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, false,
+                          "Segoe UI Emoji");
+#elif defined(__WXGTK__)
+  m_fallbackFont = wxFont(m_defaultFont.GetPointSize(), wxFONTFAMILY_DEFAULT,
+                          wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, false,
+                          "Noto Color Emoji");
+#else
+  m_fallbackFont = m_defaultFont;
+#endif
+
   // Fonts changed: every row must be repainted.
   InvalidateRenderCache();
 #if USE_OPENGL
@@ -1009,14 +1022,20 @@ void wxTerminalViewCtrl::RenderRowNoGrouping(
       continue;
     }
     wxString cell_content(wxUniChar(cell.ch));
-    if (theme.isMonospaced) {
-      dc.DrawText(cell_content, x, y);
-    } else {
-      const int w = static_cast<int>(cell.cellWidth) * m_charW;
-      wxRect glyph_rect{x, y, w, m_charH};
-      wxRect text_rect{wxPoint{x, y}, dc.GetTextExtent(cell_content)};
-      text_rect = text_rect.CentreIn(glyph_rect, wxHORIZONTAL);
-      dc.DrawText(cell_content, text_rect.GetTopLeft());
+    bool useFallback = (cell.ch >= 0x10000 || (cell.ch >= 0x2600 && cell.ch <= 0x27BF) ||
+                        (cell.ch >= 0x1F300 && cell.ch <= 0x1FAFF)) &&
+                       m_fallbackFont.IsOk();
+    if (useFallback) {
+      dc.SetFont(m_fallbackFont);
+    }
+    const int w = static_cast<int>(cell.cellWidth) * m_charW;
+    wxRect glyph_rect{x, y, w, m_charH};
+    wxRect text_rect{wxPoint{x, y}, dc.GetTextExtent(cell_content)};
+    text_rect = text_rect.CentreIn(glyph_rect, wxHORIZONTAL);
+    dc.DrawText(cell_content, text_rect.GetTopLeft());
+    if (useFallback) {
+      PrepareDcForTextDrawing(dc, cell);
+      prev_cell = cell.attrs;
     }
     counters.draw_text_++;
   }

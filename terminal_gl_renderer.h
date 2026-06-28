@@ -130,6 +130,7 @@ private:
   wxFont m_fontBold;
   wxFont m_fontUnderlined;
   wxFont m_fontBoldUnderlined;
+  wxFont m_fontFallback;
   std::unordered_map<std::uint64_t, GlyphInfo> m_glyphs;
 };
 
