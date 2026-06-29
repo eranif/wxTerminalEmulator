@@ -188,7 +188,7 @@ if(BUILD_GLYPHT)
     # Copy SVG asset next to binary (Linux)
     message(STATUS "Copying glypht.svg asset file to binary directory...")
     file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht.svg"
-         DESTINATION "$<TARGET_FILE_DIR:glypht>")
+         DESTINATION "${CMAKE_BINARY_DIR}")
   else()
     # Copy SVG asset next to binary (macOS bundle)
     message(

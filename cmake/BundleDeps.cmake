@@ -3,30 +3,40 @@
 # install wxWidgets system-wide.
 #
 # Called as a post-build step via cmake -P with the following variables defined:
-#   EXECUTABLE   - Full path to the built binary (inside .app on macOS)
-#   BUNDLE_DIR   - On macOS: the .app bundle root. Others: directory of the exe.
-#   TARGET_OS    - "macos", "linux", or "windows"
-#   WX_LIB_DIR   - Directory containing wxWidgets shared libraries
+# EXECUTABLE   - Full path to the built binary (inside .app on macOS) BUNDLE_DIR
+# - On macOS: the .app bundle root. Others: directory of the exe. TARGET_OS    -
+# "macos", "linux", or "windows" WX_LIB_DIR   - Directory containing wxWidgets
+# shared libraries
 
 cmake_minimum_required(VERSION 3.10)
 
-if(NOT EXECUTABLE OR NOT BUNDLE_DIR OR NOT TARGET_OS)
-  message(FATAL_ERROR "BundleDeps.cmake requires EXECUTABLE, BUNDLE_DIR, and TARGET_OS")
+if(NOT EXECUTABLE
+   OR NOT BUNDLE_DIR
+   OR NOT TARGET_OS)
+  message(
+    FATAL_ERROR
+      "BundleDeps.cmake requires EXECUTABLE, BUNDLE_DIR, and TARGET_OS")
 endif()
 
 # Resolve a path through symlinks to the real file on disk.
 function(resolve_realpath INPUT_PATH OUT_VAR)
   get_filename_component(_RESOLVED "${INPUT_PATH}" REALPATH)
-  set(${OUT_VAR} "${_RESOLVED}" PARENT_SCOPE)
+  set(${OUT_VAR}
+      "${_RESOLVED}"
+      PARENT_SCOPE)
 endfunction()
 
-# Given an otool reference (absolute path, @rpath/..., or @loader_path/...),
-# try to find the real dylib on disk. Sets OUT_REAL to the resolved path and
+# Given an otool reference (absolute path, @rpath/..., or @loader_path/...), try
+# to find the real dylib on disk. Sets OUT_REAL to the resolved path and
 # OUT_ORIGINAL to the reference as otool printed it.  Returns empty string if
 # the lib is a system library or cannot be found.
 function(resolve_otool_ref REF SEARCH_DIRS OUT_REAL OUT_ORIGINAL)
-  set(${OUT_REAL} "" PARENT_SCOPE)
-  set(${OUT_ORIGINAL} "" PARENT_SCOPE)
+  set(${OUT_REAL}
+      ""
+      PARENT_SCOPE)
+  set(${OUT_ORIGINAL}
+      ""
+      PARENT_SCOPE)
 
   # Skip system libraries.
   if(REF MATCHES "^/System/" OR REF MATCHES "^/usr/lib/")
@@ -45,8 +55,12 @@ function(resolve_otool_ref REF SEARCH_DIRS OUT_REAL OUT_ORIGINAL)
     foreach(DIR ${SEARCH_DIRS})
       if(EXISTS "${DIR}/${LIB_FILENAME}")
         resolve_realpath("${DIR}/${LIB_FILENAME}" _REAL)
-        set(${OUT_REAL} "${_REAL}" PARENT_SCOPE)
-        set(${OUT_ORIGINAL} "${REF}" PARENT_SCOPE)
+        set(${OUT_REAL}
+            "${_REAL}"
+            PARENT_SCOPE)
+        set(${OUT_ORIGINAL}
+            "${REF}"
+            PARENT_SCOPE)
         return()
       endif()
     endforeach()
@@ -57,8 +71,12 @@ function(resolve_otool_ref REF SEARCH_DIRS OUT_REAL OUT_ORIGINAL)
   if(REF MATCHES "^/.*\\.dylib")
     resolve_realpath("${REF}" _REAL)
     if(EXISTS "${_REAL}")
-      set(${OUT_REAL} "${_REAL}" PARENT_SCOPE)
-      set(${OUT_ORIGINAL} "${REF}" PARENT_SCOPE)
+      set(${OUT_REAL}
+          "${_REAL}"
+          PARENT_SCOPE)
+      set(${OUT_ORIGINAL}
+          "${REF}"
+          PARENT_SCOPE)
     endif()
   endif()
 endfunction()
@@ -80,14 +98,13 @@ if(TARGET_OS STREQUAL "macos")
     OUTPUT_VARIABLE OTOOL_OUTPUT
     OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-  # Parse otool output into a list of references to bundle.
-  # Each otool line looks like:
-  #     /usr/local/lib/libfoo.dylib (compatibility ...)
-  # or: @rpath/libfoo.dylib (compatibility ...)
+  # Parse otool output into a list of references to bundle. Each otool line
+  # looks like: /usr/local/lib/libfoo.dylib (compatibility ...) or:
+  # @rpath/libfoo.dylib (compatibility ...)
   string(REPLACE "\n" ";" OTOOL_LINES "${OTOOL_OUTPUT}")
-  # DEPS_ORIGINALS: the reference string as otool prints it (used for install_name_tool -change)
-  # DEPS_REALS:     the resolved absolute path to the real file on disk
-  # DEPS_NAMES:     the filename to use inside Frameworks/
+  # DEPS_ORIGINALS: the reference string as otool prints it (used for
+  # install_name_tool -change) DEPS_REALS:     the resolved absolute path to the
+  # real file on disk DEPS_NAMES:     the filename to use inside Frameworks/
   set(DEPS_ORIGINALS "")
   set(DEPS_REALS "")
   set(DEPS_NAMES "")
@@ -97,8 +114,8 @@ if(TARGET_OS STREQUAL "macos")
     # Match lines that contain a dylib reference (absolute or @-prefixed).
     if(LINE MATCHES "(/[^ ]+\\.dylib|@[a-z_]+/[^ ]+\\.dylib)")
       string(REGEX REPLACE " \\(.*" "" REF "${LINE}")
-      # The very first line of otool output is the file header (path with colon),
-      # skip it.
+      # The very first line of otool output is the file header (path with
+      # colon), skip it.
       if(_IS_FIRST_LINE AND REF MATCHES ":$")
         set(_IS_FIRST_LINE FALSE)
         continue()
@@ -118,7 +135,8 @@ if(TARGET_OS STREQUAL "macos")
     endif()
   endforeach()
 
-  # Scan each dependency for its own transitive non-system deps (one level deep).
+  # Scan each dependency for its own transitive non-system deps (one level
+  # deep).
   set(TRANS_ORIGINALS "")
   set(TRANS_REALS "")
   set(TRANS_NAMES "")
@@ -179,7 +197,8 @@ if(TARGET_OS STREQUAL "macos")
     endforeach()
   endif()
 
-  # Rewrite the executable's references to point into @executable_path/../Frameworks/
+  # Rewrite the executable's references to point into
+  # @executable_path/../Frameworks/
   if(_DEP_COUNT GREATER 0)
     foreach(_I RANGE 0 ${_DEP_LAST})
       list(GET DEPS_ORIGINALS ${_I} _ORIG)
@@ -194,7 +213,8 @@ if(TARGET_OS STREQUAL "macos")
     endforeach()
   endif()
 
-  # Rewrite each bundled dylib's own install name and its references to sibling libs.
+  # Rewrite each bundled dylib's own install name and its references to sibling
+  # libs.
   if(_DEP_COUNT GREATER 0)
     foreach(_I RANGE 0 ${_DEP_LAST})
       list(GET DEPS_NAMES ${_I} _NAME)
@@ -204,7 +224,8 @@ if(TARGET_OS STREQUAL "macos")
       endif()
       # Fix its own id.
       execute_process(
-        COMMAND install_name_tool -id "@executable_path/../Frameworks/${_NAME}" "${BUNDLED}")
+        COMMAND install_name_tool -id "@executable_path/../Frameworks/${_NAME}"
+                "${BUNDLED}")
       # Fix references to other bundled libs.
       foreach(_J RANGE 0 ${_DEP_LAST})
         list(GET DEPS_ORIGINALS ${_J} _OTHER_ORIG)
@@ -218,36 +239,14 @@ if(TARGET_OS STREQUAL "macos")
 
   message(STATUS "BundleDeps: macOS bundle complete (${FRAMEWORKS_DIR})")
 
-elseif(TARGET_OS STREQUAL "linux")
-  # On Linux, copy .so files to a lib/ directory beside the binary and rely on
-  # RPATH ($ORIGIN/../lib) set at link time.
-  get_filename_component(BIN_DIR "${EXECUTABLE}" DIRECTORY)
-  set(LIB_DIR "${BIN_DIR}/../lib")
-  file(MAKE_DIRECTORY "${LIB_DIR}")
-
-  if(NOT WX_LIB_DIR OR NOT EXISTS "${WX_LIB_DIR}")
-    message(WARNING "BundleDeps: WX_LIB_DIR not set or does not exist, skipping Linux bundling")
-    return()
-  endif()
-
-  file(GLOB WX_LIBS "${WX_LIB_DIR}/libwx_*.so*")
-  foreach(LIB ${WX_LIBS})
-    get_filename_component(LIB_NAME "${LIB}" NAME)
-    file(COPY "${LIB}" DESTINATION "${LIB_DIR}"
-         FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-    message(STATUS "Bundled: ${LIB_NAME}")
-  endforeach()
-
-  message(STATUS "BundleDeps: Linux bundle complete (${LIB_DIR})")
-
 elseif(TARGET_OS STREQUAL "windows")
   # On Windows (MINGW), copy DLLs next to the executable.
   get_filename_component(BIN_DIR "${EXECUTABLE}" DIRECTORY)
 
   file(MAKE_DIRECTORY "${BIN_DIR}")
 
-  # Build the list of directories to search for DLLs.
-  # Search the MSYS2 toolchain bin dir for MinGW runtime, GLEW, etc.
+  # Build the list of directories to search for DLLs. Search the MSYS2 toolchain
+  # bin dir for MinGW runtime, GLEW, etc.
   set(_SEARCH_DIRS "")
   if(CLANG64_BIN AND EXISTS "${CLANG64_BIN}")
     list(APPEND _SEARCH_DIRS "${CLANG64_BIN}")
@@ -255,33 +254,52 @@ elseif(TARGET_OS STREQUAL "windows")
 
   # Walk all transitive runtime dependencies of the executable.
   # PRE_INCLUDE_REGEXES / PRE_EXCLUDE_REGEXES filter which DLL names are even
-  # considered before path resolution.
-  # POST_EXCLUDE_REGEXES drops Windows system DLLs after resolution.
-  file(GET_RUNTIME_DEPENDENCIES
-    EXECUTABLES "${EXECUTABLE}"
-    RESOLVED_DEPENDENCIES_VAR   _RESOLVED
-    UNRESOLVED_DEPENDENCIES_VAR _UNRESOLVED
-    DIRECTORIES ${_SEARCH_DIRS}
+  # considered before path resolution. POST_EXCLUDE_REGEXES drops Windows system
+  # DLLs after resolution.
+  file(
+    GET_RUNTIME_DEPENDENCIES
+    EXECUTABLES
+    "${EXECUTABLE}"
+    RESOLVED_DEPENDENCIES_VAR
+    _RESOLVED
+    UNRESOLVED_DEPENDENCIES_VAR
+    _UNRESOLVED
+    DIRECTORIES
+    ${_SEARCH_DIRS}
     PRE_EXCLUDE_REGEXES
-      "^api-ms-win-.*"        # API sets — always system
-      "^ext-ms-win-.*"        # Extension API sets
-      "^wx.*\\.dll$"          # wxWidgets DLLs — copied explicitly in Step 1
+    "^api-ms-win-.*" # API sets — always system
+    "^ext-ms-win-.*" # Extension API sets
+    "^wx.*\\.dll$" # wxWidgets DLLs — copied explicitly in Step 1
     POST_EXCLUDE_REGEXES
-      ".*[Ss]ystem32/.*\\.dll$"   # C:\Windows\System32\*
-      ".*[Ww]in[Ss][Xx][Ss]/.*"   # WinSxS
+    ".*[Ss]ystem32/.*\\.dll$" # C:\Windows\System32\*
+    ".*[Ww]in[Ss][Xx][Ss]/.*" # WinSxS
   )
 
   foreach(_DLL ${_RESOLVED})
     get_filename_component(_DLL_NAME "${_DLL}" NAME)
     file(COPY "${_DLL}" DESTINATION "${BIN_DIR}")
-    message(STATUS "Bundled: ${_DLL_NAME}")
+    message(STATUS "Bundled:
+      ${_DLL_NAME}")
   endforeach()
 
   if(_UNRESOLVED)
     foreach(_U ${_UNRESOLVED})
-      message(WARNING "BundleDeps: could not resolve ${_U}")
+      message(
+        WARNING
+          "BundleDeps:
+      could
+      not
+      resolve
+      ${_U}")
     endforeach()
   endif()
 
-  message(STATUS "BundleDeps: Windows bundle complete (${BIN_DIR})")
+  message(
+    STATUS
+      "BundleDeps:
+      Windows
+      bundle
+      complete
+      (${BIN_DIR})
+      ")
 endif()
