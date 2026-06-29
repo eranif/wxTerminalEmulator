@@ -99,7 +99,8 @@ bool TerminalGLRenderer::Init() {
   if (!s_glewInitialized) {
     GLenum err = glewInit();
     if (err != GLEW_OK) {
-      TLOG_ERROR() << "glewInit failed: " << glewGetErrorString(err) << std::endl;
+      TLOG_ERROR() << "glewInit failed: " << glewGetErrorString(err)
+                   << std::endl;
       return false;
     }
     s_glewInitialized = true;
@@ -212,13 +213,13 @@ void TerminalGLRenderer::SetFonts(const wxFont &regular, const wxFont &bold,
   m_fontBoldUnderlined = boldUnderlined;
 
 #ifdef __WXMSW__
-  m_fontFallback = wxFont(regular.GetPointSize(), wxFONTFAMILY_DEFAULT,
-                          wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, false,
-                          "Segoe UI Emoji");
+  m_fontFallback =
+      wxFont(regular.GetPointSize(), wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
+             wxFONTWEIGHT_NORMAL, false, "Segoe UI Emoji");
 #elif defined(__WXGTK__)
-  m_fontFallback = wxFont(regular.GetPointSize(), wxFONTFAMILY_DEFAULT,
-                          wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, false,
-                          "Noto Color Emoji");
+  m_fontFallback =
+      wxFont(regular.GetPointSize(), wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
+             wxFONTWEIGHT_NORMAL, false, "Noto Color Emoji");
 #else
   m_fontFallback = regular;
 #endif
@@ -349,24 +350,27 @@ TerminalGLRenderer::GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,
     return it->second;
   }
 
+#if 0
   bool preferFallback = m_fontFallback.IsOk() &&
                         (ch >= 0x10000 ||
                          (ch >= 0x2600 && ch <= 0x27BF) ||
                          (ch >= 0x1F300 && ch <= 0x1FAFF));
+#else
+  bool preferFallback{false};
+#endif
 
-  const wxFont &font = preferFallback ? m_fontFallback
-                       : (bold && underlined)  ? m_fontBoldUnderlined
-                       : bold                  ? m_fontBold
-                       : underlined            ? m_fontUnderlined
-                                               : m_fontRegular;
+  const wxFont &font = preferFallback         ? m_fontFallback
+                       : (bold && underlined) ? m_fontBoldUnderlined
+                       : bold                 ? m_fontBold
+                       : underlined           ? m_fontUnderlined
+                                              : m_fontRegular;
 
   const int cellWPhys =
       std::max(1, static_cast<int>(std::ceil(cellW * m_scale)));
   const int cellHPhys =
       std::max(1, static_cast<int>(std::ceil(cellH * m_scale)));
 
-  GlyphInfo info =
-      RasterizeAndPack(ch, font, cellWPhys, cellHPhys, m_scale);
+  GlyphInfo info = RasterizeAndPack(ch, font, cellWPhys, cellHPhys, m_scale);
   auto res = m_glyphs.emplace(key, info);
   return res.first->second;
 }
@@ -492,8 +496,7 @@ void TerminalGLRenderer::EndFrame() {
     glBufferData(GL_ARRAY_BUFFER,
                  static_cast<GLsizeiptr>(m_solidVerts.size() * sizeof(Vertex)),
                  m_solidVerts.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0,
-                 static_cast<GLsizei>(m_solidVerts.size()));
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_solidVerts.size()));
   }
 
   // Pass 2: textured glyph quads.
@@ -505,8 +508,7 @@ void TerminalGLRenderer::EndFrame() {
     glBufferData(GL_ARRAY_BUFFER,
                  static_cast<GLsizeiptr>(m_glyphVerts.size() * sizeof(Vertex)),
                  m_glyphVerts.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0,
-                 static_cast<GLsizei>(m_glyphVerts.size()));
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_glyphVerts.size()));
   }
 
   glBindVertexArray(0);
