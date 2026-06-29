@@ -44,12 +44,12 @@ static wxString GetAppIconPath() {
   wxFileName bundleIconPath = iconPath;
   bundleIconPath.RemoveLastDir();
   bundleIconPath.AppendDir("Resources");
-  bundleIconPath.SetFullName("wxterminal.svg");
+  bundleIconPath.SetFullName("glypht.svg");
   if (wxFileExists(bundleIconPath.GetFullPath())) {
     return bundleIconPath.GetFullPath();
   }
 #endif
-  iconPath.SetFullName("wxterminal.svg");
+  iconPath.SetFullName("glypht.svg");
   return iconPath.GetFullPath();
 }
 

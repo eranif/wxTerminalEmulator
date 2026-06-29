@@ -184,7 +184,7 @@ bool SaveLayoutFile(const std::vector<LayoutPersistence::TabInfo> &tabs,
     return false;
   }
 
-  file.AddLine("# wxTerminalEmulator window layout - generated file");
+  file.AddLine("# GlyphT window layout - generated file");
   if (!activeTitle.empty()) {
     file.AddLine("active=" + Encode(activeTitle));
   }

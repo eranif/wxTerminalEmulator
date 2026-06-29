@@ -17,9 +17,9 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
                  const std::optional<EnvironmentList> &environment,
                  std::optional<wxString> workingDirectory)
 #if USE_OPENGL
-    : wxFrame(nullptr, wxID_ANY, "wxTerminalEmulator (OpenGL)") {
+    : wxFrame(nullptr, wxID_ANY, "GlyphT (OpenGL)") {
 #else
-    : wxFrame(nullptr, wxID_ANY, "wxTerminalEmulator") {
+    : wxFrame(nullptr, wxID_ANY, "GlyphT") {
 #endif
   SetIcons(LoadAppIcons());
   wxString shellCommand;

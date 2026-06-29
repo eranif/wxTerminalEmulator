@@ -7,7 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/FindWxWidgetsMSYS.cmake)
 
-option(BUILD_WXTERMINAL_DEMO "Build the wxterminal demo application" ON)
+option(BUILD_GLYPHT "Build the GlyphT Terminal Application" ON)
 
 # Find OpenGL (required by wxWidgets)
 if(WIN32)
@@ -58,36 +58,43 @@ else()
   find_package(wxWidgets REQUIRED COMPONENTS ${WX_COMPONENTS})
 endif()
 
-if(CMAKE_BUILD_TYPE MATCHES Release)
-  add_compile_definitions(wxDEBUG_LEVEL=0)
-endif()
+add_compile_definitions(wxDEBUG_LEVEL=0)
 
 # Build libtsm
 add_subdirectory(libtsm)
 
 # Source files
-set(LIB_SOURCES terminal_core.cpp terminal_logger.cpp terminal_view.cpp
-                terminal_event.cpp terminal_gl_renderer.cpp)
+set(LIB_SOURCES
+    ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_core.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_logger.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_view.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_event.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_gl_renderer.cpp)
 
-set(EXAMPLE_SOURCES
-    main.cpp
-    app_persistence.cpp
-    layout_persistence.cpp
-    MainFrame.cpp
-    wxTerminalUI.cpp
-    SettingsDlg.cpp
-    wxTerminalUI_wxterminalemulator_bitmaps.cpp)
+set(GLYPHT_SOURCES
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/main.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/app_persistence.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/layout_persistence.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/MainFrame.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/wxTerminalUI.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/SettingsDlg.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/wxTerminalUI_wxterminalemulator_bitmaps.cpp
+)
 
 if(MINGW)
-  list(APPEND EXAMPLE_SOURCES wx.rc)
+  list(APPEND GLYPHT_SOURCES wx.rc)
 endif()
 
 if(WIN32)
-  list(APPEND LIB_SOURCES pty_backend_windows.cpp)
-  list(APPEND HEADER_SOURCES pty_backend_windows.h)
+  list(APPEND LIB_SOURCES
+       ${CMAKE_CURRENT_LIST_DIR}/src/lib/pty_backend_windows.cpp)
+  list(APPEND HEADER_SOURCES
+       ${CMAKE_CURRENT_LIST_DIR}/src/lib/pty_backend_windows.h)
 else()
-  list(APPEND LIB_SOURCES pty_backend_posix.cpp)
-  list(APPEND HEADER_SOURCES pty_backend_posix.h)
+  list(APPEND LIB_SOURCES
+       ${CMAKE_CURRENT_LIST_DIR}/src/lib/pty_backend_posix.cpp)
+  list(APPEND HEADER_SOURCES
+       ${CMAKE_CURRENT_LIST_DIR}/src/lib/pty_backend_posix.h)
 endif()
 
 # Common headers can be listed here if needed
@@ -95,6 +102,10 @@ set(HEADER_SOURCES)
 
 # Create library
 add_library(wxterminal_lib STATIC ${LIB_SOURCES} ${HEADER_SOURCES})
+target_include_directories(wxterminal_lib PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+target_include_directories(wxterminal_lib
+                           PUBLIC ${CMAKE_CURRENT_LIST_DIR}/src/lib)
+
 target_link_libraries(wxterminal_lib PUBLIC ${wxWidgets_LIBRARIES} tsm)
 if(APPLE)
   add_compile_definitions(wxDEBUG_LEVEL=0)
@@ -129,29 +140,29 @@ endif()
 set_target_properties(wxterminal_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Create example program
-if(BUILD_WXTERMINAL_DEMO)
+if(BUILD_GLYPHT)
   if(MINGW)
-    add_executable(wxterminal WIN32 ${EXAMPLE_SOURCES})
+    add_executable(glypht WIN32 ${GLYPHT_SOURCES})
   elseif(APPLE)
     set(MACOSX_BUNDLE_ICON_FILE icon.icns)
     set(APP_ICON "${CMAKE_CURRENT_LIST_DIR}/assets/icon.icns")
     set_source_files_properties(${APP_ICON} PROPERTIES MACOSX_PACKAGE_LOCATION
                                                        Resources)
-    add_executable(wxterminal MACOSX_BUNDLE ${EXAMPLE_SOURCES} ${APP_ICON})
+    add_executable(glypht MACOSX_BUNDLE ${GLYPHT_SOURCES} ${APP_ICON})
     set_target_properties(
-      wxterminal PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns
-                            MACOSX_BUNDLE_BUNDLE_NAME "wxTerminalEmulator")
+      glypht PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns
+                        MACOSX_BUNDLE_BUNDLE_NAME "GlyphT")
   else()
-    add_executable(wxterminal ${EXAMPLE_SOURCES})
+    add_executable(glypht ${GLYPHT_SOURCES})
   endif()
 
-  target_link_libraries(wxterminal PRIVATE wxterminal_lib)
+  target_link_libraries(glypht PRIVATE wxterminal_lib)
 
   # Platform specific settings
   if(WIN32)
-    target_compile_definitions(wxterminal PRIVATE __WXMSW__)
+    target_compile_definitions(glypht PRIVATE __WXMSW__)
     set_target_properties(
-      wxterminal
+      glypht
       PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/install/bin"
                  RUNTIME_OUTPUT_DIRECTORY_RELEASE
                  "${CMAKE_BINARY_DIR}/install/bin"
@@ -160,29 +171,28 @@ if(BUILD_WXTERMINAL_DEMO)
     set(_WIN_EXTRA_LIBS shell32 ole32 user32)
 
     # Copy SVG asset next to binary (Windows only)
-    message(
-      STATUS "Copying wxterminal-msw.svg asset file to binary directory...")
-    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/wxterminal-msw.svg"
+    message(STATUS "Copying glypht-msw.svg asset file to binary directory...")
+    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht-msw.svg"
          DESTINATION "${CMAKE_BINARY_DIR}/install/bin/")
-    file(RENAME "${CMAKE_BINARY_DIR}/install/bin/wxterminal-msw.svg"
-         "${CMAKE_BINARY_DIR}/install/bin/wxterminal.svg")
+    file(RENAME "${CMAKE_BINARY_DIR}/install/bin/glypht-msw.svg"
+         "${CMAKE_BINARY_DIR}/install/bin/glypht.svg")
 
     if(USE_OPENGL)
       list(APPEND _WIN_EXTRA_LIBS opengl32)
     endif()
-    target_link_libraries(wxterminal PRIVATE ${wxWidgets_LIBRARIES}
-                                             ${_WIN_EXTRA_LIBS})
+    target_link_libraries(glypht PRIVATE ${wxWidgets_LIBRARIES}
+                                         ${_WIN_EXTRA_LIBS})
   elseif(NOT APPLE)
     # Linux needs libutil for forkpty
-    target_link_libraries(wxterminal PRIVATE util ${wxWidgets_LIBRARIES})
+    target_link_libraries(glypht PRIVATE util ${wxWidgets_LIBRARIES})
   else()
     # Copy SVG asset next to binary (macOS bundle)
     message(
       STATUS
-        "Copying wxterminal.svg asset file to ${CMAKE_BINARY_DIR}/wxterminal.app/Contents/Resources/"
+        "Copying glypht.svg asset file to ${CMAKE_BINARY_DIR}/glypht.app/Contents/Resources/"
     )
-    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/wxterminal.svg"
-         DESTINATION "${CMAKE_BINARY_DIR}/wxterminal.app/Contents/Resources/")
+    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht.svg"
+         DESTINATION "${CMAKE_BINARY_DIR}/glypht.app/Contents/Resources/")
   endif()
 
   # ---------------------------------------------------------------------------
@@ -192,13 +202,13 @@ if(BUILD_WXTERMINAL_DEMO)
 
   if(APPLE)
     set(BUNDLE_TARGET_OS "macos")
-    set(BUNDLE_DIR "$<TARGET_BUNDLE_DIR:wxterminal>")
-    set(BUNDLE_EXE "$<TARGET_FILE:wxterminal>")
+    set(BUNDLE_DIR "$<TARGET_BUNDLE_DIR:glypht>")
+    set(BUNDLE_EXE "$<TARGET_FILE:glypht>")
     # Determine wxWidgets library directory from the first library in the list.
     list(GET wxWidgets_LIBRARIES 0 _WX_FIRST_LIB)
     get_filename_component(_WX_LIB_DIR "${_WX_FIRST_LIB}" DIRECTORY)
     add_custom_command(
-      TARGET wxterminal
+      TARGET glypht
       POST_BUILD
       COMMAND
         ${CMAKE_COMMAND} -DEXECUTABLE=${BUNDLE_EXE} -DBUNDLE_DIR=${BUNDLE_DIR}
@@ -208,19 +218,18 @@ if(BUILD_WXTERMINAL_DEMO)
       VERBATIM)
   elseif(NOT WIN32)
     # Linux: set RPATH so the binary finds libs in ../lib relative to itself.
-    set_target_properties(wxterminal PROPERTIES INSTALL_RPATH "$ORIGIN/../lib"
-                                                BUILD_RPATH "$ORIGIN/../lib")
+    set_target_properties(glypht PROPERTIES INSTALL_RPATH "$ORIGIN/../lib"
+                                            BUILD_RPATH "$ORIGIN/../lib")
     set(BUNDLE_TARGET_OS "linux")
     list(GET wxWidgets_LIBRARIES 0 _WX_FIRST_LIB)
     get_filename_component(_WX_LIB_DIR "${_WX_FIRST_LIB}" DIRECTORY)
     add_custom_command(
-      TARGET wxterminal
+      TARGET glypht
       POST_BUILD
       COMMAND
-        ${CMAKE_COMMAND} -DEXECUTABLE=$<TARGET_FILE:wxterminal>
-        -DBUNDLE_DIR=$<TARGET_FILE_DIR:wxterminal>
-        -DTARGET_OS=${BUNDLE_TARGET_OS} -DWX_LIB_DIR=${_WX_LIB_DIR} -P
-        ${BUNDLE_DEPS_SCRIPT}
+        ${CMAKE_COMMAND} -DEXECUTABLE=$<TARGET_FILE:glypht>
+        -DBUNDLE_DIR=$<TARGET_FILE_DIR:glypht> -DTARGET_OS=${BUNDLE_TARGET_OS}
+        -DWX_LIB_DIR=${_WX_LIB_DIR} -P ${BUNDLE_DEPS_SCRIPT}
       COMMENT "Bundling dependencies alongside binary"
       VERBATIM)
   else()
@@ -232,20 +241,20 @@ if(BUILD_WXTERMINAL_DEMO)
     set(_WIN_INSTALL_BIN "${CMAKE_BINARY_DIR}/install/bin")
 
     add_custom_command(
-      TARGET wxterminal
+      TARGET glypht
       POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:wx::wxmono>"
-              "$<TARGET_FILE_DIR:wxterminal>/"
-      COMMENT "Copying wxWidgets DLL next to wxterminal executable"
+              "$<TARGET_FILE_DIR:glypht>/"
+      COMMENT "Copying wxWidgets DLL next to glypht executable"
       VERBATIM)
 
     # Step 2: copy all transitive toolchain DLLs (MinGW runtime, GLEW, etc.) by
     # walking the import table of the exe against the toolchain bin dir.
     add_custom_command(
-      TARGET wxterminal
+      TARGET glypht
       POST_BUILD
       COMMAND
-        ${CMAKE_COMMAND} -DEXECUTABLE=$<TARGET_FILE:wxterminal>
+        ${CMAKE_COMMAND} -DEXECUTABLE=$<TARGET_FILE:glypht>
         -DBUNDLE_DIR=${_WIN_INSTALL_BIN} -DTARGET_OS=${BUNDLE_TARGET_OS}
         -DCLANG64_BIN=${_TOOLCHAIN_BIN} -P ${BUNDLE_DEPS_SCRIPT}
       COMMENT "Bundling toolchain DLLs alongside executable"
