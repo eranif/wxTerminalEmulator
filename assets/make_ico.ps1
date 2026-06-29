@@ -1,8 +1,8 @@
 $ErrorActionPreference = 'Stop'
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$svg = Join-Path $scriptDir 'wxterminal-msw.svg'
-$ico = Join-Path $scriptDir 'wxterminal.ico'
+$svg = Join-Path $scriptDir 'glypht-msw.svg'
+$ico = Join-Path $scriptDir 'glypht.ico'
 $tempDir = Join-Path $env:TEMP ('wxterminal_ico_' + [Guid]::NewGuid().ToString('N'))
 $sizes = @(16, 32, 48, 64, 128, 256)
 
