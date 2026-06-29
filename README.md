@@ -1,19 +1,21 @@
 # wxTerminalEmulator
 
-[![wxTerminalEmulator demo](wxterminal.gif)](wxterminal.gif)
+[![GlyphT demo](wxterminal.gif)](wxterminal.gif)
 
 [Open a larger preview](wxterminal.gif)
 
 A wxWidgets-based terminal emulator project with two deliverables:
 
 - A static library: `wxterminal_lib`
-- A demo application: `wxterminal`
+- A demo application: **GlyphT** (`glypht`)
 
 ## Overview
 
 wxTerminalEmulator provides a cross-platform terminal emulation solution for wxWidgets applications. The current codebase
 includes a terminal core, a wxWidgets terminal view, platform PTY backends, custom terminal events, theming support,
 logging, and a demo program that exercises the API.
+
+**GlyphT** is the demo terminal application that showcases the library's capabilities.
 
 All you need is **wxWidgets** and **CMake** — no third-party libraries are required.
 
@@ -144,7 +146,7 @@ GPU-accelerated rendering path (Windows & macOS only, enabled by default):
 
 ### Build Targets
 - `wxterminal_lib` - static library
-- `wxterminal` - demo application (enabled by default through `BUILD_WXTERMINAL_DEMO`)
+- `glypht` - demo application (enabled by default through `BUILD_WXTERMINAL_DEMO`)
 
 ### Build Instructions
 
@@ -274,7 +276,7 @@ terminal->Bind(wxEVT_TERMINAL_TEXT_LINK, [](wxTerminalEvent& evt) {
 });
 ```
 
-## Demo Application
+## GlyphT — Demo Application
 
 The included demo application (`main.cpp`) showcases the library features:
 
@@ -297,10 +299,10 @@ The included demo application (`main.cpp`) showcases the library features:
 - Command-line log level control
 - Optional shell override and environment list support
 
-### Running the Demo
+### Running GlyphT
 
 ```bash
-./wxterminal [--log-level=<level>] [--appearance=<mode>] [--working-directory=<path>] [--shell=<command>]
+./glypht [--log-level=<level>] [--appearance=<mode>] [--working-directory=<path>] [--shell=<command>]
 ```
 
 **Log Levels**: `trace`, `debug`, `warn`, `error`
