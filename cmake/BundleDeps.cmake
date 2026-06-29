@@ -278,28 +278,13 @@ elseif(TARGET_OS STREQUAL "windows")
   foreach(_DLL ${_RESOLVED})
     get_filename_component(_DLL_NAME "${_DLL}" NAME)
     file(COPY "${_DLL}" DESTINATION "${BIN_DIR}")
-    message(STATUS "Bundled:
-      ${_DLL_NAME}")
+    message(STATUS "Bundled: ${_DLL_NAME}")
   endforeach()
 
   if(_UNRESOLVED)
     foreach(_U ${_UNRESOLVED})
-      message(
-        WARNING
-          "BundleDeps:
-      could
-      not
-      resolve
-      ${_U}")
+      message(WARNING "BundleDeps: could not resolve ${_U}")
     endforeach()
   endif()
-
-  message(
-    STATUS
-      "BundleDeps:
-      Windows
-      bundle
-      complete
-      (${BIN_DIR})
-      ")
+  message(STATUS "BundleDeps: Windows bundle complete (${BIN_DIR})")
 endif()
