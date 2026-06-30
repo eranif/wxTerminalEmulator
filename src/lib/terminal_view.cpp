@@ -632,9 +632,9 @@ void wxTerminalViewCtrl::UpdateFontCache() {
   m_defaultFontBoldUnderlined.MakeUnderlined();
 
 #ifdef __WXMSW__
-  m_fallbackFont = wxFont(m_defaultFont.GetPointSize(), wxFONTFAMILY_DEFAULT,
-                          wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, false,
-                          "Segoe UI Emoji");
+  m_fallbackFont =
+      wxFont(m_defaultFont.GetPointSize(), wxFONTFAMILY_DEFAULT,
+             wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, false, "Segoe UI Emoji");
 #elif defined(__WXGTK__)
   m_fallbackFont = wxFont(m_defaultFont.GetPointSize(), wxFONTFAMILY_DEFAULT,
                           wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, false,
@@ -1022,9 +1022,10 @@ void wxTerminalViewCtrl::RenderRowNoGrouping(
       continue;
     }
     wxString cell_content(wxUniChar(cell.ch));
-    bool useFallback = (cell.ch >= 0x10000 || (cell.ch >= 0x2600 && cell.ch <= 0x27BF) ||
-                        (cell.ch >= 0x1F300 && cell.ch <= 0x1FAFF)) &&
-                       m_fallbackFont.IsOk();
+    bool useFallback =
+        (cell.ch >= 0x10000 || (cell.ch >= 0x2600 && cell.ch <= 0x27BF) ||
+         (cell.ch >= 0x1F300 && cell.ch <= 0x1FAFF)) &&
+        m_fallbackFont.IsOk();
     if (useFallback) {
       dc.SetFont(m_fallbackFont);
     }
@@ -1616,6 +1617,8 @@ void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
 
 void wxTerminalViewCtrl::OnMouseUp(wxMouseEvent &evt) {
   evt.Skip();
+  CallAfter(&wxTerminalViewCtrl::SetFocus);
+
   m_isDragging = false;
   if (HasCapture()) {
     // Release the moouse
@@ -2528,7 +2531,8 @@ void wxTerminalViewCtrl::OnMouseLeftDoubleClick(wxMouseEvent &evt) {
   int endRow = r.GetBottom();
 
   int cols = static_cast<int>(m_core.Cols());
-  int totalViewRows = static_cast<int>(m_core.TotalLines() - m_core.ViewStart());
+  int totalViewRows =
+      static_cast<int>(m_core.TotalLines() - m_core.ViewStart());
 
   // Expand right across soft-wrapped lines.
   while (endCol >= cols - 1 && endRow + 1 < totalViewRows) {
