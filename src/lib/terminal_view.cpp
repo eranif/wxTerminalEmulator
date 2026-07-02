@@ -39,6 +39,10 @@ extern char **environ;
 
 namespace {
 using EnvMap = std::unordered_map<wxString, wxString>;
+
+constexpr int kFeedTimerIntervalMs = 10;
+constexpr std::size_t kMaxFeedBytesPerTick = 256 * 1024;
+
 /**
  * @brief Builds a map of the current process environment variables.
  *
@@ -198,6 +202,10 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   Bind(wxEVT_TIMER, &wxTerminalViewCtrl::OnResizeEndTimer, this,
        m_resizeEndTimer.GetId());
 
+  m_feedTimer.SetOwner(this);
+  Bind(wxEVT_TIMER, &wxTerminalViewCtrl::OnFeedTimer, this,
+       m_feedTimer.GetId());
+
   m_shell_command = shellCommand;
   m_environment = std::move(environment);
   if (workingDirectory) {
@@ -243,6 +251,8 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
 }
 
 wxTerminalViewCtrl::~wxTerminalViewCtrl() {
+  m_feedShuttingDown.store(true);
+
   // Un-Bind events using modern API
   Unbind(wxEVT_PAINT, &wxTerminalViewCtrl::OnPaint, this);
   Unbind(wxEVT_SIZE, &wxTerminalViewCtrl::OnSize, this);
@@ -267,6 +277,15 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   Unbind(wxEVT_SCROLLWIN_THUMBRELEASE, &wxTerminalViewCtrl::OnScroll, this);
   Unbind(wxEVT_LEAVE_WINDOW, &wxTerminalViewCtrl::OnLeaveWindow, this);
   Unbind(wxEVT_ERASE_BACKGROUND, &wxTerminalViewCtrl::OnEraseBg, this);
+  if (m_feedTimer.IsRunning()) {
+    m_feedTimer.Stop();
+  }
+  Unbind(wxEVT_TIMER, &wxTerminalViewCtrl::OnFeedTimer, this,
+         m_feedTimer.GetId());
+  {
+    std::unique_lock lk{m_feedMutex};
+    m_feedBuffer.clear();
+  }
 
 #if USE_TIMER_REFRESH
   m_shutdownFlag.store(true);
@@ -354,13 +373,26 @@ void wxTerminalViewCtrl::StartProcess(
       m_backend &&
       m_backend->Start(m_shell_command.ToStdString(wxConvUTF8), m_environment,
                        m_workingDirectory, [this](const std::string &out) {
-                         CallAfter(&wxTerminalViewCtrl::Feed, out);
+                         {
+                           std::unique_lock lk{m_feedMutex};
+                           m_feedBuffer.append(out);
+                         }
+                         // The callback runs on the PTY I/O thread; wxTimer
+                         // must only be touched from the GUI thread, so hop
+                         // over via CallAfter. The IsRunning() guard in
+                         // WakeFeedTimer makes repeated wakes idempotent.
+                         CallAfter(&wxTerminalViewCtrl::WakeFeedTimer);
                        });
+
   if (ok && m_core.Cols() > 0 && m_core.Rows() > 0) {
     m_backend->Resize(static_cast<int>(m_core.Cols()),
                       static_cast<int>(m_core.Rows()));
   }
   m_backendReady = true;
+
+  // The feed timer is started on demand by WakeFeedTimer when the PTY callback
+  // delivers data, and stops itself once m_feedBuffer drains, so an idle shell
+  // produces no timer wakeups.
 
   // Process queue
   CallAfter([this]() {
@@ -2701,4 +2733,47 @@ void wxTerminalViewCtrl::OnScroll(wxScrollWinEvent &evt) {
   m_core.SetViewStart(static_cast<std::size_t>(pos));
   m_mouseSelection.Clear();
   RefreshView();
+}
+
+bool wxTerminalViewCtrl::ProcessFeedBuffer() {
+  std::string chunk;
+  bool hasMore = false;
+  {
+    std::unique_lock lk{m_feedMutex};
+    if (m_feedBuffer.empty()) {
+      return false;
+    }
+    // Process at most kMaxFeedBytesPerTick per tick so a flood of output
+    // (e.g. `yes` or `cat bigfile`) can't monopolize the GUI thread. The
+    // remainder stays in m_feedBuffer and is drained on subsequent ticks.
+    const std::size_t take =
+        std::min(m_feedBuffer.size(), kMaxFeedBytesPerTick);
+    chunk.assign(m_feedBuffer, 0, take);
+    m_feedBuffer.erase(0, take);
+    hasMore = !m_feedBuffer.empty();
+  }
+
+  Feed(chunk);
+  return hasMore;
+}
+
+void wxTerminalViewCtrl::WakeFeedTimer() {
+  if (m_feedShuttingDown.load()) {
+    return;
+  }
+  if (!m_feedTimer.IsRunning()) {
+    m_feedTimer.StartOnce(kFeedTimerIntervalMs);
+  }
+}
+
+void wxTerminalViewCtrl::OnFeedTimer(wxTimerEvent &event) {
+  wxUnusedVar(event);
+  if (m_feedShuttingDown.load()) {
+    return;
+  }
+  // Re-arm only while data remains; when the buffer drains the timer stops,
+  // and the PTY callback restarts it via WakeFeedTimer on the next burst.
+  if (ProcessFeedBuffer()) {
+    m_feedTimer.StartOnce(kFeedTimerIntervalMs);
+  }
 }

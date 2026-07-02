@@ -26,6 +26,7 @@
 #include <wx/timer.h>
 
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <unordered_set>
 #include <wx/arrstr.h>
@@ -433,7 +434,8 @@ private:
   struct CellInfo {
     int colIdx{wxNOT_FOUND};
     char32_t ch{U' '};
-    unsigned int cellWidth{1}; // terminal columns spanned (2 for wide chars like emoji)
+    unsigned int cellWidth{
+        1}; // terminal columns spanned (2 for wide chars like emoji)
     CellAttributes attrs;
     inline bool IsUnicode() const { return ch >= 0x80; }
     inline bool HasSameAttributes(const CellInfo &other) const {
@@ -556,6 +558,14 @@ private:
   // Force a full redraw on the next paint.
   inline void InvalidateRenderCache() { m_renderCacheValid = false; }
 
+  void OnResizeEndTimer(wxTimerEvent &evt);
+  void OnFeedTimer(wxTimerEvent &event);
+  // Drains up to kMaxFeedBytesPerTick from m_feedBuffer into the terminal core.
+  // Returns true if the buffer still holds data (the timer must re-arm).
+  bool ProcessFeedBuffer();
+  // Wakes the feed timer if it is idle. Must be called on the GUI thread.
+  void WakeFeedTimer();
+
 #if USE_OPENGL
   // --- OpenGL rendering state ----------------------------------------------
   std::unique_ptr<wxGLContext> m_glContext;
@@ -568,5 +578,9 @@ private:
   wxSize m_glLastClientSize{0, 0};
 #endif
   wxTimer m_resizeEndTimer;
-  void OnResizeEndTimer(wxTimerEvent &evt);
+  wxTimer m_feedTimer;
+
+  std::mutex m_feedMutex;
+  std::string m_feedBuffer;
+  std::atomic_bool m_feedShuttingDown{false};
 };
