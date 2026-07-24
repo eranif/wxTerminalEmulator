@@ -218,6 +218,7 @@ static void link_to_scrollback(struct tsm_screen *con, struct line *line)
 		tmp = shl_dlist_first(&con->sb.list, struct line, list);
 		shl_dlist_unlink(&tmp->list);
 		--con->sb.count;
+		++con->sb.evict_count;
 
 		/* Only consider sb.max > 1, so there is always another line in sb. */
 		if (con->sb.pos == tmp) {
@@ -812,6 +813,7 @@ void tsm_screen_set_max_sb(struct tsm_screen *con,
 		line = shl_dlist_first(&con->sb.list, struct line, list);
 		shl_dlist_unlink(&line->list);
 		--con->sb.count;
+		++con->sb.evict_count;
 
 		/* We treat fixed/unfixed position the same here because we
 		 * remove lines from the TOP of the scrollback buffer. */
@@ -957,6 +959,15 @@ unsigned int tsm_screen_sb_get_line_pos(struct tsm_screen *con)
 	}
 
 	return con->sb.pos_num;
+}
+
+uint64_t tsm_screen_sb_get_evict_count(struct tsm_screen *con)
+{
+	if (!con) {
+		return 0;
+	}
+
+	return con->sb.evict_count;
 }
 
 int tsm_screen_sb_get_line_cells(struct tsm_screen *con,

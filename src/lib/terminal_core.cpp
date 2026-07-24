@@ -341,6 +341,7 @@ void TerminalCore::PutData(const std::string &data) {
   }
 
   unsigned int flagsBefore = tsm_screen_get_flags(m_tsmScreen);
+  uint64_t evictedBefore = tsm_screen_sb_get_evict_count(m_tsmScreen);
   tsm_vte_input(m_tsmVte, data.c_str(), data.size());
   unsigned int flagsAfter = tsm_screen_get_flags(m_tsmScreen);
 
@@ -352,9 +353,20 @@ void TerminalCore::PutData(const std::string &data) {
 
   RefreshActiveScreen();
 
-  // Auto-follow bottom if user was at bottom
-  if (m_followingBottom)
+  if (m_followingBottom) {
+    // Auto-follow bottom if user was at bottom
     m_viewStart = ShellStart();
+  } else {
+    // User scrolled back: keep the viewport pinned to the same content.
+    // When the scrollback is full, each new line evicts one from the top
+    // and shifts all absolute indexes down; compensate so the visible
+    // content does not drift while output streams in.
+    uint64_t evicted =
+        tsm_screen_sb_get_evict_count(m_tsmScreen) - evictedBefore;
+    m_viewStart = (m_viewStart > evicted)
+                      ? m_viewStart - static_cast<std::size_t>(evicted)
+                      : 0;
+  }
 
   RefreshScrollbackCache();
 }

@@ -329,12 +329,9 @@ void wxTerminalViewCtrl::Feed(const std::string &data) {
   if (m_outputCallback) {
     m_outputCallback(data);
   }
-  bool wasAtBottom = (m_core.ViewStart() == m_core.ShellStart());
+  // PutData keeps the viewport pinned: it follows the bottom when the user
+  // is there, and keeps scrolled-back content in place otherwise.
   m_core.PutData(data);
-  if (wasAtBottom) {
-    m_core.SetViewStart(m_core.ShellStart());
-  }
-
   RefreshView();
 }
 

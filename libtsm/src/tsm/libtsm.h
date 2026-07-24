@@ -207,6 +207,11 @@ void tsm_screen_sb_page_down(struct tsm_screen *con, unsigned int num);
 void tsm_screen_sb_reset(struct tsm_screen *con);
 unsigned int tsm_screen_sb_get_line_count(struct tsm_screen *con);
 unsigned int tsm_screen_sb_get_line_pos(struct tsm_screen *con);
+/* Monotonic count of lines evicted from the top of a full scrollback.
+ * Callers that keep absolute scrollback indexes (e.g. a scrolled-back
+ * viewport) can diff this across input to keep their index pinned to the
+ * same content. */
+uint64_t tsm_screen_sb_get_evict_count(struct tsm_screen *con);
 
 struct tsm_screen_cell {
 	uint32_t ch;

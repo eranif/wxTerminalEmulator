@@ -108,6 +108,7 @@ struct tsm_scrollback {
 	struct line *pos;		/* current position in sb or NULL */
 	unsigned int pos_num;	/* current numeric position in sb */
 	uint64_t last_id;		/* last id given to sb-line */
+	uint64_t evict_count;	/* total lines ever evicted from the top */
 };
 
 struct tsm_screen {
