@@ -202,6 +202,11 @@ bool TerminalCore::IsCursorVisible() const {
   return (flags & TSM_VTE_FLAG_TEXT_CURSOR_MODE) != 0;
 }
 
+bool TerminalCore::IsCursorKeyMode() const {
+  unsigned int flags = tsm_vte_get_flags(m_tsmVte);
+  return (flags & TSM_VTE_FLAG_CURSOR_KEY_MODE) != 0;
+}
+
 const std::vector<Cell> &TerminalCore::BufferRow(std::size_t absRow) const {
   static const std::vector<Cell> empty;
   std::size_t sbSize = ShellStart();

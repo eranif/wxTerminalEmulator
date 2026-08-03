@@ -94,6 +94,9 @@ public:
   void SendPageUp();
   void SendPageDown();
 
+  // Transmit a cursor-style key, honouring DECCKM (CSI vs SS3 encoding).
+  void SendCursorKey(char final);
+
   // Common keyboard shortcuts
 
   // Ctrl-C

@@ -189,6 +189,11 @@ public:
   // Whether the terminal cursor is currently visible (DECTCEM)
   bool IsCursorVisible() const;
 
+  // Whether the application has requested cursor-key application mode
+  // (DECCKM, ESC[?1h). When set, cursor/Home/End keys must be transmitted
+  // as SS3 sequences (ESC O A) instead of CSI (ESC [ A).
+  bool IsCursorKeyMode() const;
+
   // View into the buffer: returns rows [viewStart .. viewStart+m_rows)
   std::size_t ViewStart() const { return m_viewStart; }
   std::size_t ShellStart() const;

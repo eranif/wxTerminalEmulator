@@ -427,17 +427,27 @@ void wxTerminalViewCtrl::SendEscape() { SendInput("\x1b"); }
 
 void wxTerminalViewCtrl::SendBackspace() { SendInput("\x7f"); }
 
-void wxTerminalViewCtrl::SendArrowUp() { SendInput("\x1b[A"); }
+// Cursor, Home and End keys have two encodings: the normal CSI form
+// (ESC [ A) and the SS3 "application" form (ESC O A). Full-screen
+// applications that enable DECCKM (ESC[?1h) -- vi, less, emacs -- bind the
+// SS3 form, so sending CSI leaves their arrow keys dead. Pick the encoding
+// the application asked for.
+void wxTerminalViewCtrl::SendCursorKey(char final) {
+  char seq[4] = {'\x1b', m_core.IsCursorKeyMode() ? 'O' : '[', final, '\0'};
+  SendInput(seq);
+}
 
-void wxTerminalViewCtrl::SendArrowDown() { SendInput("\x1b[B"); }
+void wxTerminalViewCtrl::SendArrowUp() { SendCursorKey('A'); }
 
-void wxTerminalViewCtrl::SendArrowRight() { SendInput("\x1b[C"); }
+void wxTerminalViewCtrl::SendArrowDown() { SendCursorKey('B'); }
 
-void wxTerminalViewCtrl::SendArrowLeft() { SendInput("\x1b[D"); }
+void wxTerminalViewCtrl::SendArrowRight() { SendCursorKey('C'); }
 
-void wxTerminalViewCtrl::SendHome() { SendInput("\x1b[H"); }
+void wxTerminalViewCtrl::SendArrowLeft() { SendCursorKey('D'); }
 
-void wxTerminalViewCtrl::SendEnd() { SendInput("\x1b[F"); }
+void wxTerminalViewCtrl::SendHome() { SendCursorKey('H'); }
+
+void wxTerminalViewCtrl::SendEnd() { SendCursorKey('F'); }
 
 void wxTerminalViewCtrl::SendDelete() { SendInput("\x1b[3~"); }
 
