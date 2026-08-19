@@ -150,7 +150,7 @@ struct Cell {
 class TerminalCore {
 public:
   TerminalCore(std::size_t rows = 24, std::size_t cols = 80,
-               std::size_t maxLines = 1000);
+               std::size_t maxLines = 5000);
   ~TerminalCore();
 
   void SetTheme(const wxTerminalTheme &theme);
