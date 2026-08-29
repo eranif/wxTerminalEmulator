@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstdio>
 #include <deque>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <psapi.h>
@@ -528,7 +529,8 @@ bool WindowsPtyBackend::CreateConPty(
   }
 
   // Initialize extended startup info for process creation
-  STARTUPINFOEXW siex{};
+  STARTUPINFOEXW siex;
+  ZeroMemory(&siex, sizeof(siex));
   siex.StartupInfo.cb = sizeof(siex);
 
   SIZE_T attrListSize = 0;
@@ -614,7 +616,22 @@ bool WindowsPtyBackend::CreateConPty(
   const wchar_t *currentDirectoryPtr = nullptr;
   if (workingDirectory && !workingDirectory->empty()) {
     currentDirectory = Utf8ToWide(*workingDirectory);
-    if (!currentDirectory.empty()) {
+    if (!currentDirectory.empty() && ::wxDirExists(currentDirectory)) {
+      // Normalise the path before passing it
+      std::error_code ec;
+      currentDirectory = std::filesystem::canonical(currentDirectory, ec);
+      if (ec) {
+        TLOG_ERROR() << "[std::filesystem::canonical failed: " << ec.message()
+                     << "] Command: " << command << std::endl;
+        if (m_onOutput) {
+          std::stringstream ss;
+          ss << "[std::filesystem::canonical failed: " << ec.message() << "]";
+          m_onOutput(ss.str());
+          closePc(hPC);
+        }
+        cleanup();
+        return false;
+      }
       currentDirectoryPtr = currentDirectory.c_str();
     }
   }
