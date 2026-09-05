@@ -632,6 +632,16 @@ bool WindowsPtyBackend::CreateConPty(
         cleanup();
         return false;
       }
+      // std::filesystem::canonical() on Windows resolves through
+      // GetFinalPathNameByHandleW, which returns paths with the "\\?\"
+      // extended-length prefix. CreateProcessW's lpCurrentDirectory does
+      // not accept that prefix and fails with ERROR_DIRECTORY (267) if
+      // it's present, so strip it before use.
+      const std::wstring kExtendedPrefix = LR"(\\?\)";
+      if (currentDirectory.compare(0, kExtendedPrefix.size(),
+                                    kExtendedPrefix) == 0) {
+        currentDirectory.erase(0, kExtendedPrefix.size());
+      }
       currentDirectoryPtr = currentDirectory.c_str();
     }
   }
