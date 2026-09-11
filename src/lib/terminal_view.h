@@ -336,6 +336,9 @@ private:
   void OnSize(wxSizeEvent &evt);
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);
+  /// Send characters that wxEVT_KEY_DOWN can not report, i.e. characters of a
+  /// non-Latin keyboard layout. Only code points above ASCII are handled here.
+  void OnChar(wxKeyEvent &evt);
   void OnMouseLeftDown(wxMouseEvent &evt);
   void OnMouseLeftDoubleClick(wxMouseEvent &evt);
   void OnMouseMove(wxMouseEvent &evt);

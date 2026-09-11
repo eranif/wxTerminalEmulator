@@ -71,6 +71,11 @@ set(LIB_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_event.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_gl_renderer.cpp)
 
+if(APPLE)
+  list(APPEND LIB_SOURCES
+       ${CMAKE_CURRENT_LIST_DIR}/src/lib/keyboard_layout_mac.cpp)
+endif()
+
 set(GLYPHT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/main.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/app_persistence.cpp
@@ -109,8 +114,11 @@ target_include_directories(wxterminal_lib
 target_link_libraries(wxterminal_lib PUBLIC ${wxWidgets_LIBRARIES} tsm)
 if(APPLE)
   add_compile_definitions(wxDEBUG_LEVEL=0)
-  target_link_libraries(wxterminal_lib PUBLIC "-framework CoreText"
-                                              "-framework CoreGraphics")
+  # Carbon is used to translate keys with the active keyboard layout, see
+  # keyboard_layout_mac.cpp.
+  target_link_libraries(
+    wxterminal_lib PUBLIC "-framework CoreText" "-framework CoreGraphics"
+                          "-framework Carbon")
 endif()
 
 # OpenGL rendering path: define USE_OPENGL and link the platform GL libraries.

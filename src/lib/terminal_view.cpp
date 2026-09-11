@@ -1,5 +1,7 @@
 #include "terminal_view.h"
 
+#include "keyboard_layout.h"
+
 #include "libtsm.h"
 #include "terminal_event.h"
 #include "terminal_logger.h"
@@ -179,6 +181,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   Bind(wxEVT_SIZE, &wxTerminalViewCtrl::OnSize, this);
   Bind(wxEVT_CHAR_HOOK, &wxTerminalViewCtrl::OnCharHook, this);
   Bind(wxEVT_KEY_DOWN, &wxTerminalViewCtrl::OnKeyDown, this);
+  Bind(wxEVT_CHAR, &wxTerminalViewCtrl::OnChar, this);
   Bind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
   Bind(wxEVT_LEFT_DCLICK, &wxTerminalViewCtrl::OnMouseLeftDoubleClick, this);
   Bind(wxEVT_MIDDLE_DOWN, &wxTerminalViewCtrl::OnMiddleClickPaste, this);
@@ -258,6 +261,7 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   Unbind(wxEVT_SIZE, &wxTerminalViewCtrl::OnSize, this);
   Unbind(wxEVT_CHAR_HOOK, &wxTerminalViewCtrl::OnCharHook, this);
   Unbind(wxEVT_KEY_DOWN, &wxTerminalViewCtrl::OnKeyDown, this);
+  Unbind(wxEVT_CHAR, &wxTerminalViewCtrl::OnChar, this);
   Unbind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
   Unbind(wxEVT_LEFT_DCLICK, &wxTerminalViewCtrl::OnMouseLeftDoubleClick, this);
   Unbind(wxEVT_MIDDLE_DOWN, &wxTerminalViewCtrl::OnMiddleClickPaste, this);
@@ -1852,11 +1856,72 @@ void wxTerminalViewCtrl::OnCharHook(wxKeyEvent &evt) {
     return;
   }
 #endif
+
+#ifdef __WXMAC__
+  // On macOS the key code and the Unicode key of a wxEVT_KEY_DOWN event are
+  // always translated through an ASCII capable layout. With a non-Latin layout
+  // (Hebrew, Russian, ...) they hold the Latin letter printed on the physical
+  // key, not the character the user typed. So we ask the OS for the real
+  // character of the active layout.
+  //
+  // Handling the key here (without calling evt.Skip()) also keeps the key away
+  // from the macOS text input system. That system rings the bell for a key
+  // combination it cannot turn into text, for example Shift plus a letter key
+  // in the Hebrew layout.
+  const bool isModifierKey = key == WXK_SHIFT || key == WXK_CONTROL ||
+                             key == WXK_RAW_CONTROL || key == WXK_ALT ||
+                             key == WXK_CAPITAL;
+  if (!isModifierKey && !evt.ControlDown() && !evt.RawControlDown() &&
+      !evt.AltDown()) {
+    std::string typed;
+    switch (terminal::TranslateKeyWithActiveLayout(
+        evt.GetRawKeyCode(), evt.GetRawKeyFlags(), &typed)) {
+    case terminal::KeyTranslation::kText:
+      if (m_mouseSelection.HasSelection()) {
+        ClearMouseSelection();
+      }
+      SendInput(typed);
+      return;
+    case terminal::KeyTranslation::kNoOutput:
+      // The layout maps this key to nothing, or it is the first key of a dead
+      // key sequence. Send nothing and swallow the event.
+      scroller->Cancel();
+      return;
+    case terminal::KeyTranslation::kUnavailable:
+      break;
+    }
+  }
+#endif
+
   // Let OnKeyDown process this as well.
   // Key not handled here; cancel the scroller so OnKeyDown can manage its
   // own.
   scroller->Cancel();
   evt.Skip();
+}
+
+void wxTerminalViewCtrl::OnChar(wxKeyEvent &evt) {
+  if (!HasFocus()) {
+    evt.Skip();
+    return;
+  }
+
+  // Only characters outside ASCII are handled here. ASCII characters, control
+  // keys and modifier combinations are handled by OnCharHook() and OnKeyDown().
+  // This handler exists because wxEVT_KEY_DOWN reports layout independent key
+  // codes: a character of a non-Latin layout (Hebrew, Russian, ...) is only
+  // available in wxEVT_CHAR.
+  const wxUniChar uc = evt.GetUnicodeKey();
+  if (uc == WXK_NONE || uc < 128) {
+    evt.Skip();
+    return;
+  }
+
+  auto scroller = std::make_unique<EndLineScroller>(this);
+  if (m_mouseSelection.HasSelection()) {
+    ClearMouseSelection();
+  }
+  SendInput(wxString(uc).ToStdString(wxConvUTF8));
 }
 
 void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
@@ -1881,7 +1946,7 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
 #ifdef __WXMAC__
   // On macOS, Cmd+C/V for copy/paste
   // (ControlDown() = Cmd key)
-  if (evt.ControlDown() && !evt.AltDown()) {
+  if (evt.GetModifiers() == wxMOD_CONTROL) {
     if (m_mouseSelection.HasSelection() && (key == 'C' || key == 'c')) {
       // Copying must not move the viewport: cancel the auto-scroll-to-bottom.
       scroller->Cancel();
@@ -1912,6 +1977,7 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
       return;
     }
 
+#ifndef __WXMAC__
     // Handle Ctrl+V - Paste clipboard content and scroll to bottom
     if (key == 'V' || key == 'v') {
       TLOG_DEBUG() << "Ctrl+V: pasting clipboard content" << std::endl;
@@ -1919,6 +1985,7 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
       OnPaste(pasteEvt);
       return;
     }
+#endif
 
     // Handle common Ctrl+<CHAR> combinations
     if (key == 'U' || key == 'u') {
