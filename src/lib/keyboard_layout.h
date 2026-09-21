@@ -21,7 +21,7 @@ enum class KeyTranslation {
   kText,
 };
 
-#ifdef __WXMAC__
+#if defined(__WXMAC__) || defined(__WXMSW__)
 /// Translate a physical key press using the keyboard layout that is active
 /// right now.
 ///
@@ -29,12 +29,18 @@ enum class KeyTranslation {
 /// `GetUnicodeKey()` after translating the key through an ASCII capable
 /// layout. With a non-Latin layout (Hebrew, Russian, Greek, ...) both return
 /// the Latin letter of the physical key, not the character the user typed.
-/// This function asks the OS for the real character instead.
+/// On Windows, `wxKeyEvent::GetKeyCode()` reports a layout-independent
+/// virtual key identity that likewise cannot represent umlauts, AltGr
+/// symbols, or non-Latin layouts. This function asks the OS for the real
+/// character instead, on both platforms.
 ///
-/// @param nativeKeyCode The value of `wxKeyEvent::GetRawKeyCode()`, which holds
-/// the macOS virtual key code.
-/// @param nativeModifiers The value of `wxKeyEvent::GetRawKeyFlags()`, which
-/// holds the `NSEvent` modifier flags.
+/// @param nativeKeyCode On macOS, the value of `wxKeyEvent::GetRawKeyCode()`
+/// (the macOS virtual key code). On Windows, the value of
+/// `wxKeyEvent::GetRawKeyCode()` (the Win32 virtual-key code, VK_*).
+/// @param nativeModifiers On macOS, the value of `wxKeyEvent::GetRawKeyFlags()`
+/// (the `NSEvent` modifier flags). On Windows, `wxKeyEvent::GetModifiers()`
+/// (the `wxMOD_*` bitmask); note `wxMOD_ALTGR` is `wxMOD_ALT | wxMOD_CONTROL`,
+/// matching how Windows itself reports the AltGr key.
 /// @param utf8 Receives the typed text, encoded as UTF-8. It is cleared first.
 /// @return See `KeyTranslation`.
 ///

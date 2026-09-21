@@ -74,6 +74,9 @@ set(LIB_SOURCES
 if(APPLE)
   list(APPEND LIB_SOURCES
        ${CMAKE_CURRENT_LIST_DIR}/src/lib/keyboard_layout_mac.cpp)
+elseif(WIN32)
+  list(APPEND LIB_SOURCES
+       ${CMAKE_CURRENT_LIST_DIR}/src/lib/keyboard_layout_windows.cpp)
 endif()
 
 set(GLYPHT_SOURCES

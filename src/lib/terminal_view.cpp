@@ -1857,41 +1857,75 @@ void wxTerminalViewCtrl::OnCharHook(wxKeyEvent &evt) {
   }
 #endif
 
-#ifdef __WXMAC__
-  // On macOS the key code and the Unicode key of a wxEVT_KEY_DOWN event are
-  // always translated through an ASCII capable layout. With a non-Latin layout
-  // (Hebrew, Russian, ...) they hold the Latin letter printed on the physical
-  // key, not the character the user typed. So we ask the OS for the real
-  // character of the active layout.
-  //
-  // Handling the key here (without calling evt.Skip()) also keeps the key away
-  // from the macOS text input system. That system rings the bell for a key
-  // combination it cannot turn into text, for example Shift plus a letter key
-  // in the Hebrew layout.
+#if defined(__WXMAC__) || defined(__WXMSW__)
+  // wxKeyEvent::GetKeyCode()/GetUnicodeKey() (used by OnKeyDown()) report a
+  // layout-independent key identity: on macOS they're always translated
+  // through an ASCII-capable layout, and on Windows they're essentially the
+  // US-layout character at that key's position. Either way, with a
+  // non-Latin layout (Hebrew, Russian, ...) they hold the Latin letter
+  // printed on the physical key, not the character the user typed, and they
+  // can't represent umlauts or AltGr/Option symbols either. So we ask the OS
+  // to translate the key through the layout that's actually active.
   const bool isModifierKey = key == WXK_SHIFT || key == WXK_CONTROL ||
                              key == WXK_RAW_CONTROL || key == WXK_ALT ||
                              key == WXK_CAPITAL;
-  if (!isModifierKey && !evt.ControlDown() && !evt.RawControlDown() &&
-      !evt.AltDown()) {
+
+#ifdef __WXMAC__
+  // On macOS, Option is used as the Meta key (ESC-prefix) for shell
+  // shortcuts, matching Terminal.app convention, so any Ctrl/Option combo is
+  // left for OnKeyDown() to handle instead of being translated to text.
+  //
+  // Also, handling the key here (without calling evt.Skip()) keeps it away
+  // from the macOS text input system, which rings the bell for a key
+  // combination it cannot turn into text, e.g. Shift + a letter key in the
+  // Hebrew layout.
+  const bool skipModifierCombo =
+      evt.ControlDown() || evt.RawControlDown() || evt.AltDown();
+  const unsigned int nativeModifiers = evt.GetRawKeyFlags();
+#else // __WXMSW__
+  // Ctrl+<key> and Alt+<key> alone are terminal shortcuts / Meta-escape
+  // sequences handled by OnKeyDown(); we don't translate those. Ctrl+Alt
+  // together is AltGr on Windows and must still be translated (it's how
+  // umlauts/AltGr symbols such as '@' or '{' are typed on many European
+  // layouts).
+  const bool skipModifierCombo = (evt.ControlDown() && !evt.AltDown()) ||
+                                 (evt.AltDown() && !evt.ControlDown());
+  const unsigned int nativeModifiers = evt.GetModifiers();
+#endif
+
+  if (key != WXK_BACK && !isModifierKey && !skipModifierCombo) {
     std::string typed;
-    switch (terminal::TranslateKeyWithActiveLayout(
-        evt.GetRawKeyCode(), evt.GetRawKeyFlags(), &typed)) {
-    case terminal::KeyTranslation::kText:
-      if (m_mouseSelection.HasSelection()) {
-        ClearMouseSelection();
+    switch (terminal::TranslateKeyWithActiveLayout(evt.GetRawKeyCode(),
+                                                    nativeModifiers, &typed)) {
+    case terminal::KeyTranslation::kText: {
+      // Guard against control characters slipping through as "text" (e.g.
+      // Windows maps VK_BACK to BS, 0x08; excluding WXK_BACK above already
+      // avoids that specific case, this is a general safety net). Let
+      // OnKeyDown() handle those as usual: it sends DEL, 0x7F, for
+      // Backspace to match what cmd.exe expects.
+      const bool isControlChar =
+          typed.size() == 1 &&
+          (static_cast<unsigned char>(typed[0]) < 0x20 ||
+           static_cast<unsigned char>(typed[0]) == 0x7f);
+      if (!isControlChar) {
+        if (m_mouseSelection.HasSelection()) {
+          ClearMouseSelection();
+        }
+        SendInput(typed);
+        return;
       }
-      SendInput(typed);
-      return;
+      break;
+    }
     case terminal::KeyTranslation::kNoOutput:
-      // The layout maps this key to nothing, or it is the first key of a dead
-      // key sequence. Send nothing and swallow the event.
+      // The layout maps this key to nothing, or it is the first key of a
+      // dead-key sequence. Send nothing and swallow the event.
       scroller->Cancel();
       return;
     case terminal::KeyTranslation::kUnavailable:
       break;
     }
   }
-#endif
+#endif // __WXMAC__ || __WXMSW__
 
   // Let OnKeyDown process this as well.
   // Key not handled here; cancel the scroller so OnKeyDown can manage its
