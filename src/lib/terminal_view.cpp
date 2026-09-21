@@ -1940,16 +1940,45 @@ void wxTerminalViewCtrl::OnChar(wxKeyEvent &evt) {
     return;
   }
 
-  // Only characters outside ASCII are handled here. ASCII characters, control
-  // keys and modifier combinations are handled by OnCharHook() and OnKeyDown().
-  // This handler exists because wxEVT_KEY_DOWN reports layout independent key
-  // codes: a character of a non-Latin layout (Hebrew, Russian, ...) is only
-  // available in wxEVT_CHAR.
+  // wxEVT_KEY_DOWN reports a layout-independent key code. This handler exists
+  // because the keyboard-layout-translated character is only available in
+  // wxEVT_CHAR.
   const wxUniChar uc = evt.GetUnicodeKey();
-  if (uc == WXK_NONE || uc < 128) {
+  if (uc == WXK_NONE) {
     evt.Skip();
     return;
   }
+
+#ifdef __WXGTK__
+  // On GTK, wxEVT_CHAR is already translated through the active XKB layout
+  // (AltGr, dead keys via the input method, non-Latin scripts, ...), unlike
+  // wxEVT_KEY_DOWN's layout-independent key code. So the full printable
+  // range is handled here, not just non-Latin (>=128) as on macOS/Windows,
+  // where OnCharHook() instead asks the OS to translate the key directly.
+  if (uc < 0x20 || uc == 0x7f) {
+    // Non-printable control characters (Enter, Tab, Escape, Backspace, ...)
+    // are handled in OnCharHook()/OnKeyDown().
+    evt.Skip();
+    return;
+  }
+  const bool ctrlDown = evt.ControlDown() || evt.RawControlDown();
+  if ((ctrlDown && !evt.AltDown()) || (evt.AltDown() && !ctrlDown)) {
+    // Pure Ctrl+<key> and pure Alt+<key> combinations (shortcuts,
+    // Meta-escape) are handled by OnKeyDown(); don't send them a second
+    // time here. Ctrl+Alt together (AltGr) is real text input and falls
+    // through.
+    evt.Skip();
+    return;
+  }
+#else
+  // On macOS/Windows, ASCII is already handled directly in OnCharHook() via
+  // the OS's own layout translation; only non-Latin (>=128) characters need
+  // to be forwarded here.
+  if (uc < 128) {
+    evt.Skip();
+    return;
+  }
+#endif
 
   auto scroller = std::make_unique<EndLineScroller>(this);
   if (m_mouseSelection.HasSelection()) {
@@ -2092,10 +2121,23 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
   }
 #endif
 
-  // Handle regular printable characters
-  // Note: GetUnicodeKey() doesn't work properly in
-  // KEY_DOWN on Windows We need to handle case
-  // conversion ourselves
+#ifdef __WXGTK__
+  // Printable text (letters, digits, symbols, non-Latin scripts, AltGr
+  // combinations, ...) is handled uniformly in OnChar(), where wxEVT_CHAR
+  // provides the keyboard-layout-translated Unicode character (GTK
+  // translates it through the active XKB layout, including dead keys via
+  // the input method). wxEVT_KEY_DOWN only exposes the untranslated key
+  // code (essentially a US-layout key identity).
+  //
+  // wxWidgets only generates wxEVT_CHAR for a key when its wxEVT_KEY_DOWN
+  // event was skipped, so this Skip() is what lets OnChar() run at all.
+  scroller->Cancel();
+  evt.Skip();
+#else
+  // Handle regular printable characters.
+  // Note: GetUnicodeKey() doesn't work properly in KEY_DOWN on Windows/macOS,
+  // so this is a US-layout guess, used only as a last-resort fallback for
+  // when OnCharHook()'s OS-level layout translation is unavailable.
   if (key >= 'A' && key <= 'Z') {
     char ch = key;
     if (!evt.ShiftDown()) {
@@ -2119,6 +2161,7 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
   }
   // Key did not send input; cancel the scroller.
   scroller->Cancel();
+#endif
 }
 
 bool wxTerminalViewCtrl::ScrollViewportForSelection(int delta) {
