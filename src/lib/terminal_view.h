@@ -125,8 +125,11 @@ public:
   void SendAltF();
 
   void Copy();
+  bool CanCopy() const { return HasActiveSelection(); }
   void Paste();
   void PasteFromPrimarySelection();
+  // Return the currently selected text or nullopt if there is no selection.
+  std::optional<wxString> GetMouseSelection() const;
 
   enum SearchFlags {
     kForward = 1 << 0,
@@ -233,6 +236,7 @@ public:
 private:
   wxRect GetTerminalRect() const;
   wxSize GetTerminalSize() const;
+  std::optional<wxString> MouseSelectionToString() const;
 
   /// Linear selection defined by anchor and current cell in viewport
   /// coordinates. Cells between anchor and current in reading order

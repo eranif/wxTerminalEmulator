@@ -329,6 +329,47 @@ wxSize wxTerminalViewCtrl::GetTerminalSize() const {
   return GetTerminalRect().GetSize();
 }
 
+std::optional<wxString> wxTerminalViewCtrl::MouseSelectionToString() const {
+  if (!m_mouseSelection.HasSelection()) {
+    return std::nullopt;
+  }
+
+  // Get the selected text using absolute buffer coordinates
+  wxString selection;
+  wxPoint s, e;
+  m_mouseSelection.GetAbsNormalized(s, e);
+  int totalLines = static_cast<int>(m_core.TotalLines());
+  int cols = static_cast<int>(m_core.Cols());
+  for (int absY = s.y; absY <= e.y && absY < totalLines; ++absY) {
+    const auto row = m_core.GetBufferRowCopy(absY);
+    int rowSize = static_cast<int>(row.size());
+    if (rowSize == 0) {
+      if (absY != e.y) {
+        selection += "\n";
+      }
+      continue;
+    }
+    int startCol = std::clamp((absY == s.y) ? s.x : 0, 0, rowSize - 1);
+    int endCol = std::clamp((absY == e.y) ? e.x : cols - 1, 0, rowSize - 1);
+    wxString line;
+    for (int x = startCol; x <= endCol; ++x) {
+      if (row[x].width == 0) {
+        continue;
+      }
+      line += wxUniChar(row[x].ch);
+    }
+    // A line whose last cell (at terminal width) is non-space was likely
+    // soft-wrapped rather than ended by a hard newline.
+    bool softWrapped = (endCol == cols - 1 && row[cols - 1].ch != U' ');
+    line.Trim();
+    selection += line;
+    if (absY != e.y && !softWrapped) {
+      selection += "\n";
+    }
+  }
+  return selection;
+}
+
 void wxTerminalViewCtrl::Feed(const std::string &data) {
   if (m_outputCallback) {
     m_outputCallback(data);
@@ -1896,7 +1937,7 @@ void wxTerminalViewCtrl::OnCharHook(wxKeyEvent &evt) {
   if (key != WXK_BACK && !isModifierKey && !skipModifierCombo) {
     std::string typed;
     switch (terminal::TranslateKeyWithActiveLayout(evt.GetRawKeyCode(),
-                                                    nativeModifiers, &typed)) {
+                                                   nativeModifiers, &typed)) {
     case terminal::KeyTranslation::kText: {
       // Guard against control characters slipping through as "text" (e.g.
       // Windows maps VK_BACK to BS, 0x08; excluding WXK_BACK above already
@@ -1904,9 +1945,8 @@ void wxTerminalViewCtrl::OnCharHook(wxKeyEvent &evt) {
       // OnKeyDown() handle those as usual: it sends DEL, 0x7F, for
       // Backspace to match what cmd.exe expects.
       const bool isControlChar =
-          typed.size() == 1 &&
-          (static_cast<unsigned char>(typed[0]) < 0x20 ||
-           static_cast<unsigned char>(typed[0]) == 0x7f);
+          typed.size() == 1 && (static_cast<unsigned char>(typed[0]) < 0x20 ||
+                                static_cast<unsigned char>(typed[0]) == 0x7f);
       if (!isControlChar) {
         if (m_mouseSelection.HasSelection()) {
           ClearMouseSelection();
@@ -2433,55 +2473,18 @@ bool wxTerminalViewCtrl::HasActiveSearch() const {
 }
 
 void wxTerminalViewCtrl::Copy() {
-  TLOG_DEBUG() << "Copy is called!" << std::endl;
-  if (!m_mouseSelection.HasSelection()) {
+  auto selection = MouseSelectionToString();
+  if (!selection.has_value()) {
     TLOG_DEBUG() << "No selection is active - will "
                     "do nothing"
                  << std::endl;
     return;
   }
-
-  // Get the selected text using absolute buffer coordinates
-  wxString selection;
-  wxPoint s, e;
-  m_mouseSelection.GetAbsNormalized(s, e);
-  TLOG_DEBUG() << "Copying content (abs): (" << s.x << "," << s.y << ")-("
-               << e.x << "," << e.y << ")" << std::endl;
-  int totalLines = static_cast<int>(m_core.TotalLines());
-  int cols = static_cast<int>(m_core.Cols());
-  for (int absY = s.y; absY <= e.y && absY < totalLines; ++absY) {
-    const auto row = m_core.GetBufferRowCopy(absY);
-    int rowSize = static_cast<int>(row.size());
-    if (rowSize == 0) {
-      if (absY != e.y) {
-        selection += "\n";
-      }
-      continue;
-    }
-    int startCol = std::clamp((absY == s.y) ? s.x : 0, 0, rowSize - 1);
-    int endCol = std::clamp((absY == e.y) ? e.x : cols - 1, 0, rowSize - 1);
-    wxString line;
-    for (int x = startCol; x <= endCol; ++x) {
-      if (row[x].width == 0) {
-        continue;
-      }
-      line += wxUniChar(row[x].ch);
-    }
-    // A line whose last cell (at terminal width) is non-space was likely
-    // soft-wrapped rather than ended by a hard newline.
-    bool softWrapped = (endCol == cols - 1 && row[cols - 1].ch != U' ');
-    line.Trim();
-    selection += line;
-    if (absY != e.y && !softWrapped) {
-      selection += "\n";
-    }
-  }
-
-  TLOG_DEBUG() << "Copying:" << selection.size() << " chars. Content:\n"
-               << selection << std::endl;
+  TLOG_DEBUG() << "Copying:" << selection->size() << " chars. Content:\n"
+               << *selection << std::endl;
   // Copy to clipboard
   if (wxTheClipboard->Open()) {
-    wxTheClipboard->SetData(new wxTextDataObject(selection));
+    wxTheClipboard->SetData(new wxTextDataObject(*selection));
     wxTheClipboard->Flush();
     wxTheClipboard->Close();
   }
@@ -2927,4 +2930,8 @@ void wxTerminalViewCtrl::OnFeedTimer(wxTimerEvent &event) {
   if (ProcessFeedBuffer()) {
     m_feedTimer.StartOnce(kFeedTimerIntervalMs);
   }
+}
+
+std::optional<wxString> wxTerminalViewCtrl::GetMouseSelection() const {
+  return MouseSelectionToString();
 }
