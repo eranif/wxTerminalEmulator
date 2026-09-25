@@ -611,7 +611,23 @@ void wxTerminalViewCtrl::SendAltF() {
             "f");
 }
 
-wxString wxTerminalViewCtrl::GetText() const { return m_core.Flatten(); }
+wxString wxTerminalViewCtrl::GetText(std::size_t from,
+                                     std::size_t count) const {
+  return m_core.Flatten(from, count);
+}
+
+std::size_t wxTerminalViewCtrl::GetFirstVisibleLine() const {
+  return m_core.ViewStart();
+}
+
+std::size_t wxTerminalViewCtrl::GetLinesOnScreen() const {
+  return m_core.Rows();
+}
+
+std::size_t wxTerminalViewCtrl::GetLastLine() const {
+  const std::size_t total = m_core.TotalLines();
+  return total > 0 ? total - 1 : 0;
+}
 
 void wxTerminalViewCtrl::SetTheme(const wxTerminalTheme &theme) {
   m_core.SetTheme(theme);

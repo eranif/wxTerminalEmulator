@@ -65,8 +65,21 @@ public:
   void SendInput(const std::string &text);
   void SetTerminalSizeFromClient();
 
-  // Get the terminal screen (including scrollbuf lines)
-  wxString GetText() const;
+  /// Get the terminal text (scrollback lines included).
+  /// @param from Absolute index of the first line to return.
+  /// @param count Maximum number of lines to return.
+  /// Both are clamped to the buffer; an out of range `from` yields an empty
+  /// string. With the defaults the entire text is returned.
+  wxString
+  GetText(std::size_t from = 0,
+          std::size_t count = std::numeric_limits<std::size_t>::max()) const;
+
+  /// Absolute index of the first line currently visible on the screen.
+  std::size_t GetFirstVisibleLine() const;
+  /// Number of lines that can be drawn onto the screen.
+  std::size_t GetLinesOnScreen() const;
+  /// Absolute index of the last line in the buffer.
+  std::size_t GetLastLine() const;
 
   // Launch parameters this view was created with. Used to serialize/restore
   // the terminal layout so the same shells can be recreated on startup.

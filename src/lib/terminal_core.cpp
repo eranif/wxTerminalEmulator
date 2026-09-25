@@ -496,9 +496,8 @@ void TerminalCore::TsmBellCb(struct tsm_vte * /*vte*/, void *data) {
 }
 
 int TerminalCore::TsmDrawCb(struct tsm_screen * /*con*/, uint64_t /*id*/,
-                            const uint32_t *ch, size_t len,
-                            unsigned int width, unsigned int posx,
-                            unsigned int posy,
+                            const uint32_t *ch, size_t len, unsigned int width,
+                            unsigned int posx, unsigned int posy,
                             const struct tsm_screen_attr *attr,
                             tsm_age_t /*age*/, void *data) {
   auto *self = static_cast<TerminalCore *>(data);
@@ -532,21 +531,31 @@ int TerminalCore::TsmDrawCb(struct tsm_screen * /*con*/, uint64_t /*id*/,
 
 // --- Selection / Clicked Range ---
 
-wxString TerminalCore::Flatten() const {
+wxString TerminalCore::Flatten(std::size_t from, std::size_t count) const {
+  const std::size_t total = TotalLines();
+  if (from >= total || count == 0) {
+    return wxString();
+  }
+  // Overflow-safe: count may be std::numeric_limits<size_t>::max().
+  const std::size_t end = count > total - from ? total : from + count;
+
   wxArrayString lines;
-  lines.reserve(m_rows);
-  for (std::size_t r = 0; r < TotalLines(); ++r) {
+  lines.reserve(end - from);
+  for (std::size_t r = from; r < end; ++r) {
     wxString line = GetBufferRowCopyString(r);
     line.Trim();
     lines.push_back(line);
   }
 
-  // Trim trailing empty lines
-  while (!lines.empty()) {
-    if (!lines.back().empty()) {
-      break;
+  // Trim trailing empty lines, only when reaching the end of the buffer (the
+  // unused rows below the shell output); an explicit range keeps its blanks.
+  if (end == total) {
+    while (!lines.empty()) {
+      if (!lines.back().empty()) {
+        break;
+      }
+      lines.pop_back();
     }
-    lines.pop_back();
   }
   return wxJoin(lines, '\n');
 }

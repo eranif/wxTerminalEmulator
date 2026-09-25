@@ -105,7 +105,8 @@ enum class CellFlags {
 
 struct Cell {
   char32_t ch{U' '};
-  unsigned int width{1}; // number of terminal columns this cell spans (0 = filler for wide char)
+  unsigned int width{1}; // number of terminal columns this cell spans (0 =
+                         // filler for wide char)
   std::optional<CellColours> colours{std::nullopt};
   CellFlags flags{CellFlags::kNone};
 
@@ -217,7 +218,13 @@ public:
   // Returns the visible rows (view area) as a vector of pointers to rows
   std::vector<const std::vector<Cell> *> GetViewArea() const;
 
-  wxString Flatten() const;
+  // Flatten `count` buffer lines starting at absolute line `from` into a
+  // string (lines joined with '\n', trailing whitespace trimmed per line).
+  // Both are clamped to the buffer. Trailing empty lines are dropped when the
+  // range reaches the end of the buffer.
+  wxString
+  Flatten(std::size_t from = 0,
+          std::size_t count = std::numeric_limits<std::size_t>::max()) const;
 
   // Convert viewport-relative row to absolute buffer row
   std::size_t AbsRow(std::size_t viewportRow) const;

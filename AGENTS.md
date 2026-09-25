@@ -56,24 +56,7 @@ The `.agents/summary/` files are older than the code. Trust the code first.
 ```
 wxTerminalEmulator/
 ├── src/lib/                       # The library
-│   ├── terminal_core.h/cpp        # Terminal engine, drives libtsm (no wx GUI code)
-│   ├── terminal_view.h/cpp        # wxTerminalViewCtrl: rendering and input
-│   ├── terminal_gl_renderer.h/cpp # OpenGL glyph-atlas renderer
-│   ├── pty_backend.h              # Abstract PTY interface
-│   ├── pty_backend_windows.h/cpp  # Windows ConPTY implementation
-│   ├── pty_backend_posix.h/cpp    # Linux/macOS forkpty implementation
-│   ├── keyboard_layout.h          # Keyboard layout translation interface
-│   ├── keyboard_layout_mac.cpp    # macOS layout translation (Carbon)
-│   ├── terminal_event.h/cpp       # Custom wxWidgets events
-│   ├── terminal_theme.h           # Color schemes (dark and light presets)
-│   └── terminal_logger.h/cpp      # Debug logging system
 ├── src/glypht/                    # GlyphT demo application
-│   ├── main.cpp                   # Application entry point
-│   ├── MainFrame.h/cpp            # Main frame, multi-tab notebook
-│   ├── SettingsDlg.hpp/cpp        # Settings dialog
-│   ├── wxTerminalUI.hpp/cpp       # Generated UI base classes (wxCrafter)
-│   ├── app_persistence.h/cpp      # Application settings persistence
-│   └── layout_persistence.h/cpp   # Window and layout persistence
 ├── libtsm/                        # Vendored libtsm (VT parser), own CMake target `tsm`
 ├── cmake/                         # CMake helpers, e.g. FindWxWidgetsMSYS.cmake
 ├── assets/                        # Icons and images
