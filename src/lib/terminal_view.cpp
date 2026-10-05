@@ -1875,11 +1875,47 @@ void wxTerminalViewCtrl::DrawFocusBorder(wxDC &dc) const {
   dc.DrawRectangle(GetClientRect());
 }
 
+namespace {
+// True for a key press that produces plain text: a printable key with no
+// modifier other than Shift. Modifier keys pressed on their own are not
+// "special" either, there is nothing for an owner to act on.
+bool IsPureCharacterOrModifierKey(const wxKeyEvent &evt) {
+  const int key = evt.GetKeyCode();
+  if (key == WXK_SHIFT || key == WXK_CONTROL || key == WXK_RAW_CONTROL ||
+      key == WXK_ALT || key == WXK_CAPITAL || key == WXK_WINDOWS_LEFT ||
+      key == WXK_WINDOWS_RIGHT) {
+    return true;
+  }
+  if (evt.ControlDown() || evt.RawControlDown() || evt.AltDown() ||
+      evt.MetaDown()) {
+    return false;
+  }
+  if ((key >= WXK_SPACE && key < WXK_DELETE) ||
+      (key >= WXK_NUMPAD0 && key <= WXK_NUMPAD9) ||
+      key == WXK_NUMPAD_MULTIPLY || key == WXK_NUMPAD_ADD ||
+      key == WXK_NUMPAD_SUBTRACT || key == WXK_NUMPAD_DECIMAL ||
+      key == WXK_NUMPAD_DIVIDE) {
+    return true;
+  }
+  // Non-ASCII characters: the layout may report them with a key code above
+  // ASCII that is not a WXK_ special key.
+  return key > WXK_DELETE && key < WXK_START;
+}
+} // namespace
+
 void wxTerminalViewCtrl::OnCharHook(wxKeyEvent &evt) {
   if (!HasFocus()) {
     evt.Skip();
     return;
   }
+
+  // Give the owner a chance to handle shortcuts before we do. wxEVT_CHAR_HOOK
+  // is the first key event, so doing it here covers every key exactly once.
+  if (m_keyEventFilter && !IsPureCharacterOrModifierKey(evt) &&
+      m_keyEventFilter(evt)) {
+    return;
+  }
+
   auto scroller = std::make_unique<EndLineScroller>(this);
 
   // This event is sent before the key is processed

@@ -234,6 +234,21 @@ public:
     m_outputCallback = std::move(callback);
   }
 
+  /// Key event filter: lets the owner of the control handle keyboard
+  /// shortcuts before the terminal does. Return true to consume the key (the
+  /// terminal ignores it), false to let the terminal process it as usual.
+  using KeyEventFilter = std::function<bool(const wxKeyEvent &)>;
+
+  /// Register a filter that is called for every "special" key press: function
+  /// keys, navigation keys, Enter/Tab/Escape/Backspace and any key combined
+  /// with Ctrl, Alt or Meta (Ctrl+<Letter>, Ctrl+Alt+<Letter>, ...). It is
+  /// not called for a pure character (a printable key with no modifier other
+  /// than Shift) nor for a modifier key pressed on its own. Pass nullptr to
+  /// remove the filter.
+  void RegisterKeyEventFilter(KeyEventFilter cb) {
+    m_keyEventFilter = std::move(cb);
+  }
+
   // Override to indicate this window can receive keyboard focus
   bool AcceptsFocus() const override { return true; }
   bool AcceptsFocusFromKeyboard() const override { return true; }
@@ -558,6 +573,7 @@ private:
   std::vector<wxString> m_pendingCommands;
   bool m_backendReady{false};
   OutputCallback m_outputCallback{nullptr};
+  KeyEventFilter m_keyEventFilter{nullptr};
   std::atomic_bool m_refreshPending{false};
   size_t m_refreshRequested{0};
   size_t m_refreshExecuted{0};
