@@ -5,6 +5,11 @@ A short guide for AI agents working with the wxTerminalEmulator codebase.
 `CLAUDE.md` in the repository root is a symbolic link to this file. Editing one
 edits both.
 
+## Agent General Guides
+
+- Never add Co-Authored-By line to git commit.
+- Answer concisely and briefly. Use B1-level English: simple vocabulary, short sentences, no rare words or idioms.
+
 ## Project Overview
 
 wxTerminalEmulator is a cross-platform terminal emulation library for wxWidgets
