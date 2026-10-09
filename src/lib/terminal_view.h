@@ -375,6 +375,10 @@ private:
   void OnMouseLeftDoubleClick(wxMouseEvent &evt);
   void OnMouseMove(wxMouseEvent &evt);
   void OnMouseUp(wxMouseEvent &evt);
+  /// Right/middle button events: report to libtsm and skip.
+  void OnMouse(wxMouseEvent &evt);
+  /// Forward a mouse event to libtsm if the application enabled mouse tracking.
+  void ReportMouse(const wxMouseEvent &evt);
   void OnContextMenu(wxContextMenuEvent &evt);
   void OnMouseWheel(wxMouseEvent &evt);
   void OnFocus(wxFocusEvent &evt);

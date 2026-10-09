@@ -185,6 +185,11 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   Bind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
   Bind(wxEVT_LEFT_DCLICK, &wxTerminalViewCtrl::OnMouseLeftDoubleClick, this);
   Bind(wxEVT_MIDDLE_DOWN, &wxTerminalViewCtrl::OnMiddleClickPaste, this);
+  Bind(wxEVT_MIDDLE_DCLICK, &wxTerminalViewCtrl::OnMouse, this);
+  Bind(wxEVT_RIGHT_DOWN, &wxTerminalViewCtrl::OnMouse, this);
+  Bind(wxEVT_RIGHT_DCLICK, &wxTerminalViewCtrl::OnMouse, this);
+  Bind(wxEVT_MIDDLE_UP, &wxTerminalViewCtrl::OnMouse, this);
+  Bind(wxEVT_RIGHT_UP, &wxTerminalViewCtrl::OnMouse, this);
   Bind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseUp, this);
   Bind(wxEVT_MOTION, &wxTerminalViewCtrl::OnMouseMove, this);
   Bind(wxEVT_CONTEXT_MENU, &wxTerminalViewCtrl::OnContextMenu, this);
@@ -265,6 +270,11 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   Unbind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
   Unbind(wxEVT_LEFT_DCLICK, &wxTerminalViewCtrl::OnMouseLeftDoubleClick, this);
   Unbind(wxEVT_MIDDLE_DOWN, &wxTerminalViewCtrl::OnMiddleClickPaste, this);
+  Unbind(wxEVT_MIDDLE_DCLICK, &wxTerminalViewCtrl::OnMouse, this);
+  Unbind(wxEVT_RIGHT_DOWN, &wxTerminalViewCtrl::OnMouse, this);
+  Unbind(wxEVT_RIGHT_DCLICK, &wxTerminalViewCtrl::OnMouse, this);
+  Unbind(wxEVT_MIDDLE_UP, &wxTerminalViewCtrl::OnMouse, this);
+  Unbind(wxEVT_RIGHT_UP, &wxTerminalViewCtrl::OnMouse, this);
   Unbind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseUp, this);
   Unbind(wxEVT_MOTION, &wxTerminalViewCtrl::OnMouseMove, this);
   Unbind(wxEVT_CONTEXT_MENU, &wxTerminalViewCtrl::OnContextMenu, this);
@@ -1633,7 +1643,65 @@ void wxTerminalViewCtrl::PaintResizeOverlay(wxDC &dc) {
   dc.DrawText(sizeText, x, y);
 }
 
+void wxTerminalViewCtrl::ReportMouse(const wxMouseEvent &evt) {
+  if (m_core.GetMouseTrackingMode() == 0) {
+    return;
+  }
+  if (m_charW <= 0 || m_charH <= 0) {
+    return;
+  }
+  // The mouse is captured while the left button is held, so a drag or the
+  // release can happen outside the window: clamp to the grid instead of
+  // dropping the event, otherwise the application never sees the release.
+  const int cols = std::max(static_cast<int>(m_core.Cols()), 1);
+  const int rows = std::max(static_cast<int>(m_core.Rows()), 1);
+  const wxPoint cell{std::clamp(std::max(evt.GetX(), 0) / m_charW, 0, cols - 1),
+                     std::clamp(std::max(evt.GetY(), 0) / m_charH, 0, rows - 1)};
+
+  unsigned int button = TSM_MOUSE_BUTTON_LEFT;
+  switch (evt.GetButton()) {
+  case wxMOUSE_BTN_MIDDLE:
+    button = TSM_MOUSE_BUTTON_MIDDLE;
+    break;
+  case wxMOUSE_BTN_RIGHT:
+    button = TSM_MOUSE_BUTTON_RIGHT;
+    break;
+  default:
+    break;
+  }
+
+  unsigned int type = TSM_MOUSE_EVENT_PRESSED;
+  if (evt.ButtonUp()) {
+    type = TSM_MOUSE_EVENT_RELEASED;
+  } else if (evt.GetEventType() == wxEVT_MOTION) {
+    // A drag is reported as 32 + the held button, a plain hover as 3.
+    type = TSM_MOUSE_EVENT_MOVED;
+    button = evt.LeftIsDown()     ? 32 + TSM_MOUSE_BUTTON_LEFT
+             : evt.MiddleIsDown() ? 32 + TSM_MOUSE_BUTTON_MIDDLE
+             : evt.RightIsDown()  ? 32 + TSM_MOUSE_BUTTON_RIGHT
+                                  : 3;
+  }
+
+  unsigned char modifiers = 0;
+  if (evt.ShiftDown()) {
+    modifiers |= TSM_MOUSE_MODIFIER_SHIFT;
+  }
+  if (evt.AltDown()) {
+    modifiers |= TSM_MOUSE_MODIFIER_META;
+  }
+  if (evt.RawControlDown()) {
+    modifiers |= TSM_MOUSE_MODIFIER_CTRL;
+  }
+  m_core.HandleMouseEvent(cell.x, cell.y, button, type, modifiers);
+}
+
+void wxTerminalViewCtrl::OnMouse(wxMouseEvent &evt) {
+  ReportMouse(evt);
+  evt.Skip();
+}
+
 void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
+  ReportMouse(evt);
   evt.Skip();
 
   // Check if Control/CMD is down (we use CMD on macOS, since Ctrl+CLICK will
@@ -1682,6 +1750,8 @@ void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
     }
   }
 
+  ReportMouse(evt);
+
   if (!m_isDragging) {
     return;
   }
@@ -1716,6 +1786,7 @@ void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
 }
 
 void wxTerminalViewCtrl::OnMouseUp(wxMouseEvent &evt) {
+  ReportMouse(evt);
   evt.Skip();
   CallAfter(&wxTerminalViewCtrl::SetFocus);
 
@@ -1808,6 +1879,7 @@ void wxTerminalViewCtrl::OnCopy(wxCommandEvent &evt) {
 }
 
 void wxTerminalViewCtrl::OnMiddleClickPaste(wxMouseEvent &evt) {
+  ReportMouse(evt);
   evt.Skip();
   PasteFromPrimarySelection();
 }
@@ -2749,6 +2821,9 @@ std::optional<wxRect> wxTerminalViewCtrl::SelectionRectFromMousePoint(
 }
 
 void wxTerminalViewCtrl::OnMouseLeftDoubleClick(wxMouseEvent &evt) {
+  // The second click of a double click arrives as a DCLICK instead of a DOWN
+  // event (wxMSW, wxGTK and wxOSX all drop the DOWN), so report it as a press.
+  ReportMouse(evt);
   ClearMouseSelection();
 
   auto is_valid_char = [this](const wxUniChar &ch) -> bool {
