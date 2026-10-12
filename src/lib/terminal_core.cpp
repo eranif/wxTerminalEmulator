@@ -509,13 +509,11 @@ static std::string DecodeOsc7Uri(const std::string &uri) {
 
 void TerminalCore::TsmOscCb(struct tsm_vte * /*vte*/, const char *u8,
                             size_t len, void *data) {
-  TLOG_INFO() << "TsmOscCb is called" << std::endl;
   auto *self = static_cast<TerminalCore *>(data);
   if (len < 2)
     return;
 
   std::string osc(u8, len);
-  TLOG_INFO() << "OSC: " << osc[0] << ": " << osc.substr(1) << std::endl;
 
   // OSC 10;? — query foreground color
   if (osc.rfind("10;", 0) == 0 && osc.find('?') != std::string::npos) {
