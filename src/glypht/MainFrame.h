@@ -188,6 +188,9 @@ public:
   void OnTerminated(wxTerminalEvent &event);
   void OnTerminalLink(wxTerminalEvent &event);
   void OnBell(wxTerminalEvent &event);
+  void OnCwdChanged(wxTerminalEvent &event);
+  // Show the directory of the active terminal in the status bar.
+  void UpdateDirectoryStatus();
   void OnTimer(wxTimerEvent &event);
   void Terminate();
   void PersistSettings();

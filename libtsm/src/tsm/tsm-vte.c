@@ -115,7 +115,7 @@ enum parser_action {
 #define CSI_ARG_MAX 16
 
 /* max length of an OSC code */
-#define OSC_MAX_LEN 128
+#define OSC_MAX_LEN 4096
 
 /* terminal flags */
 #define FLAG_CURSOR_KEY_MODE			0x00000001 /* DEC cursor key mode */

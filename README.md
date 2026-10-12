@@ -312,7 +312,7 @@ The included demo application (`main.cpp`) showcases the library features:
 - `--shell=<command>`: Launch a specific shell or command (default: platform default shell)
 - `--working-directory=<path>`: Start the shell in a specific directory
 - `--env=<list>`: Pass environment variables to the launched process
-- `--log-level=<level>`: Set logging verbosity (default: `warn`)
+- `--log-level=<level>`: Set logging verbosity: `trace`, `debug`, `info`, `warn`, or `error` (default: `error`)
 
 ## API Reference
 

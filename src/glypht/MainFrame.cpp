@@ -50,7 +50,10 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   AppPersistence::Load(m_config);
   ApplyNativeAppTheme();
 
-  CreateStatusBar();
+  // Field 0: messages. Field 1: directory of the active terminal.
+  CreateStatusBar(2);
+  const int statusWidths[] = {-1, -2};
+  SetStatusWidths(2, statusWidths);
   BuildMenuBar();
   long nbStyle = wxAUI_NB_DEFAULT_STYLE &
                  ~(wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS);
@@ -90,6 +93,7 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
         if (page) {
           page->SetFocus();
         }
+        UpdateDirectoryStatus();
       });
   m_notebook->Bind(
       wxEVT_AUINOTEBOOK_TAB_RIGHT_UP,
@@ -425,6 +429,7 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   page->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
   page->Bind(wxEVT_TERMINAL_TEXT_LINK, &MyFrame::OnTerminalLink, this);
   page->Bind(wxEVT_TERMINAL_BELL, &MyFrame::OnBell, this);
+  page->Bind(wxEVT_TERMINAL_CWD_CHANGED, &MyFrame::OnCwdChanged, this);
   return page;
 }
 
@@ -672,6 +677,27 @@ void MyFrame::OnTerminalLink(wxTerminalEvent &event) {
   } else if (wxFileName::FileExists(clickedText)) {
     ::wxLaunchDefaultApplication(clickedText);
   }
+}
+
+// Status bar fields: 0 for messages, 1 for the directory of the active tab.
+static constexpr int kStatusFieldDirectory = 1;
+
+void MyFrame::OnCwdChanged(wxTerminalEvent &event) {
+  event.Skip();
+  // Tabs in the background must not overwrite the active tab's directory.
+  if (event.GetEventObject() == GetActiveTerminalView()) {
+    UpdateDirectoryStatus();
+  }
+}
+
+void MyFrame::UpdateDirectoryStatus() {
+  auto *statusBar = GetStatusBar();
+  if (!statusBar || statusBar->GetFieldsCount() <= kStatusFieldDirectory) {
+    return;
+  }
+  auto *view = GetActiveTerminalView();
+  statusBar->SetStatusText(view ? view->GetCurrentDirectory() : wxString{},
+                           kStatusFieldDirectory);
 }
 
 void MyFrame::OnBell(wxTerminalEvent &event) {

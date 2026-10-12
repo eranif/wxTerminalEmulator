@@ -89,6 +89,9 @@ public:
                               : wxString{};
   }
 
+  /// Last directory the program reported with OSC 7 or OSC 9;9, or an empty string.
+  wxString GetCurrentDirectory() const { return m_currentDirectory; }
+
   static bool IsOpenGLEnabled();
 
   // Helper methods for sending special characters
@@ -566,6 +569,7 @@ private:
   wxString m_shell_command;
   std::optional<EnvironmentList> m_environment{std::nullopt};
   std::optional<std::string> m_workingDirectory{std::nullopt};
+  wxString m_currentDirectory;
   bool m_safeDrawing{false};
 #if USE_TIMER_REFRESH
   std::atomic_bool m_needsRepaint{true};

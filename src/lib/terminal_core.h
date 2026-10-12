@@ -172,6 +172,10 @@ public:
   void SetTitleCallback(std::function<void(const std::string &)> callback) {
     m_titleCallback = callback;
   }
+  // Called with the decoded path when the program sends OSC 7 or OSC 9;9.
+  void SetCwdCallback(std::function<void(const std::string &)> callback) {
+    m_cwdCallback = callback;
+  }
   void SetBellCallback(std::function<void()> callback) {
     m_bellCallback = callback;
   }
@@ -288,6 +292,7 @@ private:
   wxTerminalTheme m_theme;
   std::function<void(const std::string &)> m_responseCallback;
   std::function<void(const std::string &)> m_titleCallback;
+  std::function<void(const std::string &)> m_cwdCallback;
   std::function<void()> m_bellCallback;
   std::function<void(bool entered)> m_altScreenCallback;
   wxRect m_clickedRect;

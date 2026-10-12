@@ -225,6 +225,26 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     // If no env provided, create one.
     EnvironmentList env_list;
     auto env_map = BuildEnvMap();
+#ifdef _WIN32
+    // Make MSYS bash report its directory (OSC 9;9) at every prompt. An
+    // existing PROMPT_COMMAND is kept and ours runs after it.
+    const wxString promptHook =
+        "command -v cygpath >/dev/null && "
+        "printf '\\e]9;9;%s\\a' \"$(cygpath -w \"$PWD\")\"";
+    wxString &promptCommand = env_map[wxS("PROMPT_COMMAND")];
+    promptCommand = promptCommand.empty() ? promptHook
+                                          : promptCommand + "; " + promptHook;
+
+    // Same for cmd.exe: put OSC 9;9 with the current directory in front of its
+    // prompt. "$P$G" is the cmd default prompt.
+    const wxString cmdHook = "$E]9;9;$P$E\\";
+    wxString &cmdPrompt = env_map[wxS("PROMPT")];
+    if (cmdPrompt.empty()) {
+      cmdPrompt = cmdHook + "$P$G";
+    } else if (!cmdPrompt.Contains("$E]9;9;")) {
+      cmdPrompt = cmdHook + cmdPrompt;
+    }
+#endif
     for (const auto &[n, v] : env_map) {
       wxString entry;
       entry << n << "=" << v;
@@ -240,6 +260,13 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   m_core.SetTitleCallback([this](const std::string &title) {
     wxTerminalEvent event{wxEVT_TERMINAL_TITLE_CHANGED};
     event.SetTitle(wxString::FromUTF8(title));
+    event.SetEventObject(this);
+    GetEventHandler()->AddPendingEvent(event);
+  });
+  m_core.SetCwdCallback([this](const std::string &path) {
+    m_currentDirectory = wxString::FromUTF8(path);
+    wxTerminalEvent event{wxEVT_TERMINAL_CWD_CHANGED};
+    event.SetString(m_currentDirectory);
     event.SetEventObject(this);
     GetEventHandler()->AddPendingEvent(event);
   });

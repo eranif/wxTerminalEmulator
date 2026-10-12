@@ -1,6 +1,7 @@
 #include "terminal_core.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 
 #include <wx/string.h>
@@ -460,13 +461,61 @@ static std::string OscRgbResponse(const wxColour &c, int oscId) {
   return buf;
 }
 
+static int HexDigitValue(char c) {
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  if (c >= 'a' && c <= 'f')
+    return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F')
+    return c - 'A' + 10;
+  return -1;
+}
+
+// Turn the URI of an OSC 7 sequence ("file://host/percent%20encoded/path") into
+// a plain path. Returns an empty string when the URI is not usable.
+static std::string DecodeOsc7Uri(const std::string &uri) {
+  static const std::string kScheme = "file://";
+  if (uri.compare(0, kScheme.size(), kScheme) != 0)
+    return {};
+
+  // Skip the host: the path starts at the first '/' after "file://".
+  const std::size_t pathStart = uri.find('/', kScheme.size());
+  if (pathStart == std::string::npos)
+    return {};
+
+  std::string path;
+  path.reserve(uri.size() - pathStart);
+  for (std::size_t i = pathStart; i < uri.size(); ++i) {
+    if (uri[i] == '%' && i + 2 < uri.size() && HexDigitValue(uri[i + 1]) >= 0 &&
+        HexDigitValue(uri[i + 2]) >= 0) {
+      path += static_cast<char>(HexDigitValue(uri[i + 1]) * 16 +
+                                HexDigitValue(uri[i + 2]));
+      i += 2;
+    } else {
+      path += uri[i];
+    }
+  }
+
+#ifdef _WIN32
+  // "/C:/dir" -> "C:/dir"
+  if (path.size() >= 3 && path[0] == '/' &&
+      std::isalpha(static_cast<unsigned char>(path[1])) && path[2] == ':' &&
+      (path.size() == 3 || path[3] == '/')) {
+    path.erase(0, 1);
+  }
+#endif
+  return path;
+}
+
 void TerminalCore::TsmOscCb(struct tsm_vte * /*vte*/, const char *u8,
                             size_t len, void *data) {
+  TLOG_INFO() << "TsmOscCb is called" << std::endl;
   auto *self = static_cast<TerminalCore *>(data);
   if (len < 2)
     return;
 
   std::string osc(u8, len);
+  TLOG_INFO() << "OSC: " << osc[0] << ": " << osc.substr(1) << std::endl;
 
   // OSC 10;? — query foreground color
   if (osc.rfind("10;", 0) == 0 && osc.find('?') != std::string::npos) {
@@ -486,6 +535,25 @@ void TerminalCore::TsmOscCb(struct tsm_vte * /*vte*/, const char *u8,
   if ((osc[0] == '0' || osc[0] == '2') && osc[1] == ';') {
     if (self->m_titleCallback)
       self->m_titleCallback(osc.substr(2));
+    return;
+  }
+
+  // OSC 7;file://host/path — current working directory
+  if (osc[0] == '7' && osc[1] == ';') {
+    std::string path = DecodeOsc7Uri(osc.substr(2));
+    if (!path.empty() && self->m_cwdCallback)
+      self->m_cwdCallback(path);
+    return;
+  }
+
+  // OSC 9;9;"C:\dir" — current working directory (ConEmu, Windows Terminal).
+  // The path is plain text, optionally in double quotes.
+  if (osc.rfind("9;9;", 0) == 0) {
+    std::string path = osc.substr(4);
+    if (path.size() >= 2 && path.front() == '"' && path.back() == '"')
+      path = path.substr(1, path.size() - 2);
+    if (!path.empty() && self->m_cwdCallback)
+      self->m_cwdCallback(path);
   }
 }
 

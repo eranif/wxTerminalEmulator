@@ -202,6 +202,7 @@ one for keyboard layout translation).
 | Event | Fired When | Handler Signature |
 |-------|-----------|-------------------|
 | `wxEVT_TERMINAL_TITLE_CHANGED` | OSC 0/2 title sequence | `evt.GetTitle()` |
+| `wxEVT_TERMINAL_CWD_CHANGED` | OSC 7 or OSC 9;9 current directory | `evt.GetString()` (decoded path); also `GetCurrentDirectory()` |
 | `wxEVT_TERMINAL_TERMINATED` | Child process exits | No payload |
 | `wxEVT_TERMINAL_TEXT_LINK` | Ctrl+click on text | `evt.GetClickedText()` |
 | `wxEVT_TERMINAL_BELL` | BEL character received | No payload |
