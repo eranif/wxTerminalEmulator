@@ -45,10 +45,20 @@ class wxTerminalViewCtrl : public wxTerminalViewBase {
 public:
   using EnvironmentList = terminal::PtyBackend::EnvironmentList;
 
+  /**
+   * @param shellIntegration When true (the default), the control adds shell
+   *        hooks to the environment of the child process so that bash reports
+   *        its directory (OSC 7 / OSC 9;9, see wxEVT_TERMINAL_CWD_CHANGED),
+   *        also over ssh and in WSL, and cmd.exe does the same on Windows. The
+   *        hooks are added to `environment` when it is given, otherwise to a
+   *        copy of the process environment. An existing PROMPT_COMMAND (or
+   *        PROMPT on Windows) is kept and extended. Set to false to leave the
+   *        environment untouched.
+   */
   wxTerminalViewCtrl(wxWindow *parent, const wxString &shellCommand,
                      const std::optional<EnvironmentList> &environment,
                      std::optional<wxString> workingDirectory = std::nullopt,
-                     bool showScrollBar = true);
+                     bool showScrollBar = true, bool shellIntegration = true);
   ~wxTerminalViewCtrl() override;
 
   /**
@@ -89,7 +99,8 @@ public:
                               : wxString{};
   }
 
-  /// Last directory the program reported with OSC 7 or OSC 9;9, or an empty string.
+  /// Last directory the program reported with OSC 7 or OSC 9;9, or an empty
+  /// string.
   wxString GetCurrentDirectory() const { return m_currentDirectory; }
 
   static bool IsOpenGLEnabled();

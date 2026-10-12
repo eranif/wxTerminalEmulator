@@ -147,6 +147,82 @@ ssh() {
 }
 )SH";
 
+/// Turns "NAME=VALUE" entries into a map. Entries without '=' are dropped. For
+/// a repeated name the first entry wins, like getenv() does.
+EnvMap EnvMapFromList(const terminal::PtyBackend::EnvironmentList &list) {
+  EnvMap env_map;
+  for (const auto &entry : list) {
+    const size_t eq_pos = entry.find('=');
+    if (eq_pos == std::string::npos || eq_pos == 0) {
+      continue;
+    }
+    env_map.emplace(wxString::FromUTF8(entry.substr(0, eq_pos)),
+                    wxString::FromUTF8(entry.substr(eq_pos + 1)));
+  }
+  return env_map;
+}
+
+/// Returns the value of `name`, creating it if needed. On Windows names are
+/// case insensitive, so "Prompt" is found when looking for "PROMPT".
+wxString &EnvVar(EnvMap &env_map, const wxString &name) {
+#ifdef _WIN32
+  for (auto &[key, value] : env_map) {
+    if (key.IsSameAs(name, false)) {
+      return value;
+    }
+  }
+#endif
+  return env_map[name];
+}
+
+/**
+ * Adds the shell hooks to `env_map`: bash reports its directory at every
+ * prompt, and on Windows WSL and cmd.exe do the same.
+ */
+void ApplyShellIntegration(EnvMap &env_map) {
+  // Make bash report its directory at every prompt, and wrap ssh so remote
+  // bash shells report theirs (OSC 7). The wrapper code is passed in
+  // GLYPHT_SHELL_INTEGRATION and evaluated at the first prompt. An existing
+  // PROMPT_COMMAND is kept and ours runs after it. Other shells ignore it.
+  EnvVar(env_map, wxS("GLYPHT_SHELL_INTEGRATION")) =
+      wxString(kSshWrapperScript);
+  // MSYS bash has cygpath and reports a Windows path (OSC 9;9). Other bash
+  // shells (WSL, Linux, macOS) report the POSIX path (OSC 7).
+  const wxString promptHook =
+      "[ -n \"$__glypht_init\" ] || { __glypht_init=1; "
+      "eval \"$GLYPHT_SHELL_INTEGRATION\"; }; "
+      "if command -v cygpath >/dev/null; then "
+      "printf '\\e]9;9;%s\\a' \"$(cygpath -w \"$PWD\")\"; "
+      "else "
+      "printf '\\e]7;file://%s%s\\a' \"$HOSTNAME\" \"$PWD\"; "
+      "fi";
+  wxString &promptCommand = EnvVar(env_map, wxS("PROMPT_COMMAND"));
+  promptCommand = promptCommand.empty() ? promptHook
+                                        : promptCommand + "; " + promptHook;
+
+#ifdef _WIN32
+  // Pass both variables on to WSL. "/u" shares them only when WSL is started
+  // from Windows.
+  wxString &wslEnv = EnvVar(env_map, wxS("WSLENV"));
+  for (const wxString name : {"PROMPT_COMMAND", "GLYPHT_SHELL_INTEGRATION"}) {
+    if (!wslEnv.Contains(name)) {
+      wslEnv += (wslEnv.empty() || wslEnv.EndsWith(":") ? "" : ":") + name +
+                "/u";
+    }
+  }
+
+  // Same for cmd.exe: put OSC 9;9 with the current directory in front of its
+  // prompt. "$P$G" is the cmd default prompt.
+  const wxString cmdHook = "$E]9;9;$P$E\\";
+  wxString &cmdPrompt = EnvVar(env_map, wxS("PROMPT"));
+  if (cmdPrompt.empty()) {
+    cmdPrompt = cmdHook + "$P$G";
+  } else if (!cmdPrompt.Contains("$E]9;9;")) {
+    cmdPrompt = cmdHook + cmdPrompt;
+  }
+#endif
+}
+
 } // namespace
 
 // Map of character key codes to their shifted values
@@ -186,7 +262,8 @@ auto kOpenGLAttributes = []() -> wxGLAttributes {
 wxTerminalViewCtrl::wxTerminalViewCtrl(
     wxWindow *parent, const wxString &shellCommand,
     const std::optional<EnvironmentList> &environment,
-    std::optional<wxString> workingDirectory, bool showScrollBar)
+    std::optional<wxString> workingDirectory, bool showScrollBar,
+    bool shellIntegration)
 #if USE_OPENGL
     : wxGLCanvas(parent, kOpenGLAttributes, wxID_ANY, wxDefaultPosition,
                  wxDefaultSize,
@@ -272,51 +349,19 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     m_workingDirectory = workingDirectory->ToStdString(wxConvUTF8);
   }
 
-  if (!m_environment.has_value()) {
-    TLOG_DEBUG() << "No env provided. Building one." << std::endl;
-    // If no env provided, create one.
+  // Build the environment from the process environment if none was provided.
+  // Add the shell hooks to it, or to the provided one. A provided environment
+  // that needs no hooks is used as is.
+  if (!m_environment.has_value() || shellIntegration) {
+    TLOG_DEBUG() << (m_environment.has_value() ? "Env provided. Adding hooks."
+                                               : "No env provided. Building one.")
+                 << std::endl;
     EnvironmentList env_list;
-    auto env_map = BuildEnvMap();
-    // Make bash report its directory at every prompt, and wrap ssh so remote
-    // bash shells report theirs (OSC 7). The wrapper code is passed in
-    // GLYPHT_SHELL_INTEGRATION and evaluated at the first prompt. An existing
-    // PROMPT_COMMAND is kept and ours runs after it. Other shells ignore it.
-    env_map[wxS("GLYPHT_SHELL_INTEGRATION")] = wxString(kSshWrapperScript);
-    // MSYS bash has cygpath and reports a Windows path (OSC 9;9). Other bash
-    // shells (WSL, Linux, macOS) report the POSIX path (OSC 7).
-    const wxString promptHook =
-        "[ -n \"$__glypht_init\" ] || { __glypht_init=1; "
-        "eval \"$GLYPHT_SHELL_INTEGRATION\"; }; "
-        "if command -v cygpath >/dev/null; then "
-        "printf '\\e]9;9;%s\\a' \"$(cygpath -w \"$PWD\")\"; "
-        "else "
-        "printf '\\e]7;file://%s%s\\a' \"$HOSTNAME\" \"$PWD\"; "
-        "fi";
-    wxString &promptCommand = env_map[wxS("PROMPT_COMMAND")];
-    promptCommand = promptCommand.empty() ? promptHook
-                                          : promptCommand + "; " + promptHook;
-
-#ifdef _WIN32
-    // Pass both variables on to WSL. "/u" shares them only when WSL is started
-    // from Windows.
-    wxString &wslEnv = env_map[wxS("WSLENV")];
-    for (const wxString name : {"PROMPT_COMMAND", "GLYPHT_SHELL_INTEGRATION"}) {
-      if (!wslEnv.Contains(name)) {
-        wslEnv += (wslEnv.empty() || wslEnv.EndsWith(":") ? "" : ":") + name +
-                  "/u";
-      }
+    auto env_map = m_environment.has_value() ? EnvMapFromList(*m_environment)
+                                             : BuildEnvMap();
+    if (shellIntegration) {
+      ApplyShellIntegration(env_map);
     }
-
-    // Same for cmd.exe: put OSC 9;9 with the current directory in front of its
-    // prompt. "$P$G" is the cmd default prompt.
-    const wxString cmdHook = "$E]9;9;$P$E\\";
-    wxString &cmdPrompt = env_map[wxS("PROMPT")];
-    if (cmdPrompt.empty()) {
-      cmdPrompt = cmdHook + "$P$G";
-    } else if (!cmdPrompt.Contains("$E]9;9;")) {
-      cmdPrompt = cmdHook + cmdPrompt;
-    }
-#endif
     for (const auto &[n, v] : env_map) {
       wxString entry;
       entry << n << "=" << v;
