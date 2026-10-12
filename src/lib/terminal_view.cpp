@@ -95,7 +95,6 @@ EnvMap BuildEnvMap() {
   return env_map;
 }
 
-#ifdef _WIN32
 /**
  * bash code that wraps ssh so remote bash shells report their directory
  * (OSC 7) without any setup on the remote host. It is evaluated once by the
@@ -147,7 +146,6 @@ ssh() {
   command ssh -t "$@" "exec env PROMPT_COMMAND=$(printf '%q' "$hook") \$SHELL -l"
 }
 )SH";
-#endif
 
 } // namespace
 
@@ -279,14 +277,13 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     // If no env provided, create one.
     EnvironmentList env_list;
     auto env_map = BuildEnvMap();
-#ifdef _WIN32
-    // Make MSYS bash report its directory (OSC 9;9) at every prompt, and wrap
-    // ssh so remote bash shells report theirs (OSC 7). The wrapper code is
-    // passed in GLYPHT_SHELL_INTEGRATION and evaluated at the first prompt.
-    // An existing PROMPT_COMMAND is kept and ours runs after it.
+    // Make bash report its directory at every prompt, and wrap ssh so remote
+    // bash shells report theirs (OSC 7). The wrapper code is passed in
+    // GLYPHT_SHELL_INTEGRATION and evaluated at the first prompt. An existing
+    // PROMPT_COMMAND is kept and ours runs after it. Other shells ignore it.
     env_map[wxS("GLYPHT_SHELL_INTEGRATION")] = wxString(kSshWrapperScript);
     // MSYS bash has cygpath and reports a Windows path (OSC 9;9). Other bash
-    // shells, for example WSL, report the POSIX path (OSC 7).
+    // shells (WSL, Linux, macOS) report the POSIX path (OSC 7).
     const wxString promptHook =
         "[ -n \"$__glypht_init\" ] || { __glypht_init=1; "
         "eval \"$GLYPHT_SHELL_INTEGRATION\"; }; "
@@ -299,6 +296,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     promptCommand = promptCommand.empty() ? promptHook
                                           : promptCommand + "; " + promptHook;
 
+#ifdef _WIN32
     // Pass both variables on to WSL. "/u" shares them only when WSL is started
     // from Windows.
     wxString &wslEnv = env_map[wxS("WSLENV")];
