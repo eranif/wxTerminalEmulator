@@ -95,6 +95,60 @@ EnvMap BuildEnvMap() {
   return env_map;
 }
 
+#ifdef _WIN32
+/**
+ * bash code that wraps ssh so remote bash shells report their directory
+ * (OSC 7) without any setup on the remote host. It is evaluated once by the
+ * local bash, from the GLYPHT_SHELL_INTEGRATION variable.
+ *
+ * For an interactive login (no remote command) it runs
+ *   ssh -t <args> 'exec env PROMPT_COMMAND=<hook> $SHELL -l'
+ * Nothing is written on the remote host. Remote shells other than bash ignore
+ * PROMPT_COMMAND and keep working as before. Every other kind of call
+ * (remote command, -N, -W, -T, -O, no terminal, ...) goes to the real ssh
+ * unchanged.
+ */
+constexpr const char *kSshWrapperScript = R"SH(
+ssh() {
+  local arg c i val skip= dest= plain=
+  if [ ! -t 0 ] || [ ! -t 1 ]; then command ssh "$@"; return; fi
+  for arg in "$@"; do
+    if [ -n "$skip" ]; then
+      if [ "$skip" = o ]; then
+        case "$arg" in [Rr]emote[Cc]ommand*|[Rr]equest[Tt][Tt][Yy]*) plain=1;; esac
+      fi
+      skip=; continue
+    fi
+    if [ -n "$dest" ]; then plain=1; break; fi
+    case "$arg" in
+      --) ;;
+      -?*)
+        i=1
+        while [ "$i" -lt "${#arg}" ]; do
+          c=${arg:$i:1}
+          case "$c" in [NTfGVnsQOW]) plain=1;; esac
+          case "$c" in
+            [BbcDEeFIiJLlmOopQRSWw])
+              val=${arg:$((i+1))}
+              if [ -z "$val" ]; then
+                skip=$c
+              elif [ "$c" = o ]; then
+                case "$val" in [Rr]emote[Cc]ommand*|[Rr]equest[Tt][Tt][Yy]*) plain=1;; esac
+              fi
+              break;;
+          esac
+          i=$((i+1))
+        done;;
+      *) dest=$arg;;
+    esac
+  done
+  if [ -n "$plain" ] || [ -z "$dest" ]; then command ssh "$@"; return; fi
+  local hook="printf '\\e]7;file://%s%s\\a' \"\$HOSTNAME\" \"\$PWD\""
+  command ssh -t "$@" "exec env PROMPT_COMMAND=$(printf '%q' "$hook") \$SHELL -l"
+}
+)SH";
+#endif
+
 } // namespace
 
 // Map of character key codes to their shifted values
@@ -226,14 +280,34 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     EnvironmentList env_list;
     auto env_map = BuildEnvMap();
 #ifdef _WIN32
-    // Make MSYS bash report its directory (OSC 9;9) at every prompt. An
-    // existing PROMPT_COMMAND is kept and ours runs after it.
+    // Make MSYS bash report its directory (OSC 9;9) at every prompt, and wrap
+    // ssh so remote bash shells report theirs (OSC 7). The wrapper code is
+    // passed in GLYPHT_SHELL_INTEGRATION and evaluated at the first prompt.
+    // An existing PROMPT_COMMAND is kept and ours runs after it.
+    env_map[wxS("GLYPHT_SHELL_INTEGRATION")] = wxString(kSshWrapperScript);
+    // MSYS bash has cygpath and reports a Windows path (OSC 9;9). Other bash
+    // shells, for example WSL, report the POSIX path (OSC 7).
     const wxString promptHook =
-        "command -v cygpath >/dev/null && "
-        "printf '\\e]9;9;%s\\a' \"$(cygpath -w \"$PWD\")\"";
+        "[ -n \"$__glypht_init\" ] || { __glypht_init=1; "
+        "eval \"$GLYPHT_SHELL_INTEGRATION\"; }; "
+        "if command -v cygpath >/dev/null; then "
+        "printf '\\e]9;9;%s\\a' \"$(cygpath -w \"$PWD\")\"; "
+        "else "
+        "printf '\\e]7;file://%s%s\\a' \"$HOSTNAME\" \"$PWD\"; "
+        "fi";
     wxString &promptCommand = env_map[wxS("PROMPT_COMMAND")];
     promptCommand = promptCommand.empty() ? promptHook
                                           : promptCommand + "; " + promptHook;
+
+    // Pass both variables on to WSL. "/u" shares them only when WSL is started
+    // from Windows.
+    wxString &wslEnv = env_map[wxS("WSLENV")];
+    for (const wxString name : {"PROMPT_COMMAND", "GLYPHT_SHELL_INTEGRATION"}) {
+      if (!wslEnv.Contains(name)) {
+        wslEnv += (wslEnv.empty() || wslEnv.EndsWith(":") ? "" : ":") + name +
+                  "/u";
+      }
+    }
 
     // Same for cmd.exe: put OSC 9;9 with the current directory in front of its
     // prompt. "$P$G" is the cmd default prompt.
