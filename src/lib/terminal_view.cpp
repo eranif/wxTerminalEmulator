@@ -106,11 +106,21 @@ EnvMap BuildEnvMap() {
  * PROMPT_COMMAND and keep working as before. Every other kind of call
  * (remote command, -N, -W, -T, -O, no terminal, ...) goes to the real ssh
  * unchanged.
+ *
+ * Every call also gets `-o ServerAliveInterval=10`, so an idle connection is
+ * not dropped. It comes before the caller's arguments, and ssh keeps the first
+ * value it sees for an option, so it also wins over a value given by the
+ * caller or in ~/.ssh/config.
+ *
+ * An `ssh` alias (for example `alias ssh='ssh -o ...'`) would be expanded in
+ * `ssh() {` and make it a syntax error, so it is removed first. eval runs the
+ * commands one at a time, so the alias is gone before the function is read.
  */
 constexpr const char *kSshWrapperScript = R"SH(
+unalias ssh >/dev/null 2>&1
 ssh() {
   local arg c i val skip= dest= plain=
-  if [ ! -t 0 ] || [ ! -t 1 ]; then command ssh "$@"; return; fi
+  if [ ! -t 0 ] || [ ! -t 1 ]; then command ssh -o ServerAliveInterval=10 "$@"; return; fi
   for arg in "$@"; do
     if [ -n "$skip" ]; then
       if [ "$skip" = o ]; then
@@ -141,9 +151,9 @@ ssh() {
       *) dest=$arg;;
     esac
   done
-  if [ -n "$plain" ] || [ -z "$dest" ]; then command ssh "$@"; return; fi
+  if [ -n "$plain" ] || [ -z "$dest" ]; then command ssh -o ServerAliveInterval=10 "$@"; return; fi
   local hook="printf '\\e]7;file://%s%s\\a' \"\$HOSTNAME\" \"\$PWD\""
-  command ssh -t "$@" "exec env PROMPT_COMMAND=$(printf '%q' "$hook") \$SHELL -l"
+  command ssh -o ServerAliveInterval=10 -t "$@" "exec env PROMPT_COMMAND=$(printf '%q' "$hook") \$SHELL -l"
 }
 )SH";
 
