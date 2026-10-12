@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        wx-version: ['v3.2.8.1'] # <v3.2.7 cannot be compiled with clang-19
+        wx-version: ['v3.3.4']
         options: ['', '-DBUILD_WXTERMINAL_DEMO=OFF']
         
     steps:

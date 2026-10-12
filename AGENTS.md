@@ -20,8 +20,8 @@ embeds a working terminal into a wxWidgets application.
 
 - Static library (`wxterminal_lib`) plus the demo application `glypht`
   ("GlyphT"), built from `src/glypht/`
-- C++20, CMake 3.10+, wxWidgets 3.2.x (CI builds against `v3.2.8.1`; 3.3.x also
-  works)
+- C++20, CMake 3.10+, wxWidgets 3.2.x (CI builds against `v3.2.8.1` on macOS
+  and Linux, and against `v3.3.4` on Windows/MSYS2; 3.3.x also works)
 - VT parsing is done by a vendored copy of **libtsm** in `libtsm/`
 - PTY: Windows (ConPTY), macOS and Linux (`forkpty`)
 - Two renderers: an OpenGL glyph atlas and the older wxDC renderer
