@@ -4,6 +4,7 @@
 
 #include "terminal_logger.h"
 
+#include <algorithm>
 #include <cmath>
 #include <wx/bitmap.h>
 #include <wx/dcmemory.h>
@@ -54,12 +55,15 @@ in vec4 v_color;
 uniform sampler2D u_atlas;
 uniform int u_useTexture;
 out vec4 fragColor;
+// The atlas holds premultiplied RGBA. A monochrome glyph is stored as
+// (cov, cov, cov, cov) and v_color is the text colour, so the product tints it.
+// A colour glyph (emoji) is stored with its own colours and v_color is white.
+// Blending uses GL_ONE, GL_ONE_MINUS_SRC_ALPHA (premultiplied alpha).
 void main() {
     if (u_useTexture == 1) {
-        float coverage = texture(u_atlas, v_uv).r;
-        fragColor = vec4(v_color.rgb, v_color.a * coverage);
+        fragColor = texture(u_atlas, v_uv) * v_color;
     } else {
-        fragColor = v_color;
+        fragColor = vec4(v_color.rgb * v_color.a, v_color.a);
     }
 }
 )";
@@ -78,6 +82,29 @@ GLuint CompileShader(GLenum type, const char *src) {
     return 0;
   }
   return shader;
+}
+
+// Code point ranges where fonts often have colour (emoji) glyphs. Only these
+// are checked for colour. Outside them, colour pixels are ClearType fringes on
+// Windows and must be treated as grey coverage.
+bool IsColourGlyphCandidate(char32_t ch) {
+  return ch >= 0x1F000 || (ch >= 0x2300 && ch <= 0x23FF) ||
+         (ch >= 0x2600 && ch <= 0x27BF) || (ch >= 0x2B00 && ch <= 0x2BFF) ||
+         (ch >= 0x3000 && ch <= 0x303F) || (ch >= 0x3290 && ch <= 0x32FF);
+}
+
+// True if the white-on-black render has pixels that are not grey.
+bool HasColourPixels(const unsigned char *rgb, size_t pixelCount) {
+  constexpr int kMinChroma = 32;
+  for (size_t i = 0; i < pixelCount; ++i) {
+    const int r = rgb[i * 3], g = rgb[i * 3 + 1], b = rgb[i * 3 + 2];
+    const int hi = std::max({r, g, b});
+    const int lo = std::min({r, g, b});
+    if (hi - lo > kMinChroma) {
+      return true;
+    }
+  }
+  return false;
 }
 
 } // namespace
@@ -160,7 +187,7 @@ bool TerminalGLRenderer::Init() {
                         (void *)offsetof(Vertex, r));
   glBindVertexArray(0);
 
-  // Single-channel coverage atlas.
+  // Premultiplied RGBA atlas (see the fragment shader).
   m_atlasW = kAtlasSize;
   m_atlasH = kAtlasSize;
   glGenTextures(1, &m_atlasTex);
@@ -169,11 +196,10 @@ bool TerminalGLRenderer::Init() {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  // Single-component texture: replicate red into rgb via swizzle is not needed
-  // because the shader samples .r directly.
-  std::vector<unsigned char> zero(static_cast<size_t>(m_atlasW) * m_atlasH, 0);
+  std::vector<unsigned char> zero(static_cast<size_t>(m_atlasW) * m_atlasH * 4,
+                                  0);
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_atlasW, m_atlasH, 0, GL_RED,
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_atlasW, m_atlasH, 0, GL_RGBA,
                GL_UNSIGNED_BYTE, zero.data());
   glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -230,10 +256,10 @@ void TerminalGLRenderer::ClearGlyphCache() {
   m_penX = m_penY = m_shelfH = 0;
   if (m_atlasTex) {
     glBindTexture(GL_TEXTURE_2D, m_atlasTex);
-    std::vector<unsigned char> zero(static_cast<size_t>(m_atlasW) * m_atlasH,
-                                    0);
+    std::vector<unsigned char> zero(
+        static_cast<size_t>(m_atlasW) * m_atlasH * 4, 0);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_atlasW, m_atlasH, GL_RED,
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_atlasW, m_atlasH, GL_RGBA,
                     GL_UNSIGNED_BYTE, zero.data());
     glBindTexture(GL_TEXTURE_2D, 0);
   }
@@ -270,7 +296,7 @@ void TerminalGLRenderer::BeginFrame(int logicalW, int logicalH, double scale,
   glViewport(0, 0, physW, physH);
   glDisable(GL_DEPTH_TEST);
   glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
   glClearColor(bg.Red() / 255.0f, bg.Green() / 255.0f, bg.Blue() / 255.0f,
                1.0f);
@@ -328,10 +354,13 @@ void TerminalGLRenderer::AddGlyph(char32_t ch, bool bold, bool underlined,
   // logical cell rectangle. Sizing the quad to the cell (not the tile's
   // rasterized pixel size) keeps glyphs aligned with their background rects
   // independent of how ConvertToImage reports the DPI-scaled tile size.
+  // Colour glyphs keep their own colours, so they are not tinted.
+  const float r = g.colour ? 1.0f : fg.Red() / 255.0f;
+  const float gr = g.colour ? 1.0f : fg.Green() / 255.0f;
+  const float b = g.colour ? 1.0f : fg.Blue() / 255.0f;
   PushQuad(m_glyphVerts, static_cast<float>(x), static_cast<float>(y),
            static_cast<float>(cellW), static_cast<float>(cellH), g.u0, g.v0,
-           g.u1, g.v1, fg.Red() / 255.0f, fg.Green() / 255.0f,
-           fg.Blue() / 255.0f, 1.0f);
+           g.u1, g.v1, r, gr, b, 1.0f);
 }
 
 const TerminalGLRenderer::GlyphInfo &
@@ -392,55 +421,89 @@ TerminalGLRenderer::RasterizeAndPack(char32_t ch, const wxFont &font,
   // the base font's line height in this very DC and scale by the exact ratio
   // needed. The glyph then fills the physical tile and is minified onto the
   // logical cell with GL_LINEAR, staying sharp on HiDPI displays.
-  wxBitmap bmp(cellWPhys, cellHPhys, 32);
-  {
-    wxMemoryDC dc(bmp);
-    dc.SetBackground(*wxBLACK_BRUSH);
-    dc.Clear();
+  auto render = [&](const wxColour &bg) -> wxImage {
+    wxBitmap bmp(cellWPhys, cellHPhys, 32);
+    {
+      wxMemoryDC dc(bmp);
+      dc.SetBackground(wxBrush(bg));
+      dc.Clear();
 
-    // Measure the base font's natural line height in device pixels, then scale
-    // the point size so the rendered line height matches the physical tile.
-    dc.SetFont(font);
-    const int baseLineH = std::max(1, dc.GetCharHeight());
-    const double basePt = font.GetFractionalPointSize();
-    wxFont scaledFont = font;
-    if (basePt > 0 && baseLineH != cellHPhys) {
-      scaledFont.SetFractionalPointSize(basePt *
-                                        (double(cellHPhys) / baseLineH));
+      // Measure the base font's natural line height in device pixels, then
+      // scale the point size so the rendered line height matches the physical
+      // tile.
+      dc.SetFont(font);
+      const int baseLineH = std::max(1, dc.GetCharHeight());
+      const double basePt = font.GetFractionalPointSize();
+      wxFont scaledFont = font;
+      if (basePt > 0 && baseLineH != cellHPhys) {
+        scaledFont.SetFractionalPointSize(basePt *
+                                          (double(cellHPhys) / baseLineH));
+      }
+
+      dc.SetFont(scaledFont);
+      dc.SetTextForeground(*wxWHITE);
+      dc.SetTextBackground(bg);
+      dc.SetBackgroundMode(wxBRUSHSTYLE_TRANSPARENT);
+      dc.DrawText(wxString(wxUniChar(ch)), 0, 0);
     }
+    return bmp.ConvertToImage();
+  };
 
-    dc.SetFont(scaledFont);
-    dc.SetTextForeground(*wxWHITE);
-    dc.SetTextBackground(*wxBLACK);
-    dc.SetBackgroundMode(wxBRUSHSTYLE_TRANSPARENT);
-    dc.DrawText(wxString(wxUniChar(ch)), 0, 0);
-  }
-
-  wxImage img = bmp.ConvertToImage();
+  wxImage img = render(*wxBLACK);
   if (!img.IsOk()) {
     return info;
   }
 
   const int w = img.GetWidth();
   const int h = img.GetHeight();
-  // Coverage = luminance of the white-on-black render (R channel is enough for
-  // grayscale anti-aliasing).
-  std::vector<unsigned char> coverage(static_cast<size_t>(w) * h, 0);
-  const unsigned char *rgb = img.GetData();
-  for (int py = 0; py < h; ++py) {
-    for (int px = 0; px < w; ++px) {
-      const size_t srcIdx = (static_cast<size_t>(py) * w + px) * 3;
-      coverage[static_cast<size_t>(py) * w + px] = rgb[srcIdx]; // red == cov
+  const size_t pixelCount = static_cast<size_t>(w) * h;
+  const unsigned char *onBlack = img.GetData();
+
+  // Premultiplied RGBA tile for the atlas.
+  std::vector<unsigned char> rgba(pixelCount * 4, 0);
+  bool hasPixels = false;
+
+  if (IsColourGlyphCandidate(ch) && HasColourPixels(onBlack, pixelCount)) {
+    // A colour glyph (emoji). The render on black is already the premultiplied
+    // colour. Render again on white to get alpha: a pixel with alpha A shows
+    // C on black and C + (1 - A) * 255 on white.
+    wxImage imgWhite = render(*wxWHITE);
+    if (imgWhite.IsOk() && imgWhite.GetWidth() == w &&
+        imgWhite.GetHeight() == h) {
+      const unsigned char *onWhite = imgWhite.GetData();
+      for (size_t i = 0; i < pixelCount; ++i) {
+        const unsigned char *bp = onBlack + i * 3;
+        const unsigned char *wp = onWhite + i * 3;
+        const int diff =
+            ((wp[0] - bp[0]) + (wp[1] - bp[1]) + (wp[2] - bp[2])) / 3;
+        int a = std::clamp(255 - diff, 0, 255);
+        a = std::max({a, int(bp[0]), int(bp[1]), int(bp[2])});
+        rgba[i * 4 + 0] = bp[0];
+        rgba[i * 4 + 1] = bp[1];
+        rgba[i * 4 + 2] = bp[2];
+        rgba[i * 4 + 3] = static_cast<unsigned char>(a);
+        hasPixels = hasPixels || a > 0;
+      }
+      info.colour = true;
     }
   }
 
-  // If the coverage is entirely zero the font has no glyph for this codepoint.
-  bool hasPixels = false;
-  for (size_t idx = 0; idx < coverage.size() && !hasPixels; ++idx) {
-    if (coverage[idx] > 0)
-      hasPixels = true;
+  if (!info.colour) {
+    // Coverage = luminance of the white-on-black render (R channel is enough
+    // for grayscale anti-aliasing).
+    for (size_t i = 0; i < pixelCount; ++i) {
+      const unsigned char cov = onBlack[i * 3];
+      rgba[i * 4 + 0] = cov;
+      rgba[i * 4 + 1] = cov;
+      rgba[i * 4 + 2] = cov;
+      rgba[i * 4 + 3] = cov;
+      hasPixels = hasPixels || cov > 0;
+    }
   }
+
+  // If the tile is entirely empty the font has no glyph for this codepoint.
   if (!hasPixels) {
+    info.colour = false;
     return info;
   }
 
@@ -460,8 +523,8 @@ TerminalGLRenderer::RasterizeAndPack(char32_t ch, const wxFont &font,
 
   glBindTexture(GL_TEXTURE_2D, m_atlasTex);
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, m_penX, m_penY, w, h, GL_RED,
-                  GL_UNSIGNED_BYTE, coverage.data());
+  glTexSubImage2D(GL_TEXTURE_2D, 0, m_penX, m_penY, w, h, GL_RGBA,
+                  GL_UNSIGNED_BYTE, rgba.data());
   glBindTexture(GL_TEXTURE_2D, 0);
 
   info.u0 = static_cast<float>(m_penX) / m_atlasW;

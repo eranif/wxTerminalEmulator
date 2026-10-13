@@ -19,8 +19,9 @@
 /**
  * @brief GPU glyph-atlas renderer for the terminal grid.
  *
- * The renderer keeps a single-channel (GL_R8) texture atlas of rasterized
- * glyphs and batches the whole visible screen into two draw calls per frame:
+ * The renderer keeps a premultiplied RGBA texture atlas of rasterized glyphs
+ * (monochrome glyphs as grey coverage, colour emoji with their own colours)
+ * and batches the whole visible screen into two draw calls per frame:
  * one for the solid background/cursor/border quads and one for the textured
  * glyph quads. Glyphs are rasterized lazily on first sighting using the
  * wxWidgets font engine (wxMemoryDC -> wxImage) so the metrics match the
@@ -80,16 +81,17 @@ private:
 
   struct GlyphInfo {
     float u0{0}, v0{0}, u1{0}, v1{0};
-    int w{0}, h{0}; // physical pixel size of the tile
-    bool ok{false}; // false => blank / failed, do not draw
+    int w{0}, h{0};     // physical pixel size of the tile
+    bool ok{false};     // false => blank / failed, do not draw
+    bool colour{false}; // true => colour glyph (emoji), do not tint
   };
 
   // Build a key combining codepoint and style bits.
   static std::uint64_t MakeKey(char32_t ch, bool bold, bool underlined);
 
   // Look up (or rasterize + insert) a glyph for the given cell size.
-  const GlyphInfo &GetGlyph(char32_t ch, bool bold, bool underlined,
-                            int cellW, int cellH);
+  const GlyphInfo &GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,
+                            int cellH);
 
   // Rasterize a single glyph into a coverage buffer and pack it into the
   // atlas. Returns the resulting GlyphInfo.
