@@ -1,8 +1,10 @@
 #include "SettingsDlg.hpp"
 
-SettingsDlg::SettingsDlg(wxWindow *parent, const AppConfig &config)
+SettingsDlg::SettingsDlg(wxWindow *parent, const AppConfig &config,
+                         PreviewCallback onPreview)
     : SettingsBaseDlg(parent), m_config{config},
-      m_theme{config.GetThemeByName(config.GetThemeName())} {
+      m_theme{config.GetThemeByName(config.GetThemeName())},
+      m_onPreview{std::move(onPreview)} {
   for (const wxString &name : m_config.GetThemeNames()) {
     m_choiceNames->Append(name);
   }
@@ -31,9 +33,11 @@ SettingsDlg::~SettingsDlg() {}
 
 void SettingsDlg::OnBackgroundColour(wxColourPickerEvent &event) {
   m_theme.bg = event.GetColour();
+  Preview();
 }
 void SettingsDlg::OnTextColour(wxColourPickerEvent &event) {
   m_theme.fg = event.GetColour();
+  Preview();
 }
 
 void SettingsDlg::OnBlack(wxColourPickerEvent &event) {
@@ -42,6 +46,7 @@ void SettingsDlg::OnBlack(wxColourPickerEvent &event) {
   } else {
     m_theme.brightBlack = event.GetColour();
   }
+  Preview();
 }
 
 void SettingsDlg::OnBlue(wxColourPickerEvent &event) {
@@ -50,6 +55,7 @@ void SettingsDlg::OnBlue(wxColourPickerEvent &event) {
   } else {
     m_theme.brightBlue = event.GetColour();
   }
+  Preview();
 }
 
 void SettingsDlg::OnCyan(wxColourPickerEvent &event) {
@@ -58,6 +64,7 @@ void SettingsDlg::OnCyan(wxColourPickerEvent &event) {
   } else {
     m_theme.brightCyan = event.GetColour();
   }
+  Preview();
 }
 
 void SettingsDlg::OnGreen(wxColourPickerEvent &event) {
@@ -66,6 +73,7 @@ void SettingsDlg::OnGreen(wxColourPickerEvent &event) {
   } else {
     m_theme.brightGreen = event.GetColour();
   }
+  Preview();
 }
 
 void SettingsDlg::OnMagenta(wxColourPickerEvent &event) {
@@ -74,6 +82,7 @@ void SettingsDlg::OnMagenta(wxColourPickerEvent &event) {
   } else {
     m_theme.brightMagenta = event.GetColour();
   }
+  Preview();
 }
 
 void SettingsDlg::UpdateColours() {
@@ -100,6 +109,20 @@ void SettingsDlg::UpdateColours() {
 void SettingsDlg::OnThemeChanged(wxCommandEvent &event) {
   wxUnusedVar(event);
   UpdateColours();
+  Preview();
+}
+
+void SettingsDlg::Preview() {
+  if (!m_onPreview) {
+    return;
+  }
+  wxTerminalTheme theme = m_theme;
+  theme.isBlockCursor = GetBlockCursor();
+  const wxFont font = GetFont();
+  if (font.IsOk()) {
+    theme.font = font;
+  }
+  m_onPreview(theme);
 }
 
 void SettingsDlg::OnRed(wxColourPickerEvent &event) {
@@ -108,6 +131,7 @@ void SettingsDlg::OnRed(wxColourPickerEvent &event) {
   } else {
     m_theme.brightRed = event.GetColour();
   }
+  Preview();
 }
 
 void SettingsDlg::OnWhite(wxColourPickerEvent &event) {
@@ -116,6 +140,7 @@ void SettingsDlg::OnWhite(wxColourPickerEvent &event) {
   } else {
     m_theme.brightWhite = event.GetColour();
   }
+  Preview();
 }
 
 void SettingsDlg::OnYellow(wxColourPickerEvent &event) {
@@ -124,6 +149,7 @@ void SettingsDlg::OnYellow(wxColourPickerEvent &event) {
   } else {
     m_theme.brightYellow = event.GetColour();
   }
+  Preview();
 }
 void SettingsDlg::OnShowBrightColours(wxCommandEvent &event) {
   m_normalColours = !event.IsChecked();

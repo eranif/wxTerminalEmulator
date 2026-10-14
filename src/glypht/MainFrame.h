@@ -174,6 +174,8 @@ public:
                                  bool selectIt);
   void UpdateSafeDrawingMenuCheck();
   void ApplyThemeToTab(wxTerminalViewCtrl *view);
+  // Set the theme of every terminal tab.
+  void ApplyThemeToAllTabs(const wxTerminalTheme &theme);
   void OnNewTerminal(wxCommandEvent &event);
   void OnExit(wxCommandEvent &event);
   void OnCenterLine(wxCommandEvent &event);

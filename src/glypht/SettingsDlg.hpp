@@ -4,9 +4,17 @@
 #include "terminal_theme.h"
 #include "wxTerminalUI.hpp"
 
+#include <functional>
+
 class SettingsDlg : public SettingsBaseDlg {
 public:
-  SettingsDlg(wxWindow *parent, const AppConfig &config);
+  /// Called with the theme the dialog shows, each time the user picks another
+  /// theme or changes a colour. Used to preview the theme while the dialog is
+  /// open.
+  using PreviewCallback = std::function<void(const wxTerminalTheme &)>;
+
+  SettingsDlg(wxWindow *parent, const AppConfig &config,
+              PreviewCallback onPreview = {});
   ~SettingsDlg() override;
 
   const wxTerminalTheme &GetTheme() const { return m_theme; }
@@ -31,9 +39,13 @@ protected:
   void OnYellow(wxColourPickerEvent &event) override;
 
   void UpdateColours();
+  // Send the current theme, with the font and cursor shape of the dialog, to
+  // the preview callback.
+  void Preview();
 
 private:
   wxTerminalTheme m_theme;
   const AppConfig &m_config;
   bool m_normalColours{true};
+  PreviewCallback m_onPreview;
 };

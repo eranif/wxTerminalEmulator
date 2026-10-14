@@ -406,12 +406,11 @@ void MyFrame::ApplySettings() {
   if (m_config.GetFont().IsOk()) {
     theme.font = m_config.GetFont();
   }
+  ApplyThemeToAllTabs(theme);
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
     if (auto *view =
             dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetPage(i))) {
-      view->SetTheme(theme);
       view->EnableSafeDrawing(m_config.IsSafeDrawingEnabled());
-      view->Refresh();
     }
   }
 
@@ -425,6 +424,19 @@ void MyFrame::ApplySettings() {
   m_notebook->Refresh();
 
   UpdateSafeDrawingMenuCheck();
+}
+
+void MyFrame::ApplyThemeToAllTabs(const wxTerminalTheme &theme) {
+  if (!m_notebook) {
+    return;
+  }
+  for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
+    if (auto *view =
+            dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetPage(i))) {
+      view->SetTheme(theme);
+      view->Refresh();
+    }
+  }
 }
 
 wxTerminalViewCtrl *MyFrame::GetActiveTerminalView() const {
@@ -789,15 +801,22 @@ void MyFrame::ApplyNativeAppTheme() {
 
 void MyFrame::OnSettings(wxCommandEvent &event) {
   wxUnusedVar(event);
-  SettingsDlg dlg{this, m_config};
-  if (dlg.ShowModal() == wxID_OK) {
-    m_config.SetTheme(dlg.GetThemeName(), dlg.GetTheme());
-    m_config.SetThemeName(dlg.GetThemeName());
+  // Preview the theme in all tabs while the dialog is open.
+  SettingsDlg dlg{this, m_config, [this](const wxTerminalTheme &theme) {
+                    ApplyThemeToAllTabs(theme);
+                  }};
+  const bool accepted = dlg.ShowModal() == wxID_OK;
+
+  // The user already sees the previewed theme, so keep it however the dialog
+  // is closed. The other settings are kept only with OK.
+  m_config.SetTheme(dlg.GetThemeName(), dlg.GetTheme());
+  m_config.SetThemeName(dlg.GetThemeName());
+  if (accepted) {
     m_config.SetNewTabTitle(dlg.GetNewTabTitle());
     m_config.SetShowCloseButton(dlg.GetShowCloseButton());
     m_config.SetBlockCursor(dlg.GetBlockCursor());
     m_config.SetFont(dlg.GetFont());
-    ApplySettings();
-    PersistSettings();
   }
+  ApplySettings();
+  PersistSettings();
 }
