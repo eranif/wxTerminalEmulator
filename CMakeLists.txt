@@ -151,6 +151,25 @@ endif()
 # binaries/shared libs)
 set_target_properties(wxterminal_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# Finds the wxWidgets library directory. wxWidgets_LIBRARIES holds either "-L<dir>"
+# flags followed by "-lwx_..." (wx-config) or full library paths (CONFIG mode).
+# BundleDeps.cmake searches this directory for the libraries to bundle.
+function(wx_find_lib_dir out_var)
+  set(_dir "")
+  foreach(_item ${wxWidgets_LIBRARIES})
+    if(_item MATCHES "^-L(.+)")
+      set(_dir "${CMAKE_MATCH_1}")
+      break()
+    elseif(EXISTS "${_item}")
+      get_filename_component(_dir "${_item}" DIRECTORY)
+      break()
+    endif()
+  endforeach()
+  set(${out_var}
+      "${_dir}"
+      PARENT_SCOPE)
+endfunction()
+
 # Create example program
 if(BUILD_GLYPHT)
   if(MINGW)
@@ -238,8 +257,7 @@ if(BUILD_GLYPHT)
     set(BUNDLE_DIR "$<TARGET_BUNDLE_DIR:glypht>")
     set(BUNDLE_EXE "$<TARGET_FILE:glypht>")
     # Determine wxWidgets library directory from the first library in the list.
-    list(GET wxWidgets_LIBRARIES 0 _WX_FIRST_LIB)
-    get_filename_component(_WX_LIB_DIR "${_WX_FIRST_LIB}" DIRECTORY)
+    wx_find_lib_dir(_WX_LIB_DIR)
     add_custom_command(
       TARGET glypht
       POST_BUILD
@@ -254,8 +272,7 @@ if(BUILD_GLYPHT)
     set_target_properties(glypht PROPERTIES INSTALL_RPATH "$ORIGIN/../lib"
                                             BUILD_RPATH "$ORIGIN/../lib")
     set(BUNDLE_TARGET_OS "linux")
-    list(GET wxWidgets_LIBRARIES 0 _WX_FIRST_LIB)
-    get_filename_component(_WX_LIB_DIR "${_WX_FIRST_LIB}" DIRECTORY)
+    wx_find_lib_dir(_WX_LIB_DIR)
     add_custom_command(
       TARGET glypht
       POST_BUILD
