@@ -126,7 +126,16 @@ void MyFrame::SaveLayout() {
     }
     LayoutPersistence::TabInfo info;
     info.shellCommand = terminal->GetShellCommand();
-    info.workingDirectory = terminal->GetWorkingDirectory();
+    // Prefer the directory the shell reported last. It is a local path only if
+    // the shell is local, so a directory that does not exist here (for example
+    // one on a remote host) is not saved.
+    info.workingDirectory = terminal->GetCurrentDirectory();
+    if (info.workingDirectory.empty() || !wxDirExists(info.workingDirectory)) {
+      info.workingDirectory = terminal->GetWorkingDirectory();
+      if (!wxDirExists(info.workingDirectory)) {
+        info.workingDirectory.clear();
+      }
+    }
     info.customLabel = terminal->GetCustomLabel().empty()
                            ? m_config.GetNewTabTitle()
                            : terminal->GetCustomLabel();
@@ -160,13 +169,22 @@ void MyFrame::SaveLayout() {
     activeTitle = m_notebook->GetPageText(static_cast<size_t>(sel));
   }
 
-  SaveLayoutFile(tabs, tabControlLines, activeTitle);
+  SaveLayoutFile(tabs, tabControlLines, activeTitle, GetSize());
 }
 
 bool MyFrame::RestoreLayout() {
   std::optional<LayoutFile> layout = LoadLayoutFile();
   if (!layout || layout->IsEmpty()) {
     return false;
+  }
+
+  if (layout->frameSize) {
+    // Keep the window inside the visible area of the screen.
+    const wxRect screen =
+        wxDisplay(wxDisplay::GetFromWindow(this)).GetClientArea();
+    SetSize(wxSize(std::min(layout->frameSize->x, screen.width),
+                   std::min(layout->frameSize->y, screen.height)));
+    CentreOnScreen();
   }
 
   for (const auto &tab : layout->tabs) {

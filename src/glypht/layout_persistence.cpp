@@ -167,7 +167,7 @@ LayoutDeserializer::LoadNotebookTabs(const wxString &name) {
 
 bool SaveLayoutFile(const std::vector<LayoutPersistence::TabInfo> &tabs,
                     const std::vector<wxString> &tabControlLines,
-                    const wxString &activeTitle) {
+                    const wxString &activeTitle, const wxSize &frameSize) {
   const wxString path = LayoutPersistence::GetLayoutPath();
   wxFileName fn(path);
   if (!fn.DirExists()) {
@@ -187,6 +187,9 @@ bool SaveLayoutFile(const std::vector<LayoutPersistence::TabInfo> &tabs,
   file.AddLine("# GlyphT window layout - generated file");
   if (!activeTitle.empty()) {
     file.AddLine("active=" + Encode(activeTitle));
+  }
+  if (frameSize.x > 0 && frameSize.y > 0) {
+    file.AddLine(wxString::Format("size=%dx%d", frameSize.x, frameSize.y));
   }
   for (const auto &tab : tabs) {
     file.AddLine("[tab]");
@@ -252,6 +255,13 @@ std::optional<LayoutFile> LoadLayoutFile() {
       // Header-level keys (before the first [tab] section).
       if (trimmed.StartsWith("active=")) {
         result.activeTitle = Decode(trimmed.Mid(7));
+      } else if (trimmed.StartsWith("size=")) {
+        long w = 0, h = 0;
+        const wxString value = trimmed.Mid(5);
+        if (value.BeforeFirst('x').ToLong(&w) &&
+            value.AfterFirst('x').ToLong(&h) && w > 0 && h > 0) {
+          result.frameSize = wxSize(static_cast<int>(w), static_cast<int>(h));
+        }
       }
       continue;
     }

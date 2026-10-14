@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <vector>
+#include <wx/gdicmn.h>
 #include <wx/string.h>
 #include <wx/version.h>
 
@@ -82,6 +83,8 @@ struct LayoutFile {
   // Title of the tab that was active on save. When several tabs share this
   // title the first one is selected on restore. Empty if unknown.
   wxString activeTitle;
+  // Size of the main frame on save, if it was stored.
+  std::optional<wxSize> frameSize;
 
   bool IsEmpty() const { return tabs.empty(); }
 };
@@ -90,5 +93,5 @@ struct LayoutFile {
 // serialization logic can be unit tested in isolation.
 bool SaveLayoutFile(const std::vector<LayoutPersistence::TabInfo> &tabs,
                     const std::vector<wxString> &tabControlLines,
-                    const wxString &activeTitle);
+                    const wxString &activeTitle, const wxSize &frameSize);
 std::optional<LayoutFile> LoadLayoutFile();
