@@ -67,11 +67,12 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   m_defaultEnvironment = environment;
   m_defaultWorkingDirectory = std::move(workingDirectory);
 
-  // When the user launches with explicit options (a specific shell, command or
-  // working directory) honour those and start a single fresh terminal.
-  // Otherwise try to restore the previously saved layout.
-  const bool hasExplicitLaunch = !shellCommand.empty() || !command.empty() ||
-                                 m_defaultWorkingDirectory.has_value();
+  // When the user launches with a command or a working directory, honour those
+  // and start a single fresh terminal. Otherwise try to restore the previously
+  // saved layout. --shell does not stop the restore: it only chooses the shell
+  // of the restored tabs (see RestoreLayout()).
+  const bool hasExplicitLaunch =
+      !command.empty() || m_defaultWorkingDirectory.has_value();
   bool restored = false;
   if (!hasExplicitLaunch) {
     restored = RestoreLayout();
@@ -192,8 +193,11 @@ bool MyFrame::RestoreLayout() {
     if (!tab.workingDirectory.empty() && wxDirExists(tab.workingDirectory)) {
       cwd = tab.workingDirectory;
     }
-    MyTerminal *page = CreateTerminalPage(
-        {tab.shellCommand, m_defaultEnvironment, cwd}, false);
+    // A shell given on the command line (--shell) wins over the saved one.
+    const wxString shell =
+        m_defaultShellCommand.empty() ? tab.shellCommand : m_defaultShellCommand;
+    MyTerminal *page =
+        CreateTerminalPage({shell, m_defaultEnvironment, cwd}, false);
     if (page && !tab.customLabel.empty()) {
       page->SetTabLabel(tab.customLabel);
     }

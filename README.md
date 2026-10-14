@@ -352,8 +352,8 @@ The included demo application (`main.cpp`) showcases the library features:
 
 **Command-Line Options**:
 - `--appearance=<mode>`: Control native app appearance: `light`, `dark`, or `auto` (platform-native)
-- `--shell=<command>`: Launch a specific shell or command (default: platform default shell)
-- `--working-directory=<path>`: Start the shell in a specific directory
+- `--shell=<command>`: Launch a specific shell or command (default: platform default shell). The saved tabs are still restored, and they use this shell
+- `--working-directory=<path>`: Start the shell in a specific directory (starts one fresh tab; the saved tabs are not restored)
 - `--env=<list>`: Pass environment variables to the launched process
 - `--log-level=<level>`: Set logging verbosity: `trace`, `debug`, `info`, `warn`, or `error` (default: `error`)
 
