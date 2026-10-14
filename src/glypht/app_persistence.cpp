@@ -1,6 +1,8 @@
 #include "app_persistence.h"
 
 #include "terminal_logger.h"
+#include "theme_loader.h"
+#include <algorithm>
 #include <wx/filename.h>
 #include <wx/textfile.h>
 #include <wx/utils.h>
@@ -52,31 +54,59 @@ wxTerminalTheme MakeBaseTheme(const wxString &name) {
   return wxTerminalTheme::MakeDarkTheme();
 }
 
+bool SameColours(const wxTerminalTheme &a, const wxTerminalTheme &b) {
+  for (const auto &entry : kColourEntries) {
+    if (a.*(entry.member) != b.*(entry.member)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 } // namespace
 
 AppConfig::AppConfig() {
   themes["dark"] = wxTerminalTheme::MakeDarkTheme();
   themes["light"] = wxTerminalTheme::MakeLightTheme();
+  for (auto &loaded : LoadShippedThemes()) {
+    if (themes.count(loaded.name) == 0) {
+      shippedThemes[loaded.name] = std::move(loaded.theme);
+    }
+  }
+}
+
+const wxTerminalTheme *AppConfig::FindTheme(const wxString &name) const {
+  auto it = themes.find(name);
+  if (it != themes.end()) {
+    return &it->second;
+  }
+  it = shippedThemes.find(name);
+  if (it != shippedThemes.end()) {
+    return &it->second;
+  }
+  return nullptr;
 }
 
 wxTerminalTheme AppConfig::GetThemeByName(const wxString &name) const {
-  auto it = themes.find(name);
-  if (it != themes.end()) {
-    return it->second;
-  }
-  return MakeBaseTheme(name);
+  const wxTerminalTheme *theme = FindTheme(name);
+  return theme ? *theme : MakeBaseTheme(name);
 }
 
 const wxTerminalTheme &AppConfig::GetActiveTheme() const {
-  auto it = themes.find(GetThemeName());
-  if (it != themes.end()) {
-    return it->second;
+  const wxTerminalTheme *theme = FindTheme(GetThemeName());
+  if (theme) {
+    return *theme;
   }
   static const wxTerminalTheme fallback = wxTerminalTheme::MakeDarkTheme();
   return fallback;
 }
 
 void AppConfig::SetTheme(const wxString &name, const wxTerminalTheme &theme) {
+  auto shipped = shippedThemes.find(name);
+  if (shipped != shippedThemes.end() && SameColours(theme, shipped->second)) {
+    themes.erase(name);
+    return;
+  }
   themes[name] = theme;
 }
 
@@ -88,6 +118,19 @@ void AppConfig::RemoveTheme(const wxString &name) {
 }
 
 std::vector<wxString> AppConfig::GetThemeNames() const {
+  std::vector<wxString> names = GetUserThemeNames();
+  for (const auto &pair : shippedThemes) {
+    if (themes.count(pair.first) == 0) {
+      names.push_back(pair.first);
+    }
+  }
+  std::sort(
+      names.begin(), names.end(),
+      [](const wxString &a, const wxString &b) { return a.CmpNoCase(b) < 0; });
+  return names;
+}
+
+std::vector<wxString> AppConfig::GetUserThemeNames() const {
   std::vector<wxString> names;
   names.reserve(themes.size());
   for (const auto &pair : themes) {
@@ -97,7 +140,7 @@ std::vector<wxString> AppConfig::GetThemeNames() const {
 }
 
 bool AppConfig::HasTheme(const wxString &name) const {
-  return themes.find(name) != themes.end();
+  return FindTheme(name) != nullptr;
 }
 
 wxString AppPersistence::GetConfigPath() {
@@ -190,7 +233,9 @@ bool AppPersistence::Load(AppConfig &config) {
     } else if (section == Section::kTheme) {
       if (key == "name") {
         currentThemeName = value;
-        currentTheme = MakeBaseTheme(value);
+        // Start from the shipped theme of the same name, if there is one, so
+        // colours that are not saved (cursor, selection) keep its values.
+        currentTheme = config.GetThemeByName(value);
       } else {
         for (const auto &entry : kColourEntries) {
           if (key == entry.suffix) {
@@ -223,15 +268,17 @@ bool AppPersistence::Save(const AppConfig &config) {
 
   file.AddLine("theme=" + config.GetThemeName());
   file.AddLine("newtabtitle=" + config.GetNewTabTitle());
-  file.AddLine(wxString::Format("showclosebutton=%s",
-                                config.GetShowCloseButton() ? "true" : "false"));
+  file.AddLine(wxString::Format(
+      "showclosebutton=%s", config.GetShowCloseButton() ? "true" : "false"));
   file.AddLine(wxString::Format("blockcursor=%s",
                                 config.GetBlockCursor() ? "true" : "false"));
   file.AddLine("font=" + config.GetFont().GetNativeFontInfoDesc());
   file.AddLine(wxString::Format(
       "safedrawing=%s", config.IsSafeDrawingEnabled() ? "true" : "false"));
 
-  for (const wxString &name : config.GetThemeNames()) {
+  // Shipped themes are read from their *.toml files, so only themes the user
+  // created or edited are saved.
+  for (const wxString &name : config.GetUserThemeNames()) {
     file.AddLine("");
     file.AddLine("[theme]");
     file.AddLine("name=" + name);

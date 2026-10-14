@@ -86,6 +86,7 @@ set(GLYPHT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/MainFrame.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/wxTerminalUI.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/SettingsDlg.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/theme_loader.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/wxTerminalUI_wxterminalemulator_bitmaps.cpp
 )
 
@@ -209,6 +210,23 @@ if(BUILD_GLYPHT)
     file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht.svg"
          DESTINATION "${CMAKE_BINARY_DIR}/glypht.app/Contents/Resources/")
   endif()
+
+  # Copy the colour themes (*.toml). They are read at startup from
+  # glypht.app/Contents/Resources/themes on macOS, and from a "themes" directory
+  # next to the executable on Windows and Linux. This runs before the bundling
+  # step below.
+  if(APPLE)
+    set(GLYPHT_THEMES_DIR "$<TARGET_BUNDLE_CONTENT_DIR:glypht>/Resources/themes")
+  else()
+    set(GLYPHT_THEMES_DIR "$<TARGET_FILE_DIR:glypht>/themes")
+  endif()
+  add_custom_command(
+    TARGET glypht
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets/themes" "${GLYPHT_THEMES_DIR}"
+    COMMENT "Copying colour themes"
+    VERBATIM)
 
   # ---------------------------------------------------------------------------
   # Post-build: bundle shared library dependencies so the app is self-contained.

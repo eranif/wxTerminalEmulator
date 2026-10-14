@@ -20,9 +20,15 @@ struct AppConfig {
     return themeName;
   }
 
+  /// Store a theme. Storing a shipped theme with unchanged colours removes the
+  /// user copy, so only edited shipped themes are saved to config.ini.
   void SetTheme(const wxString &name, const wxTerminalTheme &theme);
+  /// Remove a user theme. A shipped theme with this name stays available.
   void RemoveTheme(const wxString &name);
+  /// All theme names (user and shipped), sorted, without duplicates.
   std::vector<wxString> GetThemeNames() const;
+  /// The themes to write to config.ini: built-in, user and edited shipped.
+  std::vector<wxString> GetUserThemeNames() const;
   bool HasTheme(const wxString &name) const;
 
   void SetFont(const wxFont &font) { this->font = font; }
@@ -54,8 +60,12 @@ struct AppConfig {
   bool GetBlockCursor() const { return blockCursor; }
 
 private:
+  const wxTerminalTheme *FindTheme(const wxString &name) const;
+
   wxString themeName{"dark"};
   std::map<wxString, wxTerminalTheme> themes;
+  // Themes loaded from the shipped *.toml files. Read only.
+  std::map<wxString, wxTerminalTheme> shippedThemes;
   wxFont font;
   wxString newTabTitle{"Terminal"};
   bool safeDrawingEnabled{false};
