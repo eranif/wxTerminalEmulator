@@ -212,13 +212,13 @@ function package_MSW() {
     cmake "${BUILD_DIR}" "${cmake_args[@]}" >/dev/null
   fi
   # The "setup" target only exists when CMake found the Inno Setup compiler.
-  if ! grep -q "^setup:" "${BUILD_DIR}/Makefile"; then
+  if ! grep -q "^glypht_setup:" "${BUILD_DIR}/Makefile"; then
     ERROR "No 'setup' target: Inno Setup 6 (ISCC.exe) was not found by CMake"
     ERROR "Install it from https://jrsoftware.org/ and run: ./build.sh --cmake package"
     exit 1
   fi
   INFO "Building the Windows installer"
-  cmake --build "${BUILD_DIR}" --target setup
+  cmake --build "${BUILD_DIR}" --target glypht_setup
   INFO "Package: $(ls -t "${BUILD_DIR}"/glypht-*-installer.exe | head -n 1)"
 }
 

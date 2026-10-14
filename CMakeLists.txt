@@ -347,7 +347,7 @@ if(BUILD_GLYPHT)
     else()
       message(STATUS "Inno Setup compiler is set to: ${INNO_SETUP_CMP}")
       add_custom_target(
-        setup
+        glypht_setup
         COMMAND
           ${CMAKE_COMMAND} -DBIN_DIR=$<TARGET_FILE_DIR:glypht>
           -DSTAGE_DIR=${INSTALLER_SOURCE_DIR} -DWX_DLL=$<TARGET_FILE:wx::wxmono>
@@ -358,7 +358,7 @@ if(BUILD_GLYPHT)
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         COMMENT "Building the Windows installer"
         VERBATIM)
-      add_dependencies(setup glypht)
+      add_dependencies(glypht_setup glypht)
     endif()
   endif()
 endif()
