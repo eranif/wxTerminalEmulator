@@ -22,7 +22,6 @@ wxTerminalEmulator/
 ├── TODO.md                 # Pending tasks
 ├── .clang-format           # Code formatting rules
 ├── .gitignore              # Git ignore patterns
-├── wx.rc                   # Windows resource file
 ├── main.cpp                # Demo application entry point
 ├── app_persistence.h/cpp   # Settings persistence
 ├── terminal_core.h/cpp     # Terminal emulation engine

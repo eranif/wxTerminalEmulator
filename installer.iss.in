@@ -1,0 +1,71 @@
+; Inno Setup installer script for GlyphT
+;
+; This file is a template. CMake generates installer.iss from it in the build
+; directory. Build the installer with:
+;   cd .build-release
+;   cmake --build . --target setup
+;
+; Or compile the generated script by hand:
+;   iscc installer.iss
+
+#define MyAppName "GlyphT"
+#define MyAppVersion "@GLYPHT_VERSION@"
+#define MyAppPublisher "Eran Ifrah"
+#define MyAppURL "https://github.com/eranif/wxTerminalEmulator"
+#define MyAppExeName "glypht.exe"
+#define SourceDir "@INSTALLER_SOURCE_DIR@"
+
+[Setup]
+; Metadata
+AppId={{FFF1F583-5448-496D-90AF-433E355C720B}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppURL}
+AppSupportURL={#MyAppURL}/issues
+AppUpdatesURL={#MyAppURL}/releases
+DefaultDirName={autopf}\{#MyAppName}
+DefaultGroupName={#MyAppName}
+AllowNoIcons=yes
+
+; UI and behavior
+DisableProgramGroupPage=no
+PrivilegesRequired=lowest
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+UninstallDisplayIcon={app}\assets\glypht.ico
+
+; Output
+OutputDir=.
+OutputBaseFilename=glypht-{#MyAppVersion}-@PROCESSOR_ARCHITECTURE@-installer
+SetupIconFile={#SourceDir}\assets\glypht.ico
+Compression=lzma2
+SolidCompression=yes
+ShowLanguageDialog=no
+WizardStyle=modern
+LicenseFile={#SourceDir}\LICENSE
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+
+[Files]
+; Everything from installer/bin/: glypht.exe, the DLLs, the themes and the icon
+Source: "{#SourceDir}\bin\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; The icon file. The shortcuts use it, so they do not depend on the icon order
+; inside glypht.exe or on the icon cache of Windows.
+Source: "{#SourceDir}\assets\glypht.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
+
+; Copy LICENSE to app directory
+Source: "{#SourceDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+
+[Icons]
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\glypht.ico"
+Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
+Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\glypht.ico"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent

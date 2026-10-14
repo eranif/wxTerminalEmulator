@@ -65,6 +65,7 @@ wxTerminalEmulator/
 ├── libtsm/                        # Vendored libtsm (VT parser), own CMake target `tsm`
 ├── cmake/                         # CMake helpers, e.g. FindWxWidgetsMSYS.cmake
 ├── assets/                        # Icons and images
+├── build.sh                       # Builds wxWidgets and GlyphT (see Build Configuration)
 ├── CMakeLists.txt                 # Build configuration
 └── .github/workflows/             # CI: macos.yml, msys2.yml, ubuntu.yml
 ```
@@ -170,6 +171,74 @@ Two selection mechanisms exist side by side:
 
 ## Build Configuration
 
+### Build with build.sh (recommended)
+
+`build.sh` in the repository root builds wxWidgets and then GlyphT with one
+command. It works on Windows (MSYS2), macOS and Linux. Run it from the
+repository root:
+
+```bash
+./build.sh              # build wxWidgets (first run only), then glypht
+./build.sh --cmake      # same, but force the CMake configure step
+./build.sh clean        # make clean
+./build.sh package      # build, then create the package for this OS
+./build.sh distclean    # delete .build-release, including wxWidgets
+./build.sh --help       # show the usage text
+```
+
+What it does:
+
+- Everything goes into `.build-release/`. The script always builds `Release`.
+- It needs these tools in `PATH`: `cmake`, `git`, `make`, and a compiler
+  (`g++` on Linux, `clang++` on macOS and Windows). It stops if one is missing.
+- wxWidgets (default `v3.3.4`) is cloned into `.build-release/wxWidgets` and
+  installed into `.build-release/wxWidgets-install`. This happens only once.
+- CMake runs again only when `.build-release/CMakeCache.txt` is missing, when
+  `CMakeLists.txt` is newer than the `Makefile`, or when you pass `--cmake`.
+- On Windows, run it in the MSYS2 **CLANG64** shell. The script then sets
+  `WXWIN` for you.
+
+Where the result is:
+
+| Platform | Result |
+|----------|--------|
+| Windows | `.build-release/install/bin/glypht.exe` (DLLs and `themes/` are next to it) |
+| macOS | `.build-release/glypht.app` |
+| Linux | `.build-release/glypht` |
+
+Environment variables:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `WX_VERSION` | `v3.3.4` | wxWidgets tag to build |
+| `WX_CONFIG` | (none) | Use this `wx-config` and skip the wxWidgets build (macOS, Linux) |
+| `USE_OPENGL` | `1` on Windows and macOS, `0` on Linux | `0` or `1`, picks the renderer |
+| `MACOS_DEPLOYMENT_TARGET` | `13.0` | macOS deployment target |
+| `GLYPHT_VERSION` | `1.0.0` | Version in the package name (`package` target) |
+
+Notes:
+
+- The script skips the wxWidgets build when it finds an install already. If you
+  change `WX_VERSION`, run `./build.sh distclean` first. On Windows an old
+  `wxmsw*.dll` can stay in `install/bin` after a version change.
+- The script has no debug mode. For a debug build use the manual steps below.
+- `./build.sh package` builds first, then makes one package in `.build-release/`:
+  - Windows: `glypht-<version>-amd64-installer.exe`, an Inno Setup installer.
+    It needs Inno Setup 6 (`ISCC.exe`). If CMake did not find it, the script
+    stops with an error; install it and run `./build.sh --cmake package`.
+  - macOS: `glypht-<version>-macos-<arch>.zip` with `glypht.app` (not signed).
+  - Linux: `glypht-<version>-linux-<arch>.tar.gz` with `glypht`, `glypht.svg`
+    and `themes/`.
+  - On macOS and Linux the package step is not tested yet. Set the version with
+    `GLYPHT_VERSION=1.2.3 ./build.sh package`.
+- Build log lines look like `INFO ...` and `ERROR ...`. When a build fails, read
+  the lines above the first `ERROR`.
+
+### Manual CMake builds (for example Debug)
+
+Use these when you need a Debug build or a build tree of your own. wxWidgets
+must already be installed.
+
 ### CMake Options
 
 | Option | Default | Description |
@@ -185,6 +254,14 @@ cd .build-debug
 cmake .. -DWXWIN=<wxWidgets install prefix> -DCMAKE_BUILD_TYPE=Debug
 make -j32
 ```
+
+### Windows Installer
+
+`cmake --build . --target setup` builds an Inno Setup installer. It needs
+`ISCC.exe` (Inno Setup 6). `cmake/StageInstaller.cmake` copies `install/bin`
+into `<build>/installer/` and skips old `wxmsw*.dll` files. `installer.iss`
+is generated from `installer.iss.in`. The version comes from `GLYPHT_VERSION`.
+The installer has no admin rights and installs per user.
 
 ### Linux/macOS Build
 

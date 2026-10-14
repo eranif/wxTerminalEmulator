@@ -157,6 +157,7 @@ works on macOS, Linux and Windows (MSYS2). Everything goes into `.build-release/
 ./build.sh              # build wxWidgets (first run only) and glypht
 ./build.sh --cmake      # force the CMake configure step
 ./build.sh clean        # make clean
+./build.sh package      # build, then create the package for this OS
 ./build.sh distclean    # remove .build-release, including wxWidgets
 ```
 
@@ -170,8 +171,14 @@ Environment variables:
 - `WX_CONFIG`: path to an existing `wx-config`; skips the wxWidgets build (macOS, Linux)
 - `USE_OPENGL=0|1`: choose the renderer (default: ON on macOS and Windows, OFF on Linux)
 - `MACOS_DEPLOYMENT_TARGET`: macOS deployment target (default: `13.0`)
+- `GLYPHT_VERSION`: version used in the package name (default: `1.0.0`)
 
 On macOS the build copies the wxWidgets library into the app bundle.
+
+`./build.sh package` builds first, then creates one package in `.build-release/`:
+- Windows: `glypht-<version>-amd64-installer.exe` (needs [Inno Setup 6](https://jrsoftware.org/); see "Windows installer" below)
+- macOS: `glypht-<version>-macos-<arch>.zip` (the unsigned `glypht.app`)
+- Linux: `glypht-<version>-linux-<arch>.tar.gz` (`glypht`, `glypht.svg` and `themes/`)
 
 #### Windows (MinGW)
 ```bash
@@ -179,6 +186,19 @@ mkdir build && cd build
 cmake .. -DWXWIN=/path/to/wxWidgets -DWXCFG=clang_x64_dll/mswu
 cmake --build .
 ```
+
+#### Windows installer
+The `setup` target builds an [Inno Setup](https://jrsoftware.org/) installer. It
+needs Inno Setup 6 (`ISCC.exe`); CMake looks for it in `Program Files`.
+```bash
+cd .build-release
+cmake --build . --target setup
+```
+The result is `.build-release/glypht-<version>-amd64-installer.exe`. The target
+copies `glypht.exe`, its DLLs and the themes to `.build-release/installer/` and
+compiles `installer.iss`, which CMake generates from `installer.iss.in`. The
+installer needs no administrator rights (it installs per user by default). Set
+the version with `-DGLYPHT_VERSION=x.y.z` (default: `1.0.0`).
 
 #### Linux/macOS
 ```bash

@@ -297,7 +297,7 @@ MyFrame::ParseEnvironmentList(const wxString &s) {
 void MyFrame::BuildMenuBar() {
   auto *menuBar = new wxMenuBar();
   auto *fileMenu = new wxMenu();
-  fileMenu->Append(wxID_NEW, _("New Terminal\tCtrl-N"));
+  fileMenu->Append(wxID_NEW, _("New Terminal\tCtrl-T"));
   fileMenu->Append(wxID_CLOSE, _("Close Terminal\tCtrl-W"));
   fileMenu->Append(wxID_PREFERENCES);
   fileMenu->AppendSeparator();

@@ -91,7 +91,7 @@ set(GLYPHT_SOURCES
 )
 
 if(MINGW)
-  list(APPEND GLYPHT_SOURCES wx.rc)
+  list(APPEND GLYPHT_SOURCES "${CMAKE_SOURCE_DIR}/src/glypht/glypht.rc")
 endif()
 
 if(WIN32)
@@ -151,9 +151,10 @@ endif()
 # binaries/shared libs)
 set_target_properties(wxterminal_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-# Finds the wxWidgets library directory. wxWidgets_LIBRARIES holds either "-L<dir>"
-# flags followed by "-lwx_..." (wx-config) or full library paths (CONFIG mode).
-# BundleDeps.cmake searches this directory for the libraries to bundle.
+# Finds the wxWidgets library directory. wxWidgets_LIBRARIES holds either
+# "-L<dir>" flags followed by "-lwx_..." (wx-config) or full library paths
+# (CONFIG mode). BundleDeps.cmake searches this directory for the libraries to
+# bundle.
 function(wx_find_lib_dir out_var)
   set(_dir "")
   foreach(_item ${wxWidgets_LIBRARIES})
@@ -180,9 +181,8 @@ if(BUILD_GLYPHT)
     set_source_files_properties(${APP_ICON} PROPERTIES MACOSX_PACKAGE_LOCATION
                                                        Resources)
     add_executable(glypht MACOSX_BUNDLE ${GLYPHT_SOURCES} ${APP_ICON})
-    set_target_properties(
-      glypht PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns
-                        MACOSX_BUNDLE_BUNDLE_NAME "GlyphT")
+    set_target_properties(glypht PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns
+                                            MACOSX_BUNDLE_BUNDLE_NAME "GlyphT")
   else()
     add_executable(glypht ${GLYPHT_SOURCES})
   endif()
@@ -202,11 +202,9 @@ if(BUILD_GLYPHT)
     set(_WIN_EXTRA_LIBS shell32 ole32 user32)
 
     # Copy SVG asset next to binary (Windows only)
-    message(STATUS "Copying glypht-msw.svg asset file to binary directory...")
-    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht-msw.svg"
+    message(STATUS "Copying glypht.svg asset file to binary directory...")
+    file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht.svg"
          DESTINATION "${CMAKE_BINARY_DIR}/install/bin/")
-    file(RENAME "${CMAKE_BINARY_DIR}/install/bin/glypht-msw.svg"
-         "${CMAKE_BINARY_DIR}/install/bin/glypht.svg")
 
     if(USE_OPENGL)
       list(APPEND _WIN_EXTRA_LIBS opengl32)
@@ -235,13 +233,17 @@ if(BUILD_GLYPHT)
   # next to the executable on Windows and Linux. This runs before the bundling
   # step below.
   if(APPLE)
-    set(GLYPHT_THEMES_DIR "$<TARGET_BUNDLE_CONTENT_DIR:glypht>/Resources/themes")
+    set(GLYPHT_THEMES_DIR
+        "$<TARGET_BUNDLE_CONTENT_DIR:glypht>/Resources/themes")
   else()
     set(GLYPHT_THEMES_DIR "$<TARGET_FILE_DIR:glypht>/themes")
   endif()
   add_custom_command(
     TARGET glypht
     POST_BUILD
+    # Start from an empty directory, so themes removed from assets/themes do
+    # not stay in an old build tree.
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${GLYPHT_THEMES_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_CURRENT_SOURCE_DIR}/assets/themes" "${GLYPHT_THEMES_DIR}"
     COMMENT "Copying colour themes"
@@ -309,5 +311,56 @@ if(BUILD_GLYPHT)
         -DCLANG64_BIN=${_TOOLCHAIN_BIN} -P ${BUNDLE_DEPS_SCRIPT}
       COMMENT "Bundling toolchain DLLs alongside executable"
       VERBATIM)
+  endif()
+
+  # ---------------------------------------------------------------------------
+  # Windows: Inno Setup installer. Build it with: cmake --build . --target setup
+  # The target stages the bundled application (see cmake/StageInstaller.cmake)
+  # and compiles installer.iss, generated from installer.iss.in, with ISCC.
+  # ---------------------------------------------------------------------------
+  if(WIN32 AND MINGW)
+    set(GLYPHT_VERSION
+        "1.0.0"
+        CACHE STRING "Version shown by the Windows installer")
+    set(INSTALLER_SOURCE_DIR "${CMAKE_BINARY_DIR}/installer")
+
+    # Architecture, used in the installer file name
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+      set(PROCESSOR_ARCHITECTURE "amd64")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")
+      set(PROCESSOR_ARCHITECTURE "arm64")
+    else()
+      set(PROCESSOR_ARCHITECTURE "unknown")
+    endif()
+
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/installer.iss.in
+                   ${CMAKE_BINARY_DIR}/installer.iss @ONLY)
+
+    find_program(
+      INNO_SETUP_CMP
+      NAMES "ISCC" "ISCC.exe"
+      PATHS "c:/Program Files (x86)/Inno Setup 6"
+            "c:/Program Files/Inno Setup 6")
+    if(NOT INNO_SETUP_CMP)
+      message(
+        WARNING
+          "Could not locate the Inno Setup compiler (ISCC). The \"setup\" target is not created. Install Inno Setup from https://jrsoftware.org/"
+      )
+    else()
+      message(STATUS "Inno Setup compiler is set to: ${INNO_SETUP_CMP}")
+      add_custom_target(
+        setup
+        COMMAND
+          ${CMAKE_COMMAND} -DBIN_DIR=$<TARGET_FILE_DIR:glypht>
+          -DSTAGE_DIR=${INSTALLER_SOURCE_DIR} -DWX_DLL=$<TARGET_FILE:wx::wxmono>
+          -DLICENSE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/LICENSE
+          -DICON_FILE=${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht.ico -P
+          ${CMAKE_CURRENT_SOURCE_DIR}/cmake/StageInstaller.cmake
+        COMMAND "${INNO_SETUP_CMP}" ${CMAKE_BINARY_DIR}/installer.iss
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        COMMENT "Building the Windows installer"
+        VERBATIM)
+      add_dependencies(setup glypht)
+    endif()
   endif()
 endif()

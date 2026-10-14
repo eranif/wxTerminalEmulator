@@ -6,6 +6,10 @@ WX_INSTALL_DIR=${BUILD_DIR}/wxWidgets-install
 MACOS_DEPLOYMENT_TARGET=${MACOS_DEPLOYMENT_TARGET:-13.0}
 OS_NAME="$(uname -s)"
 FORCE_CMAKE=0
+DO_PACKAGE=0
+
+# Version used by the "package" target. Empty: use the default of each package.
+GLYPHT_VERSION=${GLYPHT_VERSION:-}
 
 # The wxWidgets tag to build. Override with WX_VERSION.
 WX_VERSION=${WX_VERSION:-v3.3.4}
@@ -198,6 +202,55 @@ function build_MSW() {
   INFO ""
 }
 
+# The "package" target. Each function runs after a successful build and leaves
+# the package in ${BUILD_DIR}.
+
+function package_MSW() {
+  local cmake_args=()
+  if [ -n "${GLYPHT_VERSION}" ]; then
+    cmake_args+=(-DGLYPHT_VERSION="${GLYPHT_VERSION}")
+    cmake "${BUILD_DIR}" "${cmake_args[@]}" >/dev/null
+  fi
+  # The "setup" target only exists when CMake found the Inno Setup compiler.
+  if ! grep -q "^setup:" "${BUILD_DIR}/Makefile"; then
+    ERROR "No 'setup' target: Inno Setup 6 (ISCC.exe) was not found by CMake"
+    ERROR "Install it from https://jrsoftware.org/ and run: ./build.sh --cmake package"
+    exit 1
+  fi
+  INFO "Building the Windows installer"
+  cmake --build "${BUILD_DIR}" --target setup
+  INFO "Package: $(ls -t "${BUILD_DIR}"/glypht-*-installer.exe | head -n 1)"
+}
+
+function package_macOS() {
+  local version=${GLYPHT_VERSION:-1.0.0}
+  local zip="${BUILD_DIR}/glypht-${version}-macos-$(uname -m).zip"
+  INFO "Creating ${zip}"
+  rm -f "${zip}"
+  # ditto keeps the symlinks and the permissions inside the .app bundle
+  ditto -c -k --keepParent "${BUILD_DIR}/glypht.app" "${zip}"
+  INFO "Package: ${zip}"
+}
+
+function package_Linux() {
+  local version=${GLYPHT_VERSION:-1.0.0}
+  local tarball="${BUILD_DIR}/glypht-${version}-linux-$(uname -m).tar.gz"
+  INFO "Creating ${tarball}"
+  rm -f "${tarball}"
+  tar -czf "${tarball}" -C "${BUILD_DIR}" glypht glypht.svg themes
+  INFO "Package: ${tarball}"
+}
+
+function package() {
+  if [[ "${OS_NAME}" == *MINGW* ]]; then
+    package_MSW
+  elif [[ "${OS_NAME}" == "Darwin" ]]; then
+    package_macOS
+  elif [[ "${OS_NAME}" == "Linux" ]]; then
+    package_Linux
+  fi
+}
+
 function clean() {
   if [ ! -f "${BUILD_DIR}/Makefile" ]; then
     INFO "Nothing to clean"
@@ -222,6 +275,10 @@ function usage() {
   echo ""
   echo "Targets:"
   echo "  (none)      Build GlyphT (default)"
+  echo "  package     Build GlyphT, then create the package for this OS:"
+  echo "                Windows: Inno Setup installer (needs Inno Setup 6)"
+  echo "                macOS:   glypht-<version>-macos-<arch>.zip"
+  echo "                Linux:   glypht-<version>-linux-<arch>.tar.gz"
   echo "  clean       Remove build artifacts (make clean)"
   echo "  distclean   Remove the entire build directory, including wxWidgets"
   echo "  -h, --help  Show this help message"
@@ -231,6 +288,7 @@ function usage() {
   echo "  WX_VERSION=<tag>            wxWidgets tag to build (default: ${WX_VERSION})"
   echo "  WX_CONFIG=<path>            Use this wx-config and skip building wxWidgets (macOS, Linux)"
   echo "  MACOS_DEPLOYMENT_TARGET=<v> macOS deployment target (default: ${MACOS_DEPLOYMENT_TARGET})"
+  echo "  GLYPHT_VERSION=<x.y.z>      Version used in the package name (default: 1.0.0)"
 }
 
 function build() {
@@ -267,6 +325,9 @@ distclean)
   usage
   exit 0
   ;;
+package)
+  DO_PACKAGE=1
+  ;;
 "") ;;
 *)
   ERROR "Unknown target: ${1}"
@@ -278,3 +339,6 @@ esac
 INFO "Building wxTerminalEmulator"
 check_prerequistes
 build
+if [ "${DO_PACKAGE}" = "1" ]; then
+  package
+fi
