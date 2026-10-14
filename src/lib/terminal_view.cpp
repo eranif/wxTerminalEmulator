@@ -371,6 +371,15 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
                                              : BuildEnvMap();
     if (shellIntegration) {
       ApplyShellIntegration(env_map);
+      // MSYS2 login shells (bash --login) go to $HOME at start, unless
+      // CHERE_INVOKING is set. Set it when a directory was given, so the shell
+      // stays there. A value set by the caller is kept.
+      if (m_workingDirectory.has_value()) {
+        wxString &chere = EnvVar(env_map, wxS("CHERE_INVOKING"));
+        if (chere.empty()) {
+          chere = "1";
+        }
+      }
     }
     for (const auto &[n, v] : env_map) {
       wxString entry;

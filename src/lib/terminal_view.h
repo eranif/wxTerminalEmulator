@@ -52,7 +52,9 @@ public:
    *        also over ssh and in WSL, and cmd.exe does the same on Windows. The
    *        hooks are added to `environment` when it is given, otherwise to a
    *        copy of the process environment. An existing PROMPT_COMMAND (or
-   *        PROMPT on Windows) is kept and extended. Set to false to leave the
+   *        PROMPT on Windows) is kept and extended. When a working directory
+   *        is given, CHERE_INVOKING=1 is set too, so an MSYS2 login shell stays
+   *        in that directory. Set to false to leave the
    *        environment untouched.
    */
   wxTerminalViewCtrl(wxWindow *parent, const wxString &shellCommand,
