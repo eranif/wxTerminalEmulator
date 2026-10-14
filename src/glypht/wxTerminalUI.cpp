@@ -6,12 +6,74 @@
 
 #include "wxTerminalUI.hpp"
 
-// Declare the bitmap loading function
-extern void wxCrafterntzRqwInitBitmapResources();
+#include <wx/filesys.h>
+#include <wx/fs_mem.h>
+#include <wx/xrc/xh_all.h>
+#include <wx/xrc/xmlres.h>
+
+// Load the bitmaps from the XRC resources that are embedded in this file
+#if wxCHECK_VERSION(2, 8, 5) && wxABI_VERSION >= 20805
+#define XRC_ADD_FILE(name, data, size, mime)                                   \
+  wxMemoryFSHandler::AddFileWithMimeType(name, data, size, mime)
+#else
+#define XRC_ADD_FILE(name, data, size, mime)                                   \
+  wxMemoryFSHandler::AddFile(name, data, size)
+#endif
+
+static size_t xml_res_size_0 = 137;
+static unsigned char xml_res_file_0[] = {
+    '<', '?', 'x', 'm', 'l', ' ', 'v', 'e', 'r', 's', 'i', 'o', 'n', '=',
+    '"', '1', '.', '0', '"', ' ', 'e', 'n', 'c', 'o', 'd', 'i', 'n', 'g',
+    '=', '"', 'U', 'T', 'F', '-', '8', '"', '?', '>', 10,  '<', 'r', 'e',
+    's', 'o', 'u', 'r', 'c', 'e', ' ', 'x', 'm', 'l', 'n', 's', '=', '"',
+    'h', 't', 't', 'p', ':', '/', '/', 'w', 'w', 'w', '.', 'w', 'x', 'w',
+    'i', 'd', 'g', 'e', 't', 's', '.', 'o', 'r', 'g', '/', 'w', 'x', 'x',
+    'r', 'c', '"', '>', 10,  ' ', ' ', '<', '!', '-', '-', ' ', 'H', 'a',
+    'n', 'd', 'l', 'e', 'r', ' ', 'G', 'e', 'n', 'e', 'r', 'a', 't', 'i',
+    'o', 'n', ' ', 'i', 's', ' ', 'O', 'N', ' ', '-', '-', '>', 10,  '<',
+    '/', 'r', 'e', 's', 'o', 'u', 'r', 'c', 'e', '>', 10};
+
+static void wxCrafterntzRqwInitBitmapResources() {
+
+  // Check for memory FS. If not present, load the handler:
+  {
+    wxMemoryFSHandler::AddFile(wxT("XRC_resource/dummy_file"),
+                               wxT("dummy one"));
+    wxFileSystem fsys;
+    wxFSFile *f = fsys.OpenFile(wxT("memory:XRC_resource/dummy_file"));
+    wxMemoryFSHandler::RemoveFile(wxT("XRC_resource/dummy_file"));
+    if (f)
+      delete f;
+    else
+      wxFileSystem::AddHandler(new wxMemoryFSHandlerBase);
+  }
+
+  XRC_ADD_FILE(
+      wxT("XRC_resource/"
+          "wxTerminalUI.cpp$C__msys64_home_eran_devl_wxTerminalEmulator_src_"
+          "glypht_wxTerminalUI_wxterminalemulator_bitmaps.xrc"),
+      xml_res_file_0, xml_res_size_0, wxT("text/xml"));
+  wxXmlResource::Get()->Load(
+      wxT("memory:XRC_resource/"
+          "wxTerminalUI.cpp$C__msys64_home_eran_devl_wxTerminalEmulator_src_"
+          "glypht_wxTerminalUI_wxterminalemulator_bitmaps.xrc"));
+}
+
+#ifdef WXC_MAYBE_UNUSED
+#undef WXC_MAYBE_UNUSED
+#endif
+
+#if __cplusplus >= 201703L
+#define WXC_MAYBE_UNUSED [[maybe_unused]]
+#elif defined(__GNUC__) || defined(__clang__)
+#define WXC_MAYBE_UNUSED __attribute__((unused))
+#else
+#define WXC_MAYBE_UNUSED
+#endif
 
 namespace {
 // return the wxBORDER_SIMPLE that matches the current application theme
-[[maybe_unused]]
+WXC_MAYBE_UNUSED
 wxBorder get_border_simple_theme_aware_bit() {
 #if wxVERSION_NUMBER >= 3300 && defined(__WXMSW__)
   return wxSystemSettings::GetAppearance().IsDark() ? wxBORDER_SIMPLE
@@ -62,6 +124,40 @@ SettingsBaseDlg::SettingsBaseDlg(wxWindow *parent, wxWindowID id,
   flexGridSizer172->SetNonFlexibleGrowMode(wxFLEX_GROWMODE_SPECIFIED);
   flexGridSizer172->AddGrowableCol(1);
   m_panel171->SetSizer(flexGridSizer172);
+
+  m_staticText182 = new wxStaticText(m_panel171, wxID_ANY, _("Shell Command:"),
+                                     wxDefaultPosition,
+                                     wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
+
+  flexGridSizer172->Add(m_staticText182, 0,
+                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
+                        WXC_FROM_DIP(5));
+
+  m_filePickerShellExe = new wxFilePickerCtrl(
+      m_panel171, wxID_ANY, wxEmptyString, _("Select a file"), wxT("*"),
+      wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1, -1)),
+      wxFLP_DEFAULT_STYLE | wxFLP_SMALL);
+
+  flexGridSizer172->Add(m_filePickerShellExe, 0, wxALL | wxEXPAND,
+                        WXC_FROM_DIP(5));
+
+  m_staticText184 = new wxStaticText(m_panel171, wxID_ANY,
+                                     _("Shell Arguments:"), wxDefaultPosition,
+                                     wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
+
+  flexGridSizer172->Add(m_staticText184, 0,
+                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
+                        WXC_FROM_DIP(5));
+
+  m_textCtrlShellArgs =
+      new wxTextCtrl(m_panel171, wxID_ANY, wxT(""), wxDefaultPosition,
+                     wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
+#if wxVERSION_NUMBER >= 3000
+  m_textCtrlShellArgs->SetHint(wxT(""));
+#endif
+
+  flexGridSizer172->Add(m_textCtrlShellArgs, 0, wxALL | wxEXPAND,
+                        WXC_FROM_DIP(5));
 
   m_staticText173 = new wxStaticText(m_panel171, wxID_ANY, _("New Tab Title:"),
                                      wxDefaultPosition,

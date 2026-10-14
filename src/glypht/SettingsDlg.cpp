@@ -13,6 +13,8 @@ SettingsDlg::SettingsDlg(wxWindow *parent, const AppConfig &config,
   m_textCtrlTitle->SetValue(m_config.GetNewTabTitle());
   m_checkBoxCloseButton->SetValue(m_config.GetShowCloseButton());
   m_checkBoxBlockCursor->SetValue(m_config.GetBlockCursor());
+  m_filePickerShellExe->SetPath(m_config.GetShellExecutable());
+  m_textCtrlShellArgs->SetValue(m_config.GetShellArgs());
   if (m_config.GetFont().IsOk()) {
     m_fontPickerFont->SetSelectedFont(m_config.GetFont());
   }

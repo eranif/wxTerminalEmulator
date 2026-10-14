@@ -63,7 +63,8 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
 
   m_notebook = new wxAuiNotebook(this, wxID_ANY, wxDefaultPosition,
                                  wxDefaultSize, nbStyle);
-  m_defaultShellCommand = shellCommand;
+  m_cliShellCommand = shellCommand;
+  m_defaultShellCommand = ResolveDefaultShell();
   m_defaultEnvironment = environment;
   m_defaultWorkingDirectory = std::move(workingDirectory);
 
@@ -79,8 +80,8 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   }
 
   if (!restored) {
-    CreateTerminalPage({shellCommand, environment, m_defaultWorkingDirectory},
-                       true);
+    CreateTerminalPage(
+        {m_defaultShellCommand, environment, m_defaultWorkingDirectory}, true);
   }
 
   Bind(wxEVT_CLOSE_WINDOW, &MyFrame::OnClose, this);
@@ -820,7 +821,16 @@ void MyFrame::OnSettings(wxCommandEvent &event) {
     m_config.SetShowCloseButton(dlg.GetShowCloseButton());
     m_config.SetBlockCursor(dlg.GetBlockCursor());
     m_config.SetFont(dlg.GetFont());
+    m_config.SetShellExecutable(dlg.GetShellExecutable());
+    m_config.SetShellArgs(dlg.GetShellArgs());
+    // Used by the tabs that are opened from now on. Open tabs keep their shell.
+    m_defaultShellCommand = ResolveDefaultShell();
   }
   ApplySettings();
   PersistSettings();
+}
+
+wxString MyFrame::ResolveDefaultShell() const {
+  return m_cliShellCommand.empty() ? m_config.GetShellCommand()
+                                   : m_cliShellCommand;
 }

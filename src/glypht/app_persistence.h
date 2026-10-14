@@ -59,6 +59,20 @@ struct AppConfig {
   void SetBlockCursor(bool block) { blockCursor = block; }
   bool GetBlockCursor() const { return blockCursor; }
 
+  /// Optional shell to start in new tabs, instead of the default shell of the
+  /// platform. Empty means: use the default shell.
+  void SetShellExecutable(const wxString &path) { shellExecutable = path; }
+  const wxString &GetShellExecutable() const { return shellExecutable; }
+  /// Optional arguments for the shell above. Used only with a shell.
+  void SetShellArgs(const wxString &args) { shellArgs = args; }
+  const wxString &GetShellArgs() const { return shellArgs; }
+
+  /// The command line to start the configured shell with: the executable
+  /// (in double quotes when it has spaces), then the arguments. Empty when no
+  /// shell is configured, or when the configured path is an absolute path of a
+  /// file that does not exist (for example a removed shell).
+  wxString GetShellCommand() const;
+
 private:
   const wxTerminalTheme *FindTheme(const wxString &name) const;
 
@@ -71,6 +85,8 @@ private:
   bool safeDrawingEnabled{false};
   bool showCloseButton{true};
   bool blockCursor{true};
+  wxString shellExecutable;
+  wxString shellArgs;
 };
 
 class AppPersistence {

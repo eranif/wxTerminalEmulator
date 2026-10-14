@@ -1,5 +1,6 @@
 #include "pty_backend_posix.h"
 
+#include <cctype>
 #include <cerrno>
 #include <cstddef>
 #include <cstdlib>
@@ -27,13 +28,36 @@
 
 namespace terminal {
 
-// Split a command string into argv tokens (simple whitespace splitting).
+// Split a command string into argv tokens. Tokens are separated by whitespace.
+// Text in single or double quotes stays in one token (the quotes are removed),
+// so a program path with spaces can be written as "/path/with spaces/shell".
 static std::vector<std::string> TokenizeCommand(const std::string &cmd) {
   std::vector<std::string> tokens;
-  std::istringstream iss(cmd);
   std::string token;
-  while (iss >> token)
-    tokens.push_back(token);
+  bool inToken = false;
+  char quote = '\0';
+  for (const char c : cmd) {
+    if (quote != '\0') {
+      if (c == quote)
+        quote = '\0';
+      else
+        token += c;
+    } else if (c == '"' || c == '\'') {
+      quote = c;
+      inToken = true;
+    } else if (std::isspace(static_cast<unsigned char>(c))) {
+      if (inToken) {
+        tokens.push_back(std::move(token));
+        token.clear();
+        inToken = false;
+      }
+    } else {
+      token += c;
+      inToken = true;
+    }
+  }
+  if (inToken)
+    tokens.push_back(std::move(token));
   return tokens;
 }
 std::unique_ptr<PtyBackend> PtyBackend::Create(wxEvtHandler *handler) {

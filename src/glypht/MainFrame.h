@@ -196,6 +196,9 @@ public:
   void OnTimer(wxTimerEvent &event);
   void Terminate();
   void PersistSettings();
+  // The shell for new tabs: --shell if given, else the shell of the settings,
+  // else empty (the default shell of the platform).
+  wxString ResolveDefaultShell() const;
   void ApplyNativeAppTheme();
 
   // Serialize the open tabs and their AUI arrangement to disk. Called on exit.
@@ -207,6 +210,8 @@ public:
 
 private:
   wxAuiNotebook *m_notebook{nullptr};
+  // The shell from --shell. It wins over the shell of the settings.
+  wxString m_cliShellCommand;
   wxString m_defaultShellCommand;
   std::optional<EnvironmentList> m_defaultEnvironment;
   std::optional<wxString> m_defaultWorkingDirectory;

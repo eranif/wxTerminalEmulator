@@ -143,6 +143,27 @@ bool AppConfig::HasTheme(const wxString &name) const {
   return FindTheme(name) != nullptr;
 }
 
+wxString AppConfig::GetShellCommand() const {
+  wxString exe = shellExecutable;
+  exe.Trim(true).Trim(false);
+  if (exe.empty()) {
+    return {};
+  }
+  // An absolute path must point to a file. A plain name such as "pwsh" is left
+  // to the operating system, which looks it up in PATH.
+  const wxFileName fn(exe);
+  if (fn.IsAbsolute() && !fn.FileExists()) {
+    return {};
+  }
+  wxString command = exe.Contains(' ') ? "\"" + exe + "\"" : exe;
+  wxString args = shellArgs;
+  args.Trim(true).Trim(false);
+  if (!args.empty()) {
+    command << ' ' << args;
+  }
+  return command;
+}
+
 wxString AppPersistence::GetConfigPath() {
   wxFileName logFile(TerminalLogger::Get().GetLevel() <=
                              TerminalLogLevel::kTrace
@@ -229,6 +250,10 @@ bool AppPersistence::Load(AppConfig &config) {
       } else if (key == "blockcursor") {
         config.SetBlockCursor(value == "1" || value == "true" ||
                               value == "yes" || value == "on");
+      } else if (key == "shell") {
+        config.SetShellExecutable(value);
+      } else if (key == "shellargs") {
+        config.SetShellArgs(value);
       }
     } else if (section == Section::kTheme) {
       if (key == "name") {
@@ -275,6 +300,8 @@ bool AppPersistence::Save(const AppConfig &config) {
   file.AddLine("font=" + config.GetFont().GetNativeFontInfoDesc());
   file.AddLine(wxString::Format(
       "safedrawing=%s", config.IsSafeDrawingEnabled() ? "true" : "false"));
+  file.AddLine("shell=" + config.GetShellExecutable());
+  file.AddLine("shellargs=" + config.GetShellArgs());
 
   // Shipped themes are read from their *.toml files, so only themes the user
   // created or edited are saved.

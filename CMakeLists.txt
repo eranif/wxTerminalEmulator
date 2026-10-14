@@ -86,9 +86,7 @@ set(GLYPHT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/MainFrame.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/wxTerminalUI.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/SettingsDlg.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/theme_loader.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/wxTerminalUI_wxterminalemulator_bitmaps.cpp
-)
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/theme_loader.cpp)
 
 if(MINGW)
   list(APPEND GLYPHT_SOURCES "${CMAKE_SOURCE_DIR}/src/glypht/glypht.rc")

@@ -4,8 +4,8 @@
 // Do not modify this file by hand!
 //////////////////////////////////////////////////////////////////////
 
-#ifndef _DEVL_WXTERMINALEMULATOR_WXTERMINALUI_BASE_CLASSES_HPP
-#define _DEVL_WXTERMINALEMULATOR_WXTERMINALUI_BASE_CLASSES_HPP
+#ifndef _SRC_GLYPHT_WXTERMINALUI_BASE_CLASSES_HPP
+#define _SRC_GLYPHT_WXTERMINALUI_BASE_CLASSES_HPP
 
 // clang-format off
 #include <wx/settings.h>
@@ -19,6 +19,7 @@
 #include <wx/notebook.h>
 #include <wx/imaglist.h>
 #include <wx/stattext.h>
+#include <wx/filepicker.h>
 #include <wx/textctrl.h>
 #include <wx/fontpicker.h>
 #include <wx/checkbox.h>
@@ -39,7 +40,7 @@
 #undef WXC_FROM_DIP
 #endif
 #if wxVERSION_NUMBER >= 3100
-#define WXC_FROM_DIP(x) wxWindow::FromDIP(x, NULL)
+#define WXC_FROM_DIP(x) wxWindow::FromDIP(x, nullptr)
 #else
 #define WXC_FROM_DIP(x) x
 #endif
@@ -51,6 +52,10 @@ protected:
   wxPanel *m_panel127;
   wxNotebook *m_notebook132;
   wxPanel *m_panel171;
+  wxStaticText *m_staticText182;
+  wxFilePickerCtrl *m_filePickerShellExe;
+  wxStaticText *m_staticText184;
+  wxTextCtrl *m_textCtrlShellArgs;
   wxStaticText *m_staticText173;
   wxTextCtrl *m_textCtrlTitle;
   wxStaticText *m_staticText180;
@@ -101,6 +106,10 @@ protected:
   virtual void OnShowBrightColours(wxCommandEvent &event) { event.Skip(); }
 
 public:
+  wxStaticText *GetStaticText182() { return m_staticText182; }
+  wxFilePickerCtrl *GetFilePickerShellExe() { return m_filePickerShellExe; }
+  wxStaticText *GetStaticText184() { return m_staticText184; }
+  wxTextCtrl *GetTextCtrlShellArgs() { return m_textCtrlShellArgs; }
   wxStaticText *GetStaticText173() { return m_staticText173; }
   wxTextCtrl *GetTextCtrlTitle() { return m_textCtrlTitle; }
   wxStaticText *GetStaticText180() { return m_staticText180; }

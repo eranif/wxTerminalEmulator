@@ -23,6 +23,15 @@ public:
   bool GetShowCloseButton() const { return m_checkBoxCloseButton->GetValue(); }
   bool GetBlockCursor() const { return m_checkBoxBlockCursor->GetValue(); }
   wxFont GetFont() const { return m_fontPickerFont->GetSelectedFont(); }
+  /// The shell executable chosen in the dialog, or empty for the default shell.
+  wxString GetShellExecutable() const {
+    wxString path = m_filePickerShellExe->GetPath();
+    return path.Trim(true).Trim(false);
+  }
+  wxString GetShellArgs() const {
+    wxString args = m_textCtrlShellArgs->GetValue();
+    return args.Trim(true).Trim(false);
+  }
 
 protected:
   void OnBackgroundColour(wxColourPickerEvent &event) override;

@@ -352,10 +352,12 @@ The included demo application (`main.cpp`) showcases the library features:
 
 **Command-Line Options**:
 - `--appearance=<mode>`: Control native app appearance: `light`, `dark`, or `auto` (platform-native)
-- `--shell=<command>`: Launch a specific shell or command (default: platform default shell). The saved tabs are still restored, and they use this shell
+- `--shell=<command>`: Launch a specific shell or command (default: the shell chosen in Settings, else the platform default shell). It wins over the Settings shell. The saved tabs are still restored, and they use this shell
 - `--working-directory=<path>`: Start the shell in a specific directory (starts one fresh tab; the saved tabs are not restored)
 - `--env=<list>`: Pass environment variables to the launched process
 - `--log-level=<level>`: Set logging verbosity: `trace`, `debug`, `info`, `warn`, or `error` (default: `error`)
+
+**Shell setting**: in Settings you can choose a shell program and its arguments. They are saved in `config.ini` (`shell=` and `shellargs=`) and used for new tabs and for restored tabs. `--shell` wins over them. When the program does not exist, or the setting is empty, the default shell of the platform is used. Tabs that are already open keep their shell.
 
 ## API Reference
 
