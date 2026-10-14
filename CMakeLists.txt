@@ -89,7 +89,7 @@ set(GLYPHT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/theme_loader.cpp)
 
 if(MINGW)
-  list(APPEND GLYPHT_SOURCES "${CMAKE_SOURCE_DIR}/src/glypht/glypht.rc")
+  list(APPEND GLYPHT_SOURCES "${CMAKE_CURRENT_LIST_DIR}/src/glypht/glypht.rc")
 endif()
 
 if(WIN32)
@@ -239,8 +239,8 @@ if(BUILD_GLYPHT)
   add_custom_command(
     TARGET glypht
     POST_BUILD
-    # Start from an empty directory, so themes removed from assets/themes do
-    # not stay in an old build tree.
+    # Start from an empty directory, so themes removed from assets/themes do not
+    # stay in an old build tree.
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${GLYPHT_THEMES_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_CURRENT_SOURCE_DIR}/assets/themes" "${GLYPHT_THEMES_DIR}"
