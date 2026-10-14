@@ -25,7 +25,7 @@ All you need is **wxWidgets** and **CMake** — no third-party libraries are req
 
 - CMake 3.10 or later
 - C++20 compatible compiler
-- wxWidgets 3.2.x
+- wxWidgets 3.2.x or 3.3.x
 - Platform-specific requirements:
   - **Windows**: MinGW with Windows 10+ (for `ConPTY` support)
   - **macOS**: macOS 10.10+ with CoreText and OpenGL support
@@ -146,9 +146,32 @@ GPU-accelerated rendering path (Windows & macOS only, enabled by default):
 
 ### Build Targets
 - `wxterminal_lib` - static library
-- `glypht` - demo application (enabled by default through `BUILD_WXTERMINAL_DEMO`)
+- `glypht` - demo application (enabled by default through `BUILD_GLYPHT`)
 
 ### Build Instructions
+
+#### Using `build.sh` (recommended)
+The script builds wxWidgets (v3.3.4 by default) and then builds `glypht`. It
+works on macOS, Linux and Windows (MSYS2). Everything goes into `.build-release/`.
+```bash
+./build.sh              # build wxWidgets (first run only) and glypht
+./build.sh --cmake      # force the CMake configure step
+./build.sh clean        # make clean
+./build.sh distclean    # remove .build-release, including wxWidgets
+```
+
+Result:
+- macOS: `.build-release/glypht.app`
+- Linux: `.build-release/glypht`
+- Windows: `.build-release/install/bin/glypht.exe`
+
+Environment variables:
+- `WX_VERSION`: wxWidgets tag to build (default: `v3.3.4`)
+- `WX_CONFIG`: path to an existing `wx-config`; skips the wxWidgets build (macOS, Linux)
+- `USE_OPENGL=0|1`: choose the renderer (default: ON on macOS and Windows, OFF on Linux)
+- `MACOS_DEPLOYMENT_TARGET`: macOS deployment target (default: `13.0`)
+
+On macOS the build copies the wxWidgets library into the app bundle.
 
 #### Windows (MinGW)
 ```bash
@@ -167,7 +190,7 @@ cmake --build .
 ### CMake Options
 - `WXWIN`: Path to wxWidgets installation (required on Windows with MinGW)
 - `WXCFG`: wxWidgets configuration string (Windows MinGW only, default: `clang_x64_dll/mswu`)
-- `BUILD_WXTERMINAL_DEMO`: Enable/disable the demo executable (default: ON)
+- `BUILD_GLYPHT`: Enable/disable the demo executable (default: ON)
 - `USE_OPENGL`: Enable OpenGL rendering on Windows/macOS (default: ON on Windows/macOS, OFF on Linux)
   - Provide via environment variable: `USE_OPENGL=1 cmake ..`
   - Or CMake option: `cmake -DUSE_OPENGL=ON ..`
