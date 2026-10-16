@@ -682,9 +682,10 @@ wxString TerminalCore::GetTextRange(std::size_t row, std::size_t col,
 
 bool TerminalCore::HandleMouseEvent(unsigned int cell_x, unsigned int cell_y,
                                     unsigned int button, unsigned int event,
-                                    unsigned char flags) {
-  return tsm_vte_handle_mouse(m_tsmVte, cell_x, cell_y, 0, 0, button, event,
-                              flags);
+                                    unsigned char flags, unsigned int pixel_x,
+                                    unsigned int pixel_y) {
+  return tsm_vte_handle_mouse(m_tsmVte, cell_x, cell_y, pixel_x, pixel_y,
+                              button, event, flags);
 }
 
 unsigned int TerminalCore::GetMouseTrackingMode() const {

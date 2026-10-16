@@ -246,7 +246,8 @@ public:
   // Handle mouse events (returns true if event was consumed by application)
   bool HandleMouseEvent(unsigned int cell_x, unsigned int cell_y,
                         unsigned int button, unsigned int event,
-                        unsigned char flags = 0);
+                        unsigned char flags = 0, unsigned int pixel_x = 0,
+                        unsigned int pixel_y = 0);
 
   // Check if mouse tracking is enabled
   unsigned int GetMouseTrackingMode() const;

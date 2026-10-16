@@ -47,6 +47,7 @@
  */
 
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -173,8 +174,10 @@ struct tsm_vte {
 
 	tsm_vte_mouse_cb mouse_cb;
 	void *mouse_data;
+	/* what the application wants to be told about: 0, 9, 1000, 1002 or 1003 */
 	unsigned int mouse_mode;
-	unsigned int mouse_event;
+	/* how the position is written: 0 (legacy), 1006 (SGR) or 1016 (pixels) */
+	unsigned int mouse_encoding;
 	unsigned int mouse_last_col;
 	unsigned int mouse_last_row;
 	bool bracketed_paste;
@@ -679,6 +682,72 @@ unsigned int tsm_vte_get_flags(struct tsm_vte *vte)
 	return vte->flags;
 }
 
+/*
+ * Mouse reporting has two independent settings. The mode (9, 1000, 1002, 1003)
+ * says which events the application wants. The encoding (1006, 1016) says how
+ * the position is written. Applications set them in any order, e.g. tmux sends
+ * 1006 first and 1000/1002 after it, so one setting must not overwrite the
+ * other.
+ */
+static unsigned int vte_mouse_event(const struct tsm_vte *vte)
+{
+	switch (vte->mouse_mode) {
+	case 0:
+		return 0;
+	case TSM_VTE_MOUSE_EVENT_ANY:
+		return TSM_VTE_MOUSE_EVENT_ANY;
+	default:
+		return TSM_VTE_MOUSE_EVENT_BTN;
+	}
+}
+
+static void vte_mouse_notify(struct tsm_vte *vte)
+{
+	if (vte->mouse_cb) {
+		vte->mouse_cb(vte, vte_mouse_event(vte),
+			      vte->mouse_encoding == TSM_VTE_MOUSE_MODE_PIXEL,
+			      vte->mouse_data);
+	}
+}
+
+/*
+ * The last mode that is set wins. Resetting a mode that is not the active one
+ * is ignored on purpose: tmux sets 1000 and then 1002, and a later reset of
+ * 1000 must not turn off 1002.
+ */
+static void vte_set_mouse_mode(struct tsm_vte *vte, bool set, unsigned int mode)
+{
+	if (set) {
+		vte->mouse_mode = mode;
+		/* the first move report must not be mistaken for a repeated one */
+		vte->mouse_last_col = UINT_MAX;
+		vte->mouse_last_row = UINT_MAX;
+	} else if (vte->mouse_mode == mode) {
+		vte->mouse_mode = 0;
+	} else {
+		return;
+	}
+
+	vte_mouse_notify(vte);
+}
+
+static void vte_set_mouse_encoding(struct tsm_vte *vte, bool set,
+				   unsigned int encoding)
+{
+	if (set) {
+		vte->mouse_encoding = encoding;
+	} else if (vte->mouse_encoding == encoding) {
+		vte->mouse_encoding = 0;
+	} else {
+		return;
+	}
+
+	/* Nothing to tell while the application does not track the mouse. */
+	if (vte->mouse_mode) {
+		vte_mouse_notify(vte);
+	}
+}
+
 SHL_EXPORT
 unsigned int tsm_vte_get_mouse_mode(struct tsm_vte *vte)
 {
@@ -696,7 +765,7 @@ unsigned int tsm_vte_get_mouse_event(struct tsm_vte *vte)
 		return 0;
 	}
 
-	return vte->mouse_event;
+	return vte_mouse_event(vte);
 }
 
 /*
@@ -865,9 +934,9 @@ void tsm_vte_reset(struct tsm_vte *vte)
 	vte->g3 = &tsm_vte_unicode_upper;
 
 	vte->mouse_mode = 0;
-	vte->mouse_event = 0;
-	vte->mouse_last_col = 0;
-	vte->mouse_last_row = 0;
+	vte->mouse_encoding = 0;
+	vte->mouse_last_col = UINT_MAX;
+	vte->mouse_last_row = UINT_MAX;
 
 	memcpy(&vte->cattr, &vte->def_attr, sizeof(vte->cattr));
 	to_rgb(vte, &vte->cattr);
@@ -1698,12 +1767,13 @@ static void csi_mode(struct tsm_vte *vte, bool set)
 			continue;
 		case TSM_VTE_MOUSE_MODE_X10:
 		case TSM_VTE_MOUSE_MODE_VT200:
-			vte->mouse_mode = set ? vte->csi_argv[i] : 0;
-			vte->mouse_event = TSM_VTE_MOUSE_EVENT_BTN;
-
-			if (vte->mouse_cb) {
-			    vte->mouse_cb(vte, vte->mouse_event, false, vte->mouse_data);
-			}
+		case TSM_VTE_MOUSE_EVENT_BTN:
+		case TSM_VTE_MOUSE_EVENT_ANY:
+			vte_set_mouse_mode(vte, set, vte->csi_argv[i]);
+			continue;
+		case TSM_VTE_MOUSE_MODE_SGR:
+		case TSM_VTE_MOUSE_MODE_PIXEL:
+			vte_set_mouse_encoding(vte, set, vte->csi_argv[i]);
 			continue;
 		case 12: /* blinking cursor */
 			/* TODO: implement */
@@ -1786,42 +1856,6 @@ static void csi_mode(struct tsm_vte *vte, bool set)
 						       TSM_SCREEN_ALTERNATE);
 				tsm_screen_move_to(vte->con, vte->alt_cursor_x,
 						   vte->alt_cursor_y);
-			}
-			continue;
-		case TSM_VTE_MOUSE_EVENT_BTN:
-		case TSM_VTE_MOUSE_EVENT_ANY:
-			if (vte->mouse_mode == TSM_VTE_MOUSE_MODE_X10 || vte->mouse_mode == TSM_VTE_MOUSE_MODE_VT200) {
-			    vte->mouse_event = TSM_VTE_MOUSE_EVENT_BTN;
-			} else {
-			    vte->mouse_event = set ? vte->csi_argv[i] : 0;
-			}
-
-			if (vte->mouse_cb && vte->mouse_mode) {
-			    vte->mouse_cb(vte, vte->mouse_event, vte->mouse_mode == TSM_VTE_MOUSE_MODE_PIXEL, vte->mouse_data);
-			}
-			continue;
-		case TSM_VTE_MOUSE_MODE_SGR:
-			vte->mouse_mode = set ? vte->csi_argv[i] : 0;
-
-			if (!vte->mouse_cb) {
-			    continue;
-			}
-
-			if (!set || vte->mouse_event) {
-			    vte->mouse_cb(vte, vte->mouse_event, false, vte->mouse_data);
-			    continue;
-			}
-			continue;
-		case TSM_VTE_MOUSE_MODE_PIXEL:
-			vte->mouse_mode = set ? vte->csi_argv[i] : 0;
-
-			if (!vte->mouse_cb) {
-			    continue;
-			}
-
-			if (!set || vte->mouse_event) {
-			    vte->mouse_cb(vte, vte->mouse_event, set, vte->mouse_data);
-			    continue;
 			}
 			continue;
 		case TSM_VTE_BRACKETED_PASTE:
@@ -3364,18 +3398,39 @@ bool tsm_vte_handle_mouse(struct tsm_vte *vte, unsigned int cell_x,
 		unsigned int button, unsigned int event, unsigned char modifiers)
 {
 	char buffer[24];
-	unsigned char reply_flags = 0;
+	unsigned char reply_flags;
 	bool pressed = event & TSM_MOUSE_EVENT_PRESSED;
+	bool pixels = vte->mouse_encoding == TSM_VTE_MOUSE_MODE_PIXEL;
+	bool sgr = pixels || vte->mouse_encoding == TSM_VTE_MOUSE_MODE_SGR;
 
-	/* drop move event if we don't wait for move events */
-	/* In mode 1002 (BTN), accept MOVED with button pressed (drag, button >= 32) */
-	/* In mode 1003 (ANY), accept all MOVED events */
-	bool is_drag = (button >= 32 && button <= 34);
-	if ((vte->mouse_mode == TSM_VTE_MOUSE_MODE_X10 || vte->mouse_mode == TSM_VTE_MOUSE_MODE_VT200 ||
-	     (vte->mouse_event == TSM_VTE_MOUSE_EVENT_BTN && !is_drag) ||
-	     (vte->mouse_event != TSM_VTE_MOUSE_EVENT_BTN && vte->mouse_event != TSM_VTE_MOUSE_EVENT_ANY)) &&
-	    (event & TSM_MOUSE_EVENT_MOVED)) {
+	if (!vte->mouse_mode) {
 		return false;
+	}
+
+	/* Drop move events the application did not ask for: none in mode 9 and
+	 * 1000, only drags (a button is held) in mode 1002, all in mode 1003. */
+	if (event & TSM_MOUSE_EVENT_MOVED) {
+		bool is_drag = (button >= 32 && button <= 34);
+
+		if (vte->mouse_mode != TSM_VTE_MOUSE_EVENT_ANY &&
+		    !(vte->mouse_mode == TSM_VTE_MOUSE_EVENT_BTN && is_drag)) {
+			return false;
+		}
+
+		/* Report a move only when the cell changes. */
+		if (!pixels && cell_x == vte->mouse_last_col && cell_y == vte->mouse_last_row) {
+			return false;
+		}
+	}
+	vte->mouse_last_col = cell_x;
+	vte->mouse_last_row = cell_y;
+
+	/* Mode 9 is press only and has no modifiers, in every encoding. */
+	if (vte->mouse_mode == TSM_VTE_MOUSE_MODE_X10) {
+		if (event & TSM_MOUSE_EVENT_RELEASED) {
+			return false;
+		}
+		modifiers = 0;
 	}
 
 	if (button == TSM_MOUSE_BUTTON_WHEEL_UP) {
@@ -3384,19 +3439,30 @@ bool tsm_vte_handle_mouse(struct tsm_vte *vte, unsigned int cell_x,
 		button = 65;
 	}
 
-	if (vte->mouse_mode == TSM_VTE_MOUSE_MODE_SGR || vte->mouse_mode == TSM_VTE_MOUSE_MODE_PIXEL) {
-		/* internally we use zero indexing but the xterm spec requires the
-		 * top left cell to have the coordinates 1,1 */
-		cell_x++;
-		cell_y++;
-
-		reply_flags = button | modifiers;
+	/* Mode 9 only reports the buttons 1 to 3, not the wheel. */
+	if (button >= 64 && vte->mouse_mode == TSM_VTE_MOUSE_MODE_X10) {
+		return false;
 	}
 
-	if (vte->mouse_mode == TSM_VTE_MOUSE_MODE_X10 || vte->mouse_mode == TSM_VTE_MOUSE_MODE_VT200) {
-		if (vte->mouse_mode == TSM_VTE_MOUSE_MODE_X10 && (event & TSM_MOUSE_EVENT_RELEASED))
-			return false;
+	if (event & TSM_MOUSE_EVENT_MOVED) {
+		/* A drag already carries the motion bit (32 + button). A hover
+		 * (button < 32, only in mode 1003) is "no button" (3) plus the
+		 * motion bit, in both encodings. Modifiers are kept. */
+		if (button < 32) {
+			button = 35;
+		}
+		pressed = true;
+	}
 
+	if (sgr) {
+		/* internally we use zero indexing but the xterm spec requires the
+		 * top left cell to have the coordinates 1,1 */
+		unsigned int x = pixels ? pixel_x : cell_x + 1;
+		unsigned int y = pixels ? pixel_y : cell_y + 1;
+
+		reply_flags = button | modifiers;
+		snprintf((char*) &buffer, sizeof(buffer), "\e[<%u;%u;%u%c", reply_flags, x, y, pressed ? 'M' : 'm');
+	} else {
 		/* + 0x20 to start in the range of visible characters
 		 * and + 1 to start at 1,1 */
 		cell_x += 0x21;
@@ -3416,54 +3482,12 @@ bool tsm_vte_handle_mouse(struct tsm_vte *vte, unsigned int cell_x,
 			button = 3;
 		}
 
-		if (vte->mouse_mode == TSM_VTE_MOUSE_MODE_X10)
-			modifiers = 0;
-
 		reply_flags = (button | modifiers) + 0x20;
 		snprintf((char*) &buffer, sizeof(buffer), "\e[M%c%c%c", reply_flags, cell_x, cell_y);
-
-		vte_write(vte, buffer, strlen(buffer));
-		return true;
-	} else if (vte->mouse_mode == TSM_VTE_MOUSE_MODE_SGR) {
-		if (event & TSM_MOUSE_EVENT_MOVED) {
-			if (cell_x == vte->mouse_last_col && cell_y == vte->mouse_last_row) {
-				return false;
-			}
-
-			/* For drags (button >= 32), use actual button value from reply_flags.
-			 * For hover motion (button < 32, only in mode ANY), use 35 (move marker). */
-			if (button < 32) {
-				reply_flags = 35;
-			}
-			/* else: reply_flags already set to button | modifiers for drags */
-			pressed = true;
-
-			vte->mouse_last_col = cell_x;
-			vte->mouse_last_row = cell_y;
-		}
-
-		snprintf((char*) &buffer, sizeof(buffer), "\e[<%d;%d;%d%c", reply_flags, cell_x, cell_y, pressed ? 'M' : 'm');
-
-		vte_write(vte, buffer, strlen(buffer));
-		return true;
-	} else if (vte->mouse_mode == TSM_VTE_MOUSE_MODE_PIXEL) {
-		if (event == TSM_MOUSE_EVENT_MOVED) {
-			/* For drags (button >= 32), use actual button value from reply_flags.
-			 * For hover motion (button < 32, only in mode ANY), use 35 (move marker). */
-			if (button < 32) {
-				reply_flags = 35;
-			}
-			/* else: reply_flags already set to button | modifiers for drags */
-			pressed = true;
-		}
-
-		snprintf((char*) &buffer, sizeof(buffer), "\e[<%d;%d;%d%c", reply_flags, pixel_x, pixel_y, pressed ? 'M' : 'm');
-
-		vte_write(vte, buffer, strlen(buffer));
-		return true;
 	}
 
-	return false;
+	vte_write(vte, buffer, strlen(buffer));
+	return true;
 }
 
 void tsm_vte_paste(struct tsm_vte *vte, const char *data)

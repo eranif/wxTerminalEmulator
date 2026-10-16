@@ -393,8 +393,26 @@ private:
   void OnMouseUp(wxMouseEvent &evt);
   /// Right/middle button events: report to libtsm and skip.
   void OnMouse(wxMouseEvent &evt);
-  /// Forward a mouse event to libtsm if the application enabled mouse tracking.
-  void ReportMouse(const wxMouseEvent &evt);
+  /// True if the application enabled mouse tracking and wants this event.
+  /// Shift bypasses the application, so the user can still select text.
+  bool AppOwnsMouse(const wxMouseEvent &evt) const;
+  /// Clamp a pixel position to the cell grid, so a position over the margin or
+  /// outside the window is reported as the nearest cell.
+  wxPoint ClampToGrid(const wxPoint &pos) const;
+  /// Forward a mouse event to libtsm if the application owns this mouse
+  /// gesture. Returns true if it does, so the caller must not handle the event
+  /// itself. The decision is made at the button press and kept until the
+  /// release.
+  bool ReportMouse(const wxMouseEvent &evt);
+  /// Write one mouse event to the application, at the cell and pixel of `evt`.
+  void SendMouseToApp(const wxMouseEvent &evt, unsigned button, unsigned type);
+  /// Release the mouse capture when no application-owned button is held and
+  /// no local selection drag runs.
+  void ReleaseCaptureIfIdle();
+  /// Start a press the application owns: no local selection, and the mouse is
+  /// captured so the release arrives even outside the window.
+  void BeginAppOwnedPress();
+  void OnMouseCaptureLost(wxMouseCaptureLostEvent &evt);
   void OnContextMenu(wxContextMenuEvent &evt);
   void OnMouseWheel(wxMouseEvent &evt);
   void OnFocus(wxFocusEvent &evt);
@@ -568,6 +586,18 @@ private:
   LinearSelection m_mouseSelection{};
   ApiSelection m_userSelection;
   bool m_isDragging{false};
+  // Mouse buttons (bit 1 left, 2 middle, 4 right) whose press went to the
+  // application. See ReportMouse().
+  unsigned m_appOwnedButtons{0};
+  // Set when the capture was lost while the application owned the left press:
+  // the real release that may follow is not a local one.
+  bool m_ignoreNextLeftUp{false};
+  wxPoint m_lastMouseCell;
+  wxPoint m_lastMousePixel;
+  unsigned char m_lastMouseModifiers{0};
+  // Whether the last right press went to the application. OnContextMenu()
+  // uses it, because the menu event arrives after the release.
+  bool m_rightPressAppOwned{false};
   int m_scrollOffset{0}; // 0 = at bottom, >0 = scrolled back
   int m_wheelAccum{0};
 

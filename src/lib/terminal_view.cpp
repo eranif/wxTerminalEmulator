@@ -331,6 +331,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   Bind(wxEVT_RIGHT_UP, &wxTerminalViewCtrl::OnMouse, this);
   Bind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseUp, this);
   Bind(wxEVT_MOTION, &wxTerminalViewCtrl::OnMouseMove, this);
+  Bind(wxEVT_MOUSE_CAPTURE_LOST, &wxTerminalViewCtrl::OnMouseCaptureLost, this);
   Bind(wxEVT_CONTEXT_MENU, &wxTerminalViewCtrl::OnContextMenu, this);
   Bind(wxEVT_MOUSEWHEEL, &wxTerminalViewCtrl::OnMouseWheel, this);
   Bind(wxEVT_SET_FOCUS, &wxTerminalViewCtrl::OnFocus, this);
@@ -440,6 +441,8 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   Unbind(wxEVT_RIGHT_UP, &wxTerminalViewCtrl::OnMouse, this);
   Unbind(wxEVT_LEFT_UP, &wxTerminalViewCtrl::OnMouseUp, this);
   Unbind(wxEVT_MOTION, &wxTerminalViewCtrl::OnMouseMove, this);
+  Unbind(wxEVT_MOUSE_CAPTURE_LOST, &wxTerminalViewCtrl::OnMouseCaptureLost,
+         this);
   Unbind(wxEVT_CONTEXT_MENU, &wxTerminalViewCtrl::OnContextMenu, this);
   Unbind(wxEVT_MOUSEWHEEL, &wxTerminalViewCtrl::OnMouseWheel, this);
   Unbind(wxEVT_SET_FOCUS, &wxTerminalViewCtrl::OnFocus, this);
@@ -1806,44 +1809,90 @@ void wxTerminalViewCtrl::PaintResizeOverlay(wxDC &dc) {
   dc.DrawText(sizeText, x, y);
 }
 
-void wxTerminalViewCtrl::ReportMouse(const wxMouseEvent &evt) {
-  if (m_core.GetMouseTrackingMode() == 0) {
-    return;
+bool wxTerminalViewCtrl::AppOwnsMouse(const wxMouseEvent &evt) const {
+  return m_core.GetMouseTrackingMode() != 0 && !evt.ShiftDown();
+}
+
+wxPoint wxTerminalViewCtrl::ClampToGrid(const wxPoint &pos) const {
+  const int cols = std::max(static_cast<int>(m_core.Cols()), 1);
+  const int rows = std::max(static_cast<int>(m_core.Rows()), 1);
+  return {std::clamp(pos.x, 0, std::max(cols * m_charW - 1, 0)),
+          std::clamp(pos.y, 0, std::max(rows * m_charH - 1, 0))};
+}
+
+namespace {
+// The bit of a wxMOUSE_BTN_ value in m_appOwnedButtons, or 0 for a button that
+// is not tracked.
+unsigned AppOwnedBit(int button) {
+  switch (button) {
+  case wxMOUSE_BTN_LEFT:
+    return 1;
+  case wxMOUSE_BTN_MIDDLE:
+    return 2;
+  case wxMOUSE_BTN_RIGHT:
+    return 4;
+  default:
+    return 0;
   }
+}
+
+// A Ctrl+click opens a link. Shift is ignored here: with Shift the application
+// does not own the mouse, so Shift+Ctrl+click opens a link even while a program
+// (tmux, vim) tracks the mouse and gets the plain Ctrl+click.
+bool IsLinkClick(const wxMouseEvent &evt) {
+  return (evt.GetModifiers() & ~wxMOD_SHIFT) == wxMOD_CONTROL;
+}
+
+unsigned TsmButton(int button) {
+  switch (button) {
+  case wxMOUSE_BTN_MIDDLE:
+    return TSM_MOUSE_BUTTON_MIDDLE;
+  case wxMOUSE_BTN_RIGHT:
+    return TSM_MOUSE_BUTTON_RIGHT;
+  default:
+    return TSM_MOUSE_BUTTON_LEFT;
+  }
+}
+
+// The button a drag belongs to: the first held button the application owns, or
+// else the first held button (left, middle, right). wxMOUSE_BTN_NONE if no
+// button is held.
+int DragButton(const wxMouseEvent &evt, unsigned ownedButtons) {
+  const int held[] = {evt.LeftIsDown() ? wxMOUSE_BTN_LEFT : wxMOUSE_BTN_NONE,
+                      evt.MiddleIsDown() ? wxMOUSE_BTN_MIDDLE : wxMOUSE_BTN_NONE,
+                      evt.RightIsDown() ? wxMOUSE_BTN_RIGHT : wxMOUSE_BTN_NONE};
+  int first = wxMOUSE_BTN_NONE;
+  for (const int button : held) {
+    if (button == wxMOUSE_BTN_NONE) {
+      continue;
+    }
+    if (ownedButtons & AppOwnedBit(button)) {
+      return button;
+    }
+    if (first == wxMOUSE_BTN_NONE) {
+      first = button;
+    }
+  }
+  return first;
+}
+} // namespace
+
+void wxTerminalViewCtrl::ReleaseCaptureIfIdle() {
+  if (HasCapture() && m_appOwnedButtons == 0 && !m_isDragging) {
+    ReleaseMouse();
+  }
+}
+
+void wxTerminalViewCtrl::SendMouseToApp(const wxMouseEvent &evt,
+                                        unsigned button, unsigned type) {
   if (m_charW <= 0 || m_charH <= 0) {
     return;
   }
-  // The mouse is captured while the left button is held, so a drag or the
-  // release can happen outside the window: clamp to the grid instead of
-  // dropping the event, otherwise the application never sees the release.
-  const int cols = std::max(static_cast<int>(m_core.Cols()), 1);
-  const int rows = std::max(static_cast<int>(m_core.Rows()), 1);
-  const wxPoint cell{std::clamp(std::max(evt.GetX(), 0) / m_charW, 0, cols - 1),
-                     std::clamp(std::max(evt.GetY(), 0) / m_charH, 0, rows - 1)};
-
-  unsigned int button = TSM_MOUSE_BUTTON_LEFT;
-  switch (evt.GetButton()) {
-  case wxMOUSE_BTN_MIDDLE:
-    button = TSM_MOUSE_BUTTON_MIDDLE;
-    break;
-  case wxMOUSE_BTN_RIGHT:
-    button = TSM_MOUSE_BUTTON_RIGHT;
-    break;
-  default:
-    break;
-  }
-
-  unsigned int type = TSM_MOUSE_EVENT_PRESSED;
-  if (evt.ButtonUp()) {
-    type = TSM_MOUSE_EVENT_RELEASED;
-  } else if (evt.GetEventType() == wxEVT_MOTION) {
-    // A drag is reported as 32 + the held button, a plain hover as 3.
-    type = TSM_MOUSE_EVENT_MOVED;
-    button = evt.LeftIsDown()     ? 32 + TSM_MOUSE_BUTTON_LEFT
-             : evt.MiddleIsDown() ? 32 + TSM_MOUSE_BUTTON_MIDDLE
-             : evt.RightIsDown()  ? 32 + TSM_MOUSE_BUTTON_RIGHT
-                                  : 3;
-  }
+  // The mouse is captured while a button is held, so a drag or the release can
+  // happen outside the window: clamp to the grid instead of dropping the
+  // event, otherwise the application never sees the release.
+  const wxPoint pixel = ClampToGrid(evt.GetPosition());
+  const wxPoint cell{pixel.x / m_charW, pixel.y / m_charH};
 
   unsigned char modifiers = 0;
   if (evt.ShiftDown()) {
@@ -1855,7 +1904,59 @@ void wxTerminalViewCtrl::ReportMouse(const wxMouseEvent &evt) {
   if (evt.RawControlDown()) {
     modifiers |= TSM_MOUSE_MODIFIER_CTRL;
   }
-  m_core.HandleMouseEvent(cell.x, cell.y, button, type, modifiers);
+  m_lastMouseCell = cell;
+  m_lastMousePixel = pixel;
+  m_lastMouseModifiers = modifiers;
+  m_core.HandleMouseEvent(cell.x, cell.y, button, type, modifiers, pixel.x,
+                          pixel.y);
+}
+
+bool wxTerminalViewCtrl::ReportMouse(const wxMouseEvent &evt) {
+  // A gesture belongs to whoever got the press, so the application always sees
+  // the drag and the release that match its press, even if Shift changes
+  // meanwhile.
+  bool owned;
+  unsigned button = TsmButton(evt.GetButton());
+  unsigned type = TSM_MOUSE_EVENT_PRESSED;
+  if (evt.ButtonDown() || evt.ButtonDClick()) {
+    owned = AppOwnsMouse(evt);
+    if (const unsigned bit = AppOwnedBit(evt.GetButton())) {
+      m_appOwnedButtons =
+          owned ? (m_appOwnedButtons | bit) : (m_appOwnedButtons & ~bit);
+    }
+    if (evt.GetButton() == wxMOUSE_BTN_RIGHT) {
+      m_rightPressAppOwned = owned;
+    }
+  } else if (evt.ButtonUp()) {
+    type = TSM_MOUSE_EVENT_RELEASED;
+    const unsigned bit = AppOwnedBit(evt.GetButton());
+    owned = bit ? (m_appOwnedButtons & bit) != 0 : AppOwnsMouse(evt);
+    m_appOwnedButtons &= ~bit;
+  } else {
+    type = TSM_MOUSE_EVENT_MOVED;
+    if (const int held = DragButton(evt, m_appOwnedButtons);
+        held != wxMOUSE_BTN_NONE) {
+      // A drag is reported as 32 + the button.
+      owned = (m_appOwnedButtons & AppOwnedBit(held)) != 0;
+      button = 32 + TsmButton(held);
+    } else {
+      // A plain hover is reported as 3.
+      owned = AppOwnsMouse(evt);
+      button = 3;
+    }
+  }
+
+  // Capture the mouse while the application owns a pressed button, so its
+  // release arrives even outside the window.
+  if (owned && (evt.ButtonDown() || evt.ButtonDClick()) && !HasCapture()) {
+    CaptureMouse();
+  } else if (evt.ButtonUp()) {
+    ReleaseCaptureIfIdle();
+  }
+  if (owned) {
+    SendMouseToApp(evt, button, type);
+  }
+  return owned;
 }
 
 void wxTerminalViewCtrl::OnMouse(wxMouseEvent &evt) {
@@ -1863,13 +1964,55 @@ void wxTerminalViewCtrl::OnMouse(wxMouseEvent &evt) {
   evt.Skip();
 }
 
+void wxTerminalViewCtrl::BeginAppOwnedPress() {
+  m_isDragging = false;
+  ClearMouseSelection();
+}
+
+void wxTerminalViewCtrl::OnMouseCaptureLost(wxMouseCaptureLostEvent &evt) {
+  // Do not Skip(): wx asserts if the window that held the capture does not
+  // process this event.
+  wxUnusedVar(evt);
+  m_isDragging = false;
+  // The application saw the presses but will not see the releases: send them
+  // now.
+  static const struct {
+    unsigned bit;
+    unsigned button;
+  } kButtons[] = {{1, TSM_MOUSE_BUTTON_LEFT},
+                  {2, TSM_MOUSE_BUTTON_MIDDLE},
+                  {4, TSM_MOUSE_BUTTON_RIGHT}};
+  for (const auto &[bit, button] : kButtons) {
+    if (m_appOwnedButtons & bit) {
+      m_core.HandleMouseEvent(m_lastMouseCell.x, m_lastMouseCell.y, button,
+                              TSM_MOUSE_EVENT_RELEASED, m_lastMouseModifiers,
+                              m_lastMousePixel.x, m_lastMousePixel.y);
+    }
+  }
+  // The real release of the left button may still come, inside the window. It
+  // belongs to the application press, so OnMouseUp must ignore it. If it comes
+  // outside the window nothing arrives and the flag stays set until the next
+  // left press or double click clears it.
+  if (m_appOwnedButtons & 1) {
+    m_ignoreNextLeftUp = true;
+  }
+  m_appOwnedButtons = 0;
+}
+
 void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
-  ReportMouse(evt);
+  // Any new press ends the wait for a release that was lost with the capture.
+  m_ignoreNextLeftUp = false;
+  const bool appOwned = ReportMouse(evt);
   evt.Skip();
+
+  if (appOwned) {
+    BeginAppOwnedPress();
+    return;
+  }
 
   // Check if Control/CMD is down (we use CMD on macOS, since Ctrl+CLICK will
   // show the context menu)
-  if (evt.GetModifiers() == wxMOD_CONTROL) {
+  if (IsLinkClick(evt)) {
     m_isDragging = false;
     DoClickable(evt, false);
     RefreshView(true);
@@ -1897,7 +2040,9 @@ void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
       false; // becomes active only when mouse moves to a different cell
   m_isDragging = true;
   RefreshView(true);
-  CaptureMouse();
+  if (!HasCapture()) {
+    CaptureMouse();
+  }
 }
 
 void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
@@ -1949,19 +2094,24 @@ void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
 }
 
 void wxTerminalViewCtrl::OnMouseUp(wxMouseEvent &evt) {
-  ReportMouse(evt);
+  const bool appOwned = ReportMouse(evt) || m_ignoreNextLeftUp;
+  m_ignoreNextLeftUp = false;
   evt.Skip();
   CallAfter(&wxTerminalViewCtrl::SetFocus);
 
   m_isDragging = false;
-  if (HasCapture()) {
-    // Release the moouse
-    ReleaseMouse();
+  // Release the mouse, unless the application still owns another button.
+  ReleaseCaptureIfIdle();
+
+  // The application got the press and the release: no link click and no
+  // selection.
+  if (appOwned) {
+    return;
   }
 
   // Check if Control/CMD is down (we use CMD on macOS, since Ctrl+CLICK will
   // show the context menu)
-  if (evt.GetModifiers() == wxMOD_CONTROL) {
+  if (IsLinkClick(evt)) {
     // Control down
     DoClickable(evt, true);
     m_core.ClearClickedRange();
@@ -1986,9 +2136,9 @@ void wxTerminalViewCtrl::OnMouseWheel(wxMouseEvent &evt) {
   if (lines == 0)
     return;
 
-  unsigned int trackMode = m_core.GetMouseTrackingMode();
-  if (trackMode == 0) {
-    // Mouse tracking disabled: scroll the viewport
+  if (!AppOwnsMouse(evt)) {
+    // The application does not track the mouse, or Shift is held: scroll the
+    // viewport
     std::size_t maxPos = m_core.ShellStart();
     std::size_t vs = m_core.ViewStart();
     if (lines > 0 && vs >= static_cast<std::size_t>(lines))
@@ -2003,17 +2153,20 @@ void wxTerminalViewCtrl::OnMouseWheel(wxMouseEvent &evt) {
     RefreshView();
   } else {
     // Mouse tracking enabled: send wheel events to the application
-    auto cellOpt = PointToCell(evt.GetPosition());
-    if (cellOpt) {
-      unsigned int button =
-          (lines > 0) ? TSM_MOUSE_BUTTON_WHEEL_UP : TSM_MOUSE_BUTTON_WHEEL_DOWN;
-      m_core.HandleMouseEvent(cellOpt->x, cellOpt->y, button,
-                              TSM_MOUSE_EVENT_PRESSED, 0);
-    }
+    SendMouseToApp(evt,
+                    lines > 0 ? TSM_MOUSE_BUTTON_WHEEL_UP
+                              : TSM_MOUSE_BUTTON_WHEEL_DOWN,
+                    TSM_MOUSE_EVENT_PRESSED);
   }
 }
 
 void wxTerminalViewCtrl::OnContextMenu(wxContextMenuEvent &evt) {
+  // No menu when the right click that opened it went to the application. The
+  // menu arrives after the release, so use the decision made at the press. A
+  // menu opened with the keyboard has no mouse position and is always shown.
+  if (evt.GetPosition() != wxDefaultPosition && m_rightPressAppOwned) {
+    return;
+  }
   wxMenu menu;
 
   if (m_mouseSelection.HasSelection()) {
@@ -2042,8 +2195,11 @@ void wxTerminalViewCtrl::OnCopy(wxCommandEvent &evt) {
 }
 
 void wxTerminalViewCtrl::OnMiddleClickPaste(wxMouseEvent &evt) {
-  ReportMouse(evt);
+  const bool appOwned = ReportMouse(evt);
   evt.Skip();
+  if (appOwned) {
+    return;
+  }
   PasteFromPrimarySelection();
 }
 
@@ -2984,9 +3140,13 @@ std::optional<wxRect> wxTerminalViewCtrl::SelectionRectFromMousePoint(
 }
 
 void wxTerminalViewCtrl::OnMouseLeftDoubleClick(wxMouseEvent &evt) {
+  m_ignoreNextLeftUp = false;
   // The second click of a double click arrives as a DCLICK instead of a DOWN
   // event (wxMSW, wxGTK and wxOSX all drop the DOWN), so report it as a press.
-  ReportMouse(evt);
+  if (ReportMouse(evt)) {
+    BeginAppOwnedPress();
+    return;
+  }
   ClearMouseSelection();
 
   auto is_valid_char = [this](const wxUniChar &ch) -> bool {
