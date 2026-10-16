@@ -195,8 +195,9 @@ bool MyFrame::RestoreLayout() {
       cwd = tab.workingDirectory;
     }
     // A shell given on the command line (--shell) wins over the saved one.
-    const wxString shell =
-        m_defaultShellCommand.empty() ? tab.shellCommand : m_defaultShellCommand;
+    const wxString shell = m_defaultShellCommand.empty()
+                               ? tab.shellCommand
+                               : m_defaultShellCommand;
     MyTerminal *page =
         CreateTerminalPage({shell, m_defaultEnvironment, cwd}, false);
     if (page && !tab.customLabel.empty()) {
@@ -303,7 +304,7 @@ void MyFrame::BuildMenuBar() {
   auto *menuBar = new wxMenuBar();
   auto *fileMenu = new wxMenu();
   fileMenu->Append(wxID_NEW, _("New Terminal\tCtrl-T"));
-  fileMenu->Append(wxID_CLOSE, _("Close Terminal\tCtrl-W"));
+  fileMenu->Append(wxID_CLOSE, _("Close Terminal"));
   fileMenu->Append(wxID_PREFERENCES);
   fileMenu->AppendSeparator();
   fileMenu->Append(ID_Exit, "Exit");
