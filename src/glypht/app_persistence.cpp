@@ -252,6 +252,8 @@ bool AppPersistence::Load(AppConfig &config) {
                               value == "yes" || value == "on");
       } else if (key == "shell") {
         config.SetShellExecutable(value);
+      } else if (key == "lastshell") {
+        config.SetLastShell(value);
       } else if (key == "shellargs") {
         config.SetShellArgs(value);
       } else if (key == "tabswitchersize") {
@@ -310,6 +312,7 @@ bool AppPersistence::Save(const AppConfig &config) {
       "safedrawing=%s", config.IsSafeDrawingEnabled() ? "true" : "false"));
   file.AddLine("shell=" + config.GetShellExecutable());
   file.AddLine("shellargs=" + config.GetShellArgs());
+  file.AddLine("lastshell=" + config.GetLastShell());
   wxSize tabSwitcherSize = config.GetTabSwitcherSize();
   file.AddLine(wxString::Format("tabswitchersize=%d,%d", tabSwitcherSize.GetWidth(),
                                 tabSwitcherSize.GetHeight()));

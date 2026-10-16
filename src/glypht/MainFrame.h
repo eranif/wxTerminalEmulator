@@ -6,6 +6,7 @@
 #include "terminal_logger.h"
 #include "terminal_view.h"
 #include "TabMRU.h"
+#include "shell_locator.h"
 #include "TabSwitcherDlg.h"
 
 #include <deque>
@@ -183,6 +184,9 @@ public:
   // Set the theme of every terminal tab.
   void ApplyThemeToAllTabs(const wxTerminalTheme &theme);
   void OnNewTerminal(wxCommandEvent &event);
+  // Ask which shell to start for a new tab (Windows only; elsewhere the default
+  // shell is used). Returns nullopt if the user cancelled.
+  std::optional<wxString> PromptForShell();
   void OnExit(wxCommandEvent &event);
   void OnCenterLine(wxCommandEvent &event);
   void OnSafeDrawing(wxCommandEvent &event);
@@ -219,6 +223,8 @@ private:
   // The tabs in most-recently-used order.
   TabMRU m_tabMru;
   TabSwitcherDlg *m_tabSwitcher{nullptr};
+  // The shells found on this computer. Filled on first use.
+  std::optional<std::vector<ShellOption>> m_shellOptions;
   // The shell from --shell. It wins over the shell of the settings.
   wxString m_cliShellCommand;
   wxString m_defaultShellCommand;

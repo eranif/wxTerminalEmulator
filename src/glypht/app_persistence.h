@@ -67,6 +67,10 @@ struct AppConfig {
   void SetShellArgs(const wxString &args) { shellArgs = args; }
   const wxString &GetShellArgs() const { return shellArgs; }
 
+  /// The command line the user picked last in the "New Terminal" prompt.
+  void SetLastShell(const wxString &command) { lastShell = command; }
+  const wxString &GetLastShell() const { return lastShell; }
+
   /// The command line to start the configured shell with: the executable
   /// (in double quotes when it has spaces), then the arguments. Empty when no
   /// shell is configured, or when the configured path is an absolute path of a
@@ -90,6 +94,7 @@ private:
   bool blockCursor{true};
   wxString shellExecutable;
   wxString shellArgs;
+  wxString lastShell;
   wxSize tabSwitcherSize{520, 260};
 };
 

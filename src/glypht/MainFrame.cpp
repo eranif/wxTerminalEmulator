@@ -1,6 +1,7 @@
 #include "MainFrame.h"
 #include "SettingsDlg.hpp"
 #include <algorithm>
+#include <wx/choicdlg.h>
 #include <wx/msgdlg.h>
 #include <wx/xrc/xmlres.h>
 // The wxAUI layout serializer header (wx/aui/serializer.h) is pulled in
@@ -194,10 +195,15 @@ bool MyFrame::RestoreLayout() {
     if (!tab.workingDirectory.empty() && wxDirExists(tab.workingDirectory)) {
       cwd = tab.workingDirectory;
     }
-    // A shell given on the command line (--shell) wins over the saved one.
-    const wxString shell = m_defaultShellCommand.empty()
-                               ? tab.shellCommand
-                               : m_defaultShellCommand;
+    // A shell given on the command line (--shell) wins over the saved one. The
+    // shell of the settings does not: each tab keeps the shell it was started
+    // with (for example a WSL distribution). It is only the fallback for tabs
+    // saved without a shell.
+    wxString shell = m_cliShellCommand;
+    if (shell.empty()) {
+      shell = tab.shellCommand.empty() ? m_defaultShellCommand
+                                       : tab.shellCommand;
+    }
     MyTerminal *page =
         CreateTerminalPage({shell, m_defaultEnvironment, cwd}, false);
     if (page && !tab.customLabel.empty()) {
@@ -551,10 +557,57 @@ void MyFrame::ApplyThemeToTab(wxTerminalViewCtrl *view) {
 
 void MyFrame::OnNewTerminal(wxCommandEvent &event) {
   wxUnusedVar(event);
+  const auto shell = PromptForShell();
+  if (!shell) {
+    return;
+  }
   CreateTerminalPage(
-      {m_defaultShellCommand, m_defaultEnvironment, m_defaultWorkingDirectory},
-      true);
+      {*shell, m_defaultEnvironment, m_defaultWorkingDirectory}, true);
   m_notebook->SetSelection(m_notebook->GetPageCount() - 1);
+}
+
+std::optional<wxString> MyFrame::PromptForShell() {
+#ifdef __WXMSW__
+  if (!m_shellOptions) {
+    wxBusyCursor busy;
+    m_shellOptions = LocateShells();
+  }
+  std::vector<ShellOption> options = *m_shellOptions;
+
+  // The shell from --shell or the settings comes first.
+  const bool hasConfigured = !m_defaultShellCommand.empty();
+  if (hasConfigured) {
+    options.insert(options.begin(),
+                   {_("Configured shell"), m_defaultShellCommand});
+  }
+
+  if (options.empty()) {
+    return m_defaultShellCommand;
+  }
+  if (options.size() == 1) {
+    return options[0].command;
+  }
+
+  wxArrayString titles;
+  int initialSelection = 0;
+  for (size_t i = 0; i < options.size(); ++i) {
+    titles.Add(options[i].title);
+    if (options[i].command == m_config.GetLastShell()) {
+      initialSelection = static_cast<int>(i);
+    }
+  }
+  const int choice = wxGetSingleChoiceIndex(_("Available shells"),
+                                            _("Choose a shell to launch"),
+                                            titles, initialSelection, this);
+  if (choice == wxNOT_FOUND) {
+    return std::nullopt;
+  }
+  m_config.SetLastShell(options[static_cast<size_t>(choice)].command);
+  PersistSettings();
+  return options[static_cast<size_t>(choice)].command;
+#else
+  return m_defaultShellCommand;
+#endif
 }
 
 void MyFrame::OnExit(wxCommandEvent &event) {
