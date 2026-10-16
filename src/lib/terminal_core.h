@@ -182,6 +182,11 @@ public:
   void SetAltScreenCallback(std::function<void(bool entered)> callback) {
     m_altScreenCallback = callback;
   }
+  // Called when the program starts (true) or stops (false) tracking the mouse,
+  // for example when tmux or vim turn mouse support on or off.
+  void SetMouseTrackingCallback(std::function<void(bool tracking)> callback) {
+    m_mouseTrackingCallback = callback;
+  }
 
   std::size_t Rows() const { return m_rows; }
   std::size_t Cols() const { return m_cols; }
@@ -251,6 +256,8 @@ public:
 
   // Check if mouse tracking is enabled
   unsigned int GetMouseTrackingMode() const;
+  // True while the program tracks the mouse (any DECSET 9/1000/1002/1003 mode).
+  bool IsMouseTracking() const { return GetMouseTrackingMode() != 0; }
 
 private:
   void DoSetClickedRange(bool b);
@@ -296,6 +303,9 @@ private:
   std::function<void(const std::string &)> m_cwdCallback;
   std::function<void()> m_bellCallback;
   std::function<void(bool entered)> m_altScreenCallback;
+  std::function<void(bool tracking)> m_mouseTrackingCallback;
+  // The last state reported to the mouse tracking callback.
+  bool m_mouseTracking{false};
   wxRect m_clickedRect;
 };
 

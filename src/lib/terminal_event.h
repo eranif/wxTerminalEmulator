@@ -34,3 +34,13 @@ wxDECLARE_EVENT(wxEVT_TERMINAL_TERMINATED, wxTerminalEvent);
 wxDECLARE_EVENT(wxEVT_TERMINAL_TEXT_LINK, wxTerminalEvent);
 /// Terminal BELL sound
 wxDECLARE_EVENT(wxEVT_TERMINAL_BELL, wxTerminalEvent);
+/// The program in the terminal started tracking the mouse (for example tmux or
+/// vim with mouse support). Mouse clicks now go to the program. Holding Shift
+/// gives the mouse back to the terminal.
+///
+/// Both events are posted, not sent: a handler can run after the state changed
+/// again, so it should not assume that the last event matches the current
+/// state. Use wxTerminalViewCtrl::IsMouseTracking() if the current state matters.
+wxDECLARE_EVENT(wxEVT_TERMINAL_APP_OWNS_MOUSE, wxTerminalEvent);
+/// The program stopped tracking the mouse. The terminal handles it again.
+wxDECLARE_EVENT(wxEVT_TERMINAL_APP_RELEASE_MOUSE, wxTerminalEvent);

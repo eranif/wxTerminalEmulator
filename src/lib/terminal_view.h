@@ -96,6 +96,9 @@ public:
   // Launch parameters this view was created with. Used to serialize/restore
   // the terminal layout so the same shells can be recreated on startup.
   const wxString &GetShellCommand() const { return m_shell_command; }
+  /// True while the program in the terminal tracks the mouse (tmux, vim, ...).
+  /// See wxEVT_TERMINAL_APP_OWNS_MOUSE.
+  bool IsMouseTracking() const { return m_core.IsMouseTracking(); }
   wxString GetWorkingDirectory() const {
     return m_workingDirectory ? wxString::FromUTF8(m_workingDirectory->c_str())
                               : wxString{};
@@ -475,6 +478,9 @@ private:
   bool ScrollViewportForSelection(int delta);
 
   void DoClickable(wxMouseEvent &event, bool fire_event);
+  /// Set the mouse cursor: an arrow while the program tracks the mouse, else the
+  /// I-beam.
+  void UpdateCursor();
 
   struct ApiSelection {
     std::size_t row{0}, col{0}, endCol{0};

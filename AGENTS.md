@@ -283,6 +283,8 @@ one for keyboard layout translation).
 | `wxEVT_TERMINAL_TERMINATED` | Child process exits | No payload |
 | `wxEVT_TERMINAL_TEXT_LINK` | Ctrl+click on text | `evt.GetClickedText()` |
 | `wxEVT_TERMINAL_BELL` | BEL character received | No payload |
+| `wxEVT_TERMINAL_APP_OWNS_MOUSE` | Program turns mouse tracking on (DECSET 9/1000/1002/1003) | No payload |
+| `wxEVT_TERMINAL_APP_RELEASE_MOUSE` | Program turns mouse tracking off, or the terminal is reset | No payload |
 
 ## Common Gotchas
 

@@ -412,6 +412,18 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     event.SetEventObject(this);
     GetEventHandler()->AddPendingEvent(event);
   });
+  m_core.SetMouseTrackingCallback([this](bool tracking) {
+    // Show an arrow while the program handles the mouse, the I-beam otherwise.
+    // An unfocused view keeps the arrow of OnLostFocus(); OnFocus() sets the
+    // cursor for the current state.
+    if (HasFocus()) {
+      UpdateCursor();
+    }
+    wxTerminalEvent event{tracking ? wxEVT_TERMINAL_APP_OWNS_MOUSE
+                                   : wxEVT_TERMINAL_APP_RELEASE_MOUSE};
+    event.SetEventObject(this);
+    GetEventHandler()->AddPendingEvent(event);
+  });
   m_core.SetAltScreenCallback([this](bool entered) {
     PostSizeEvent();
     if (entered && m_backend && m_core.Cols() > 0 && m_core.Rows() > 0) {
@@ -1810,7 +1822,7 @@ void wxTerminalViewCtrl::PaintResizeOverlay(wxDC &dc) {
 }
 
 bool wxTerminalViewCtrl::AppOwnsMouse(const wxMouseEvent &evt) const {
-  return m_core.GetMouseTrackingMode() != 0 && !evt.ShiftDown();
+  return m_core.IsMouseTracking() && !evt.ShiftDown();
 }
 
 wxPoint wxTerminalViewCtrl::ClampToGrid(const wxPoint &pos) const {
@@ -2054,7 +2066,7 @@ void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
       // We cleared a previously clicked range, refresh is needed.
       RefreshView();
       // Restore the cursor
-      SetCursor(wxCURSOR_IBEAM);
+      UpdateCursor();
     }
   }
 
@@ -2218,7 +2230,7 @@ void wxTerminalViewCtrl::OnFocus(wxFocusEvent &evt) {
   evt.Skip();
   m_hasFocusBorder = true;
   InvalidateRenderCache();
-  SetCursor(wxCursor(wxCURSOR_IBEAM));
+  UpdateCursor();
   RefreshView();
 }
 
@@ -3224,6 +3236,11 @@ void wxTerminalViewCtrl::OnMouseLeftDoubleClick(wxMouseEvent &evt) {
   RefreshView();
 }
 
+void wxTerminalViewCtrl::UpdateCursor() {
+  SetCursor(m_core.IsMouseTracking() ? wxCursor(wxCURSOR_ARROW)
+                                     : wxCursor(wxCURSOR_IBEAM));
+}
+
 void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event, bool fire_event) {
   ClearMouseSelection();
   m_core.ClearClickedRange();
@@ -3259,7 +3276,7 @@ void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event, bool fire_event) {
     click_event.SetEventObject(this);
     GetEventHandler()->ProcessEvent(click_event);
     // Restore the cursor
-    SetCursor(wxCURSOR_IBEAM);
+    UpdateCursor();
   }
 }
 

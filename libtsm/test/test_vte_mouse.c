@@ -541,6 +541,26 @@ START_TEST(test_mouse_x10_sgr)
 }
 END_TEST
 
+START_TEST(test_mouse_cb_reset)
+{
+	/* a reset of the VTE takes the mouse away from the application */
+	char *msg = "\e[?1002h";
+	tsm_vte_input(vte, msg, strlen(msg));
+	ck_assert(mouse_cb_called);
+
+	mouse_cb_called = false;
+	tsm_vte_reset(vte);
+	ck_assert(mouse_cb_called);
+	ck_assert_int_eq(mouse_track_mode, TSM_MOUSE_TRACK_DISABLE);
+	ck_assert_int_eq(tsm_vte_get_mouse_mode(vte), 0);
+
+	/* nothing to report when the application did not track the mouse */
+	mouse_cb_called = false;
+	tsm_vte_reset(vte);
+	ck_assert(!mouse_cb_called);
+}
+END_TEST
+
 TEST_DEFINE_CASE(tests_mouse_modes)
 	CHECKED_FIXTURE(setup, teardown)
 	TEST(test_mouse_mode_encoding_order)
@@ -555,6 +575,7 @@ TEST_DEFINE_CASE(tests_mouse_modes)
 	TEST(test_mouse_legacy_cell_change)
 	TEST(test_mouse_x10_sgr)
 	TEST(test_mouse_hover_modifiers)
+	TEST(test_mouse_cb_reset)
 TEST_END_CASE
 
 // clang-format off

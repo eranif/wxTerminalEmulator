@@ -113,6 +113,7 @@ Custom wxWidgets events for terminal-specific notifications:
 - `wxEVT_TERMINAL_TERMINATED`: Fired when the shell/process exits
 - `wxEVT_TERMINAL_TEXT_LINK`: Fired when user Ctrl+clicks on text to select a token/link
   - The event carries the clicked text string for custom handling (e.g., opening URLs, file paths)
+- `wxEVT_TERMINAL_APP_OWNS_MOUSE` / `wxEVT_TERMINAL_APP_RELEASE_MOUSE`: Fired when the program in the terminal (tmux, vim, ...) starts or stops tracking the mouse. While it tracks the mouse the cursor is an arrow, and Shift gives the mouse back to the terminal
 
 #### Terminal Theme (`terminal_theme.h`)
 Color scheme management:

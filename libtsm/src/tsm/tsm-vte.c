@@ -933,10 +933,17 @@ void tsm_vte_reset(struct tsm_vte *vte)
 	vte->g2 = &tsm_vte_unicode_lower;
 	vte->g3 = &tsm_vte_unicode_upper;
 
+	bool was_tracking = vte->mouse_mode != 0;
+
 	vte->mouse_mode = 0;
 	vte->mouse_encoding = 0;
 	vte->mouse_last_col = UINT_MAX;
 	vte->mouse_last_row = UINT_MAX;
+
+	/* the application loses the mouse with a reset */
+	if (was_tracking) {
+		vte_mouse_notify(vte);
+	}
 
 	memcpy(&vte->cattr, &vte->def_attr, sizeof(vte->cattr));
 	to_rgb(vte, &vte->cattr);

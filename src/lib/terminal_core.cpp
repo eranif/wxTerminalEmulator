@@ -88,6 +88,21 @@ TerminalCore::TerminalCore(std::size_t rows, std::size_t cols,
   tsm_vte_new(&m_tsmVte, m_tsmScreen, TsmWriteCb, this, nullptr, nullptr);
   tsm_vte_set_osc_cb(m_tsmVte, TsmOscCb, this);
   tsm_vte_set_bell_cb(m_tsmVte, TsmBellCb, this);
+  // libtsm calls this for every change of the mouse settings. Only report when
+  // the program starts or stops tracking.
+  tsm_vte_set_mouse_cb(
+      m_tsmVte,
+      [](struct tsm_vte *, enum tsm_mouse_track_mode mode, bool, void *data) {
+        auto *self = static_cast<TerminalCore *>(data);
+        const bool tracking = mode != TSM_MOUSE_TRACK_DISABLE;
+        if (tracking == self->m_mouseTracking) {
+          return;
+        }
+        self->m_mouseTracking = tracking;
+        if (self->m_mouseTrackingCallback)
+          self->m_mouseTrackingCallback(tracking);
+      },
+      this);
 
   m_activeScreen.assign(m_rows, std::vector<Cell>(m_cols));
   m_viewStart = 0;
