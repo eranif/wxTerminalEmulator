@@ -201,8 +201,8 @@ bool MyFrame::RestoreLayout() {
     // saved without a shell.
     wxString shell = m_cliShellCommand;
     if (shell.empty()) {
-      shell = tab.shellCommand.empty() ? m_defaultShellCommand
-                                       : tab.shellCommand;
+      shell =
+          tab.shellCommand.empty() ? m_defaultShellCommand : tab.shellCommand;
     }
     MyTerminal *page =
         CreateTerminalPage({shell, m_defaultEnvironment, cwd}, false);
@@ -425,7 +425,8 @@ bool MyFrame::ShowTabSwitcher(bool backwards) {
   }
 
   m_tabSwitcher = new TabSwitcherDlg(
-      this, std::move(items), backwards, [this](wxWindow *chosen, bool lostFocus) {
+      this, std::move(items), backwards,
+      [this](wxWindow *chosen, bool lostFocus) {
         m_config.SetTabSwitcherSize(m_tabSwitcher->GetSavedSize());
         m_tabSwitcher = nullptr;
         // The tab may have been closed while the dialog was open.
@@ -528,6 +529,7 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   page->Bind(wxEVT_TERMINAL_TEXT_LINK, &MyFrame::OnTerminalLink, this);
   page->Bind(wxEVT_TERMINAL_BELL, &MyFrame::OnBell, this);
   page->Bind(wxEVT_TERMINAL_CWD_CHANGED, &MyFrame::OnCwdChanged, this);
+  page->EnsureStarted();
   return page;
 }
 
@@ -561,8 +563,8 @@ void MyFrame::OnNewTerminal(wxCommandEvent &event) {
   if (!shell) {
     return;
   }
-  CreateTerminalPage(
-      {*shell, m_defaultEnvironment, m_defaultWorkingDirectory}, true);
+  CreateTerminalPage({*shell, m_defaultEnvironment, m_defaultWorkingDirectory},
+                     true);
   m_notebook->SetSelection(m_notebook->GetPageCount() - 1);
 }
 
