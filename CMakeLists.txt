@@ -86,6 +86,7 @@ set(GLYPHT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/MainFrame.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/wxTerminalUI.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/SettingsDlg.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/TabSwitcherDlg.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/theme_loader.cpp)
 
 if(MINGW)

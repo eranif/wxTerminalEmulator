@@ -1,5 +1,6 @@
 #include "MainFrame.h"
 #include "SettingsDlg.hpp"
+#include <algorithm>
 #include <wx/msgdlg.h>
 #include <wx/xrc/xmlres.h>
 // The wxAUI layout serializer header (wx/aui/serializer.h) is pulled in
@@ -93,6 +94,7 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
         }
         auto page = m_notebook->GetPage(m_notebook->GetSelection());
         if (page) {
+          TouchMru(page);
           page->SetFocus();
         }
         UpdateDirectoryStatus();
@@ -392,6 +394,68 @@ void MyFrame::OnPreviousTab(wxCommandEvent &event) {
   m_notebook->SetSelection(currentTabIndex);
 }
 
+void MyFrame::TouchMru(wxWindow *page) {
+  std::erase(m_mruPages, page);
+  m_mruPages.insert(m_mruPages.begin(), page);
+}
+
+bool MyFrame::ShowTabSwitcher(bool backwards) {
+  if (m_notebook->GetPageCount() < 2) {
+    return false;
+  }
+  if (m_tabSwitcher) {
+    return true;
+  }
+
+  // Drop closed tabs, put the current tab first, then add tabs that were never
+  // selected.
+  std::erase_if(m_mruPages, [this](wxWindow *page) {
+    return m_notebook->FindPage(page) == wxNOT_FOUND;
+  });
+  if (auto *current = m_notebook->GetCurrentPage()) {
+    TouchMru(current);
+  }
+  for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
+    wxWindow *page = m_notebook->GetPage(i);
+    if (std::find(m_mruPages.begin(), m_mruPages.end(), page) ==
+        m_mruPages.end()) {
+      m_mruPages.push_back(page);
+    }
+  }
+
+  std::vector<TabSwitcherDlg::Item> items;
+  for (wxWindow *page : m_mruPages) {
+    TabSwitcherDlg::Item item;
+    item.label = m_notebook->GetPageText(
+        static_cast<size_t>(m_notebook->FindPage(page)));
+    if (auto *view = dynamic_cast<wxTerminalViewCtrl *>(page)) {
+      item.directory = view->GetCurrentDirectory();
+    }
+    item.page = page;
+    items.push_back(std::move(item));
+  }
+
+  m_tabSwitcher = new TabSwitcherDlg(
+      this, std::move(items), backwards, [this](wxWindow *chosen, bool lostFocus) {
+        m_tabSwitcher = nullptr;
+        // The tab may have been closed while the dialog was open.
+        const int idx = chosen ? m_notebook->FindPage(chosen) : wxNOT_FOUND;
+        if (idx != wxNOT_FOUND) {
+          m_notebook->SetSelection(static_cast<size_t>(idx));
+        }
+        // Do not take the focus back if the user switched to another app.
+        if (!lostFocus) {
+          if (auto *current = m_notebook->GetCurrentPage()) {
+            current->SetFocus();
+          }
+        }
+      });
+  m_tabSwitcher->Show();
+  m_tabSwitcher->Raise();
+  m_tabSwitcher->FocusList();
+  return true;
+}
+
 void MyFrame::OnCloseTab(wxCommandEvent &event) {
   wxUnusedVar(event);
   int currentTabIndex = m_notebook->GetSelection();
@@ -457,11 +521,25 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   auto *page = new MyTerminal(m_notebook, config.shellCommand,
                               config.environment, config.workingDirectory);
   m_notebook->AddPage(page, m_config.GetNewTabTitle(), selectIt);
+  // Also drops a stale entry if the address of a closed page was reused.
+  // A background tab was never used, so it goes to the end.
+  std::erase(m_mruPages, static_cast<wxWindow *>(page));
+  if (selectIt) {
+    m_mruPages.insert(m_mruPages.begin(), page);
+  } else {
+    m_mruPages.push_back(page);
+  }
   ApplyThemeToTab(page);
   m_config.SetSafeDrawingEnabled(m_config.IsSafeDrawingEnabled() ||
                                  wxTerminalViewCtrl::IsOpenGLEnabled());
   page->EnableSafeDrawing(m_config.IsSafeDrawingEnabled());
   UpdateSafeDrawingMenuCheck();
+  page->RegisterKeyEventFilter([this](const wxKeyEvent &key) {
+    if (key.GetKeyCode() != WXK_TAB || !key.RawControlDown() || key.AltDown()) {
+      return false;
+    }
+    return ShowTabSwitcher(key.ShiftDown());
+  });
   page->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
   page->Bind(wxEVT_TERMINAL_TEXT_LINK, &MyFrame::OnTerminalLink, this);
   page->Bind(wxEVT_TERMINAL_BELL, &MyFrame::OnBell, this);
