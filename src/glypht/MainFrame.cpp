@@ -94,7 +94,7 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
         }
         auto page = m_notebook->GetPage(m_notebook->GetSelection());
         if (page) {
-          TouchMru(page);
+          m_tabMru.Touch(page);
           page->SetFocus();
         }
         UpdateDirectoryStatus();
@@ -140,9 +140,7 @@ void MyFrame::SaveLayout() {
         info.workingDirectory.clear();
       }
     }
-    info.customLabel = terminal->GetCustomLabel().empty()
-                           ? m_config.GetNewTabTitle()
-                           : terminal->GetCustomLabel();
+    info.customLabel = terminal->GetCustomLabel();
     tabs.push_back(std::move(info));
   }
 
@@ -394,11 +392,6 @@ void MyFrame::OnPreviousTab(wxCommandEvent &event) {
   m_notebook->SetSelection(currentTabIndex);
 }
 
-void MyFrame::TouchMru(wxWindow *page) {
-  std::erase(m_mruPages, page);
-  m_mruPages.insert(m_mruPages.begin(), page);
-}
-
 bool MyFrame::ShowTabSwitcher(bool backwards) {
   if (m_notebook->GetPageCount() < 2) {
     return false;
@@ -407,24 +400,14 @@ bool MyFrame::ShowTabSwitcher(bool backwards) {
     return true;
   }
 
-  // Drop closed tabs, put the current tab first, then add tabs that were never
-  // selected.
-  std::erase_if(m_mruPages, [this](wxWindow *page) {
-    return m_notebook->FindPage(page) == wxNOT_FOUND;
-  });
-  if (auto *current = m_notebook->GetCurrentPage()) {
-    TouchMru(current);
-  }
+  TabMRU::Pages existing;
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
-    wxWindow *page = m_notebook->GetPage(i);
-    if (std::find(m_mruPages.begin(), m_mruPages.end(), page) ==
-        m_mruPages.end()) {
-      m_mruPages.push_back(page);
-    }
+    existing.push_back(m_notebook->GetPage(i));
   }
+  m_tabMru.Sync(existing, m_notebook->GetCurrentPage());
 
   std::vector<TabSwitcherDlg::Item> items;
-  for (wxWindow *page : m_mruPages) {
+  for (wxWindow *page : m_tabMru.GetPages()) {
     TabSwitcherDlg::Item item;
     item.label = m_notebook->GetPageText(
         static_cast<size_t>(m_notebook->FindPage(page)));
@@ -521,14 +504,7 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   auto *page = new MyTerminal(m_notebook, config.shellCommand,
                               config.environment, config.workingDirectory);
   m_notebook->AddPage(page, m_config.GetNewTabTitle(), selectIt);
-  // Also drops a stale entry if the address of a closed page was reused.
-  // A background tab was never used, so it goes to the end.
-  std::erase(m_mruPages, static_cast<wxWindow *>(page));
-  if (selectIt) {
-    m_mruPages.insert(m_mruPages.begin(), page);
-  } else {
-    m_mruPages.push_back(page);
-  }
+  m_tabMru.AddPage(page, selectIt);
   ApplyThemeToTab(page);
   m_config.SetSafeDrawingEnabled(m_config.IsSafeDrawingEnabled() ||
                                  wxTerminalViewCtrl::IsOpenGLEnabled());

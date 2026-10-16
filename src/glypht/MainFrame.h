@@ -5,6 +5,7 @@
 #include "terminal_event.h"
 #include "terminal_logger.h"
 #include "terminal_view.h"
+#include "TabMRU.h"
 #include "TabSwitcherDlg.h"
 
 #include <deque>
@@ -173,8 +174,6 @@ public:
   // Show the modeless tab list in most-recently-used order (Ctrl-Tab).
   // Returns false if there is nothing to switch to (fewer than 2 tabs).
   bool ShowTabSwitcher(bool backwards);
-  // Make `page` the most recently used tab.
-  void TouchMru(wxWindow *page);
   void ApplySettings();
   wxTerminalViewCtrl *GetActiveTerminalView() const;
   MyTerminal *CreateTerminalPage(const TerminalPageConfig &config,
@@ -217,9 +216,8 @@ public:
 
 private:
   wxAuiNotebook *m_notebook{nullptr};
-  // Tabs, most recently used first. May hold pages that are already closed;
-  // ShowTabSwitcher() removes them.
-  std::vector<wxWindow *> m_mruPages;
+  // The tabs in most-recently-used order.
+  TabMRU m_tabMru;
   TabSwitcherDlg *m_tabSwitcher{nullptr};
   // The shell from --shell. It wins over the shell of the settings.
   wxString m_cliShellCommand;
