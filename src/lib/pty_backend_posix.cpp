@@ -115,7 +115,7 @@ bool PosixPtyBackend::Start(const std::string &command,
     envp.push_back(nullptr);
   }
 
-  struct winsize ws {};
+  struct winsize ws{};
   ws.ws_col = 120;
   ws.ws_row = 30;
 
@@ -179,7 +179,7 @@ void PosixPtyBackend::Write(const std::string &data) {
 void PosixPtyBackend::Resize(int cols, int rows) {
   if (m_masterFd < 0)
     return;
-  struct winsize ws {};
+  struct winsize ws{};
   ws.ws_col = static_cast<unsigned short>(cols);
   ws.ws_row = static_cast<unsigned short>(rows);
   ioctl(m_masterFd, TIOCSWINSZ, &ws);
@@ -220,7 +220,7 @@ void PosixPtyBackend::ReaderThread() {
     if (m_masterFd < 0)
       break;
 
-    struct pollfd pfd {};
+    struct pollfd pfd{};
     pfd.fd = m_masterFd;
     pfd.events = POLLIN;
 

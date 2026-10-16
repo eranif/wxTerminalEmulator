@@ -45,9 +45,8 @@ KeyTranslation TranslateKeyWithActiveLayout(unsigned int nativeKeyCode,
   }
 
   wchar_t buffer[8] = {0};
-  const int result =
-      ::ToUnicode(vk, scanCode, state, buffer,
-                 sizeof(buffer) / sizeof(buffer[0]), 0);
+  const int result = ::ToUnicode(vk, scanCode, state, buffer,
+                                 sizeof(buffer) / sizeof(buffer[0]), 0);
 
   if (result < 0) {
     // The first key of a dead-key sequence (e.g. the accent in a compose
@@ -60,14 +59,14 @@ KeyTranslation TranslateKeyWithActiveLayout(unsigned int nativeKeyCode,
     return KeyTranslation::kNoOutput;
   }
 
-  const int byteCount = ::WideCharToMultiByte(
-      CP_UTF8, 0, buffer, result, nullptr, 0, nullptr, nullptr);
+  const int byteCount = ::WideCharToMultiByte(CP_UTF8, 0, buffer, result,
+                                              nullptr, 0, nullptr, nullptr);
   if (byteCount <= 0) {
     return KeyTranslation::kUnavailable;
   }
   utf8->resize(static_cast<size_t>(byteCount));
   ::WideCharToMultiByte(CP_UTF8, 0, buffer, result, utf8->data(), byteCount,
-                       nullptr, nullptr);
+                        nullptr, nullptr);
   return KeyTranslation::kText;
 }
 

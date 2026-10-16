@@ -1,13 +1,13 @@
 #pragma once
 
+#include "TabMRU.h"
+#include "TabSwitcherDlg.h"
 #include "app_persistence.h"
 #include "layout_persistence.h"
+#include "shell_locator.h"
 #include "terminal_event.h"
 #include "terminal_logger.h"
 #include "terminal_view.h"
-#include "TabMRU.h"
-#include "shell_locator.h"
-#include "TabSwitcherDlg.h"
 
 #include <deque>
 #include <optional>

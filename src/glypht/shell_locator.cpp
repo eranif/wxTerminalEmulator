@@ -12,7 +12,9 @@ wxString Which(const wxString &name) {
   return paths.FindValidPath(name);
 }
 
-wxString Quote(const wxString &s) { return s.Contains(' ') ? "\"" + s + "\"" : s; }
+wxString Quote(const wxString &s) {
+  return s.Contains(' ') ? "\"" + s + "\"" : s;
+}
 
 #ifdef __WXMSW__
 void AddWslDistributions(std::vector<ShellOption> &shells) {

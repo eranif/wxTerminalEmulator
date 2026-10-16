@@ -172,7 +172,9 @@ wxString AppPersistence::GetConfigPath() {
   wxUnusedVar(logFile);
 
   wxString path;
-  { TerminalLogger::Get().SetLevel(TerminalLogger::Get().GetLevel()); }
+  {
+    TerminalLogger::Get().SetLevel(TerminalLogger::Get().GetLevel());
+  }
 
 #ifdef __WXMSW__
   wxString dir;
@@ -262,7 +264,8 @@ bool AppPersistence::Load(AppConfig &config) {
           long w = 520, h = 260;
           parts[0].ToLong(&w);
           parts[1].ToLong(&h);
-          config.SetTabSwitcherSize(wxSize(static_cast<int>(w), static_cast<int>(h)));
+          config.SetTabSwitcherSize(
+              wxSize(static_cast<int>(w), static_cast<int>(h)));
         }
       }
     } else if (section == Section::kTheme) {
@@ -314,7 +317,8 @@ bool AppPersistence::Save(const AppConfig &config) {
   file.AddLine("shellargs=" + config.GetShellArgs());
   file.AddLine("lastshell=" + config.GetLastShell());
   wxSize tabSwitcherSize = config.GetTabSwitcherSize();
-  file.AddLine(wxString::Format("tabswitchersize=%d,%d", tabSwitcherSize.GetWidth(),
+  file.AddLine(wxString::Format("tabswitchersize=%d,%d",
+                                tabSwitcherSize.GetWidth(),
                                 tabSwitcherSize.GetHeight()));
 
   // Shipped themes are read from their *.toml files, so only themes the user

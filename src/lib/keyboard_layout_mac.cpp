@@ -96,11 +96,10 @@ KeyTranslation TranslateKeyWithActiveLayout(unsigned int nativeKeyCode,
 
   UniChar chars[16] = {0};
   UniCharCount charCount = 0;
-  OSStatus status =
-      UCKeyTranslate(layout, static_cast<UInt16>(nativeKeyCode),
-                     kUCKeyActionDown, ToUCKeyModifiers(nativeModifiers),
-                     LMGetKbdType(), 0, &deadKeyState,
-                     sizeof(chars) / sizeof(chars[0]), &charCount, chars);
+  OSStatus status = UCKeyTranslate(
+      layout, static_cast<UInt16>(nativeKeyCode), kUCKeyActionDown,
+      ToUCKeyModifiers(nativeModifiers), LMGetKbdType(), 0, &deadKeyState,
+      sizeof(chars) / sizeof(chars[0]), &charCount, chars);
   CFRelease(source);
 
   if (status != noErr) {

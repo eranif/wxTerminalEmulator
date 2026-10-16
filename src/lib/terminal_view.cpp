@@ -207,8 +207,8 @@ void ApplyShellIntegration(EnvMap &env_map) {
       "printf '\\e]7;file://%s%s\\a' \"$HOSTNAME\" \"$PWD\"; "
       "fi";
   wxString &promptCommand = EnvVar(env_map, wxS("PROMPT_COMMAND"));
-  promptCommand = promptCommand.empty() ? promptHook
-                                        : promptCommand + "; " + promptHook;
+  promptCommand =
+      promptCommand.empty() ? promptHook : promptCommand + "; " + promptHook;
 
 #ifdef _WIN32
   // Pass both variables on to WSL. "/u" shares them only when WSL is started
@@ -216,8 +216,8 @@ void ApplyShellIntegration(EnvMap &env_map) {
   wxString &wslEnv = EnvVar(env_map, wxS("WSLENV"));
   for (const wxString name : {"PROMPT_COMMAND", "GLYPHT_SHELL_INTEGRATION"}) {
     if (!wslEnv.Contains(name)) {
-      wslEnv += (wslEnv.empty() || wslEnv.EndsWith(":") ? "" : ":") + name +
-                "/u";
+      wslEnv +=
+          (wslEnv.empty() || wslEnv.EndsWith(":") ? "" : ":") + name + "/u";
     }
   }
 
@@ -364,8 +364,9 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   // Add the shell hooks to it, or to the provided one. A provided environment
   // that needs no hooks is used as is.
   if (!m_environment.has_value() || shellIntegration) {
-    TLOG_DEBUG() << (m_environment.has_value() ? "Env provided. Adding hooks."
-                                               : "No env provided. Building one.")
+    TLOG_DEBUG() << (m_environment.has_value()
+                         ? "Env provided. Adding hooks."
+                         : "No env provided. Building one.")
                  << std::endl;
     EnvironmentList env_list;
     auto env_map = m_environment.has_value() ? EnvMapFromList(*m_environment)
@@ -1871,7 +1872,8 @@ unsigned TsmButton(int button) {
 // button is held.
 int DragButton(const wxMouseEvent &evt, unsigned ownedButtons) {
   const int held[] = {evt.LeftIsDown() ? wxMOUSE_BTN_LEFT : wxMOUSE_BTN_NONE,
-                      evt.MiddleIsDown() ? wxMOUSE_BTN_MIDDLE : wxMOUSE_BTN_NONE,
+                      evt.MiddleIsDown() ? wxMOUSE_BTN_MIDDLE
+                                         : wxMOUSE_BTN_NONE,
                       evt.RightIsDown() ? wxMOUSE_BTN_RIGHT : wxMOUSE_BTN_NONE};
   int first = wxMOUSE_BTN_NONE;
   for (const int button : held) {
@@ -2166,9 +2168,9 @@ void wxTerminalViewCtrl::OnMouseWheel(wxMouseEvent &evt) {
   } else {
     // Mouse tracking enabled: send wheel events to the application
     SendMouseToApp(evt,
-                    lines > 0 ? TSM_MOUSE_BUTTON_WHEEL_UP
-                              : TSM_MOUSE_BUTTON_WHEEL_DOWN,
-                    TSM_MOUSE_EVENT_PRESSED);
+                   lines > 0 ? TSM_MOUSE_BUTTON_WHEEL_UP
+                             : TSM_MOUSE_BUTTON_WHEEL_DOWN,
+                   TSM_MOUSE_EVENT_PRESSED);
   }
 }
 

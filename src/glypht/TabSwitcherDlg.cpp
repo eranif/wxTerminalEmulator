@@ -22,7 +22,8 @@ TabSwitcherDlg::TabSwitcherDlg(wxWindow *parent, std::vector<Item> items,
   auto *sizer = new wxBoxSizer(wxVERTICAL);
   sizer->Add(m_list, 1, wxEXPAND | wxALL, FromDIP(4));
   SetSizer(sizer);
-  wxSize size = preferredSize != wxDefaultSize ? preferredSize : FromDIP(wxSize(520, 260));
+  wxSize size = preferredSize != wxDefaultSize ? preferredSize
+                                               : FromDIP(wxSize(520, 260));
   SetClientSize(size);
   CentreOnParent();
 
