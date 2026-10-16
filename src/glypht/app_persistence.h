@@ -73,6 +73,9 @@ struct AppConfig {
   /// file that does not exist (for example a removed shell).
   wxString GetShellCommand() const;
 
+  void SetTabSwitcherSize(const wxSize &size) { tabSwitcherSize = size; }
+  wxSize GetTabSwitcherSize() const { return tabSwitcherSize; }
+
 private:
   const wxTerminalTheme *FindTheme(const wxString &name) const;
 
@@ -87,6 +90,7 @@ private:
   bool blockCursor{true};
   wxString shellExecutable;
   wxString shellArgs;
+  wxSize tabSwitcherSize{520, 260};
 };
 
 class AppPersistence {

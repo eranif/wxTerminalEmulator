@@ -3,7 +3,8 @@
 #include <wx/sizer.h>
 
 TabSwitcherDlg::TabSwitcherDlg(wxWindow *parent, std::vector<Item> items,
-                               bool backwards, DoneCallback onDone)
+                               bool backwards, DoneCallback onDone,
+                               const wxSize &preferredSize)
     : wxDialog(parent, wxID_ANY, _("Switch Tab"), wxDefaultPosition,
                wxDefaultSize, wxCAPTION | wxRESIZE_BORDER | wxSTAY_ON_TOP),
       m_items{std::move(items)}, m_onDone{std::move(onDone)} {
@@ -21,7 +22,8 @@ TabSwitcherDlg::TabSwitcherDlg(wxWindow *parent, std::vector<Item> items,
   auto *sizer = new wxBoxSizer(wxVERTICAL);
   sizer->Add(m_list, 1, wxEXPAND | wxALL, FromDIP(4));
   SetSizer(sizer);
-  SetClientSize(FromDIP(wxSize(520, 260)));
+  wxSize size = preferredSize != wxDefaultSize ? preferredSize : FromDIP(wxSize(520, 260));
+  SetClientSize(size);
   CentreOnParent();
 
   if (!m_items.empty()) {

@@ -26,8 +26,9 @@ public:
 
   // `items` are in MRU order: the first item is the current tab. The initial
   // selection is the second item (forward) or the last item (backward).
+  // `preferredSize` is used to restore the previously saved dialog size, if any.
   TabSwitcherDlg(wxWindow *parent, std::vector<Item> items, bool backwards,
-                 DoneCallback onDone);
+                 DoneCallback onDone, const wxSize &preferredSize = wxDefaultSize);
   ~TabSwitcherDlg() override;
 
   // wxEventFilter: sees the Ctrl key release, which the dialog does not get
@@ -35,6 +36,7 @@ public:
   int FilterEvent(wxEvent &event) override;
 
   void FocusList() { m_list->SetFocus(); }
+  wxSize GetSavedSize() const { return GetClientSize(); }
 
 private:
   void OnCharHook(wxKeyEvent &event);

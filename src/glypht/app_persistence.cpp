@@ -254,6 +254,14 @@ bool AppPersistence::Load(AppConfig &config) {
         config.SetShellExecutable(value);
       } else if (key == "shellargs") {
         config.SetShellArgs(value);
+      } else if (key == "tabswitchersize") {
+        wxArrayString parts = wxSplit(value, ',');
+        if (parts.size() == 2) {
+          long w = 520, h = 260;
+          parts[0].ToLong(&w);
+          parts[1].ToLong(&h);
+          config.SetTabSwitcherSize(wxSize(static_cast<int>(w), static_cast<int>(h)));
+        }
       }
     } else if (section == Section::kTheme) {
       if (key == "name") {
@@ -302,6 +310,9 @@ bool AppPersistence::Save(const AppConfig &config) {
       "safedrawing=%s", config.IsSafeDrawingEnabled() ? "true" : "false"));
   file.AddLine("shell=" + config.GetShellExecutable());
   file.AddLine("shellargs=" + config.GetShellArgs());
+  wxSize tabSwitcherSize = config.GetTabSwitcherSize();
+  file.AddLine(wxString::Format("tabswitchersize=%d,%d", tabSwitcherSize.GetWidth(),
+                                tabSwitcherSize.GetHeight()));
 
   // Shipped themes are read from their *.toml files, so only themes the user
   // created or edited are saved.

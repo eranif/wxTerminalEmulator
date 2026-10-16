@@ -420,6 +420,7 @@ bool MyFrame::ShowTabSwitcher(bool backwards) {
 
   m_tabSwitcher = new TabSwitcherDlg(
       this, std::move(items), backwards, [this](wxWindow *chosen, bool lostFocus) {
+        m_config.SetTabSwitcherSize(m_tabSwitcher->GetSavedSize());
         m_tabSwitcher = nullptr;
         // The tab may have been closed while the dialog was open.
         const int idx = chosen ? m_notebook->FindPage(chosen) : wxNOT_FOUND;
@@ -432,7 +433,8 @@ bool MyFrame::ShowTabSwitcher(bool backwards) {
             current->SetFocus();
           }
         }
-      });
+      },
+      m_config.GetTabSwitcherSize());
   m_tabSwitcher->Show();
   m_tabSwitcher->Raise();
   m_tabSwitcher->FocusList();
