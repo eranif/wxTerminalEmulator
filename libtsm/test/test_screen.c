@@ -291,11 +291,121 @@ START_TEST(test_screen_sb_get_line_pos)
 END_TEST
 
 
+/* The second cell of a wide character is a filler: no symbol, width 0 and the
+ * attributes of its owner. Overwriting one half blanks the other half. */
+START_TEST(test_screen_wide_filler)
+{
+	struct tsm_screen *screen;
+	struct tsm_screen_attr attr;
+	struct line *line;
+	int r;
+
+	r = tsm_screen_new(&screen, NULL, NULL);
+	ck_assert_int_eq(r, 0);
+	r = tsm_screen_resize(screen, 6, 2);
+	ck_assert_int_eq(r, 0);
+
+	memset(&attr, 0, sizeof(attr));
+	attr.br = 255;
+	line = screen->lines[0];
+
+	/* U+4F60 is two columns wide */
+	tsm_screen_write(screen, 0x4F60, &attr);
+	ck_assert_int_eq(line->cells[0].width, 2);
+	ck_assert_int_eq(line->cells[1].width, 0);
+	ck_assert_int_eq(line->cells[1].ch, 0);
+	ck_assert_int_eq(line->cells[1].attr.br, 255);
+
+	/* a narrow write on the filler blanks the owner */
+	tsm_screen_move_to(screen, 1, 0);
+	tsm_screen_write(screen, 'B', &attr);
+	ck_assert_int_eq(line->cells[0].width, 1);
+	ck_assert_int_eq(line->cells[0].ch, 0);
+	ck_assert_int_eq(line->cells[1].width, 1);
+	ck_assert_int_eq(line->cells[1].ch, 'B');
+
+	/* a narrow write on the owner blanks the filler */
+	tsm_screen_move_to(screen, 3, 0);
+	tsm_screen_write(screen, 0x4F60, &attr);
+	tsm_screen_move_to(screen, 3, 0);
+	tsm_screen_write(screen, 'C', &attr);
+	ck_assert_int_eq(line->cells[3].width, 1);
+	ck_assert_int_eq(line->cells[3].ch, 'C');
+	ck_assert_int_eq(line->cells[4].width, 1);
+	ck_assert_int_eq(line->cells[4].ch, 0);
+
+	/* the blanked half gets the attributes of the write, not the old ones */
+	attr.br = 10;
+	tsm_screen_move_to(screen, 0, 1);
+	tsm_screen_write(screen, 0x4F60, &attr);
+	attr.br = 20;
+	tsm_screen_move_to(screen, 1, 1);
+	tsm_screen_write(screen, 'D', &attr);
+	line = screen->lines[1];
+	ck_assert_int_eq(line->cells[0].width, 1);
+	ck_assert_int_eq(line->cells[0].attr.br, 20);
+
+	/* insert mode: the shift must not copy a filler */
+	tsm_screen_erase_screen(screen, false);
+	tsm_screen_set_flags(screen, TSM_SCREEN_INSERT_MODE);
+	tsm_screen_move_to(screen, 0, 0);
+	tsm_screen_write(screen, 0x4F60, &attr);
+	tsm_screen_move_to(screen, 1, 0);
+	tsm_screen_write(screen, 'E', &attr);
+	line = screen->lines[0];
+	{
+		unsigned int x;
+
+		for (x = 0; x < 6; ++x)
+			ck_assert_int_ne(line->cells[x].width, 0);
+	}
+	ck_assert_int_eq(line->cells[1].ch, 'E');
+
+	/* insert mode on the owner column: the wide character is shifted whole */
+	tsm_screen_erase_screen(screen, false);
+	tsm_screen_move_to(screen, 0, 0);
+	tsm_screen_write(screen, 0x4F60, &attr);
+	tsm_screen_move_to(screen, 0, 0);
+	tsm_screen_write(screen, 'E', &attr);
+	line = screen->lines[0];
+	ck_assert_int_eq(line->cells[0].ch, 'E');
+	ck_assert_int_eq(line->cells[1].ch, 0x4F60);
+	ck_assert_int_eq(line->cells[1].width, 2);
+	ck_assert_int_eq(line->cells[2].width, 0);
+
+	/* a wide character that still fits after the shift is kept */
+	tsm_screen_erase_screen(screen, false);
+	tsm_screen_move_to(screen, 3, 0);
+	tsm_screen_write(screen, 0x4F60, &attr);
+	tsm_screen_move_to(screen, 0, 0);
+	tsm_screen_write(screen, 'F', &attr);
+	line = screen->lines[0];
+	ck_assert_int_eq(line->cells[4].ch, 0x4F60);
+	ck_assert_int_eq(line->cells[4].width, 2);
+	ck_assert_int_eq(line->cells[5].width, 0);
+
+	/* a wide character that is pushed over the edge is blanked, no orphan */
+	tsm_screen_erase_screen(screen, false);
+	tsm_screen_move_to(screen, 4, 0);
+	tsm_screen_write(screen, 0x4F60, &attr);
+	tsm_screen_move_to(screen, 0, 0);
+	tsm_screen_write(screen, 'G', &attr);
+	line = screen->lines[0];
+	ck_assert_int_ne(line->cells[4].width, 0);
+	ck_assert_int_ne(line->cells[5].width, 0);
+	ck_assert_int_eq(line->cells[5].ch, 0);
+
+	tsm_screen_unref(screen);
+	screen = NULL;
+}
+END_TEST
+
 TEST_DEFINE_CASE(misc)
 	TEST(test_screen_init)
 	TEST(test_screen_null)
 	TEST(test_screen_resize_alt_colors)
 	TEST(test_screen_sb_get_line_pos)
+	TEST(test_screen_wide_filler)
 TEST_END_CASE
 
 TEST_DEFINE(

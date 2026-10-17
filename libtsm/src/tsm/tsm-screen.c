@@ -372,6 +372,40 @@ static void screen_scroll_down(struct tsm_screen *con, unsigned int num)
 	       cache, num * sizeof(struct line*));
 }
 
+/*
+ * Turn the wide character that includes column x into blank narrow cells. Call
+ * it before overwriting a cell that is part of a wide character, otherwise
+ * the other half stays behind: a filler without an owner, or an owner whose
+ * filler was replaced. The blanked cells get `attr`, like an erase does.
+ */
+static void screen_break_wide(struct tsm_screen *con, struct line *line,
+			      unsigned int x, const struct tsm_screen_attr *attr)
+{
+	unsigned int start = x, i, width;
+
+	while (start > 0 && line->cells[start].width == 0)
+		--start;
+
+	width = line->cells[start].width;
+	if (width < 2) {
+		/* A filler without an owner: blank it. */
+		if (start != x) {
+			line->cells[x].ch = 0;
+			line->cells[x].width = 1;
+			line->cells[x].age = con->age_cnt;
+			memcpy(&line->cells[x].attr, attr, sizeof(*attr));
+		}
+		return;
+	}
+
+	for (i = start; i < start + width && i < con->size_x; ++i) {
+		line->cells[i].ch = 0;
+		line->cells[i].width = 1;
+		line->cells[i].age = con->age_cnt;
+		memcpy(&line->cells[i].attr, attr, sizeof(*attr));
+	}
+}
+
 static void screen_write(struct tsm_screen *con, unsigned int x,
 			  unsigned int y, tsm_symbol_t ch, unsigned int len,
 			  const struct tsm_screen_attr *attr)
@@ -391,9 +425,24 @@ static void screen_write(struct tsm_screen *con, unsigned int x,
 
 	if ((con->flags & TSM_SCREEN_INSERT_MODE) &&
 	    (int)x < ((int)con->size_x - len)) {
+		unsigned int edge = con->size_x - len - 1;
+
 		line->age = con->age_cnt;
+		/* The shift moves a wide character whole, so only break the
+		 * ones it would cut: a filler at x (its owner stays behind) and
+		 * an owner at the last shifted cell (its filler would be pushed
+		 * out of the line). */
+		if (line->cells[x].width == 0)
+			screen_break_wide(con, line, x, attr);
+		if (line->cells[edge].width > 1)
+			screen_break_wide(con, line, edge, attr);
 		memmove(&line->cells[x + len], &line->cells[x],
 			sizeof(struct cell) * (con->size_x - len - x));
+	} else {
+		/* Do not leave half of a wide character behind. In insert mode
+		 * the cells at x are stale copies that are overwritten below. */
+		for (i = 0; i < len && i + x < con->size_x; ++i)
+			screen_break_wide(con, line, x + i, attr);
 	}
 
 	line->cells[x].age = con->age_cnt;
@@ -401,9 +450,18 @@ static void screen_write(struct tsm_screen *con, unsigned int x,
 	line->cells[x].width = len;
 	memcpy(&line->cells[x].attr, attr, sizeof(*attr));
 
+	/*
+	 * The trailing cells of a wide character are fillers owned by the first
+	 * cell: their glyph is drawn by it. Clear the old symbol and give them
+	 * the same attributes, otherwise a renderer that walks the cells in
+	 * order still sees whatever was there before, and a background with the
+	 * old colour covers the right half of the wide glyph.
+	 */
 	for (i = 1; i < len && i + x < con->size_x; ++i) {
 		line->cells[x + i].age = con->age_cnt;
+		line->cells[x + i].ch = 0;
 		line->cells[x + i].width = 0;
+		memcpy(&line->cells[x + i].attr, attr, sizeof(*attr));
 	}
 }
 
@@ -1270,12 +1328,16 @@ void tsm_screen_write(struct tsm_screen *con, tsm_symbol_t ch,
 			if (prev->width == 1 && is_emoji_candidate(prev->ch) &&
 			    prev_x + 1 < con->size_x) {
 				screen_inc_age(con);
+				screen_break_wide(con, line, prev_x + 1, &prev->attr);
 				prev->width = 2;
 				prev->age = con->age_cnt;
-				/* Turn the next cell into a filler */
+				/* Turn the next cell into a filler owned by the
+				 * emoji: same attributes, no symbol of its own. */
 				line->cells[prev_x + 1].ch = 0;
 				line->cells[prev_x + 1].width = 0;
 				line->cells[prev_x + 1].age = con->age_cnt;
+				memcpy(&line->cells[prev_x + 1].attr, &prev->attr,
+				       sizeof(prev->attr));
 				move_cursor(con, con->cursor_x + 1,
 					    con->cursor_y);
 			}

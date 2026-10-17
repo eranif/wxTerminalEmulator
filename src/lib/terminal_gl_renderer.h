@@ -87,7 +87,8 @@ private:
   };
 
   // Build a key combining codepoint and style bits.
-  static std::uint64_t MakeKey(char32_t ch, bool bold, bool underlined);
+  static std::uint64_t MakeKey(char32_t ch, bool bold, bool underlined,
+                              int cellW);
 
   // Look up (or rasterize + insert) a glyph for the given cell size.
   const GlyphInfo &GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,

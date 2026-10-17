@@ -455,6 +455,20 @@ private:
   void OnLeaveWindow(wxMouseEvent &e) { e.Skip(); }
 
   const wxFont &GetCachedFont(bool bold, bool underlined) const;
+  /// True if `ch` (an emoji or a symbol) is drawn with the fallback font.
+  bool UseFallbackFont(char32_t ch) const;
+
+  /// The cell under the block cursor and the columns it covers.
+  struct CursorCellInfo {
+    const terminal::Cell *cell{nullptr};
+    int col{0};  ///< first column of the character (its owner for a filler)
+    int cols{1}; ///< columns covered: the width of a wide character, else 1
+  };
+  /// Find the cell at column `x` of `row`. A cursor on the filler cell of a wide
+  /// character snaps to the wide cell that owns it.
+  static CursorCellInfo CursorCellAt(const std::vector<terminal::Cell> &row,
+                                     int x);
+
   /**
    * @brief Computes the selection rectangle from mouse position.
    *
@@ -567,9 +581,10 @@ private:
 
     // Used by the incremental renderer to detect whether a screen row's
     // visual content changed since the last paint. Two cells render
-    // identically iff their column, glyph and attributes are equal.
+    // identically iff their column, glyph, width and attributes are equal.
     inline bool operator==(const CellInfo &other) const {
-      return colIdx == other.colIdx && ch == other.ch && attrs == other.attrs;
+      return colIdx == other.colIdx && ch == other.ch &&
+             cellWidth == other.cellWidth && attrs == other.attrs;
     }
     inline bool operator!=(const CellInfo &other) const {
       return !(*this == other);
@@ -593,6 +608,10 @@ private:
     std::vector<wxTerminalViewCtrl::CellInfo> cells;
     bool is_ascii_safe{true};
     bool row_has_selection{false};
+    /// True when the row has a cell that does not span exactly one column (a
+    /// wide character such as CJK or an emoji, or its filler). Such rows must
+    /// be drawn on the cell grid, never as a run of text.
+    bool row_has_wide{false};
   };
 
   PrepareRowForDrawingResult

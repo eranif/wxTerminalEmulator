@@ -16,6 +16,7 @@
  */
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 struct width_interval {
@@ -519,7 +520,7 @@ static bool intable(struct width_interval* table, int table_length, int c) {
         return false;
 }
 
-int wcwidth(wchar_t ucs) {
+int tsm_wcwidth(uint32_t ucs) {
 	// NOTE: created by hand, there isn't anything identifiable other than
 	// general Cf category code to identify these, and some characters in Cf
 	// category code are of non-zero width.
@@ -540,4 +541,8 @@ int wcwidth(wchar_t ucs) {
         if (intable(ZERO_WIDTH, sizeof(ZERO_WIDTH)/sizeof(struct width_interval), ucs)) return 0;
 
         return intable(WIDE_EASTASIAN, sizeof(WIDE_EASTASIAN)/sizeof(struct width_interval), ucs) ? 2 : 1;
+}
+
+int wcwidth(wchar_t ucs) {
+        return tsm_wcwidth((uint32_t)ucs);
 }

@@ -310,7 +310,23 @@ one for keyboard layout translation).
 7. **Safe drawing mode**: `EnableSafeDrawing(true)` switches the wxDC path to
    per-cell drawing. It has no effect on the OpenGL path.
 
-8. **CI option name is stale**: the workflows still pass
+8. **Wide characters (CJK, emoji)**: a wide character occupies two or more
+   columns. The cells after its first cell are **fillers** (`Cell::width == 0`)
+   owned by it: they have no glyph and share its attributes (`screen_write()` in
+   the vendored libtsm sets this). `PrepareRowForDrawing()` reports such a row
+   with `row_has_wide`, and `RenderRowWithGrouping()` then draws it with
+   `RenderRowNoGrouping()`, which paints all cell backgrounds first and the
+   glyphs afterwards. Do not draw a wide row as a run of text and never paint a
+   cell background after a glyph: both cut the wide glyph in half. The block
+   cursor spans the columns of a wide character (`CursorCellAt()` also moves a
+   cursor on a filler cell back to its owner). libtsm's `screen_write()` blanks
+   the other half when a write lands on one half of a wide character. Use
+   `tsm_wcwidth(uint32_t)`, not `wcwidth(wchar_t)`: `wchar_t` is 16 bits on
+   Windows. In the OpenGL renderer on Windows, emoji are drawn with Direct2D
+   (`DrawColourGlyphD2D()` in `terminal_gl_renderer.cpp`) to get colour; it was
+   checked with wxWidgets v3.3.4.
+
+9. **CI option name is stale**: the workflows still pass
    `-DBUILD_WXTERMINAL_DEMO=OFF`. That option no longer exists; the current name
    is `BUILD_GLYPHT`, so that CI job builds the demo anyway.
 
