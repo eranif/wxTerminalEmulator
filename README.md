@@ -114,6 +114,8 @@ Custom wxWidgets events for terminal-specific notifications:
 - `wxEVT_TERMINAL_TEXT_LINK`: Fired when user Ctrl+clicks on text to select a token/link
   - The event carries the clicked text string for custom handling (e.g., opening URLs, file paths)
 - `wxEVT_TERMINAL_APP_OWNS_MOUSE` / `wxEVT_TERMINAL_APP_RELEASE_MOUSE`: Fired when the program in the terminal (tmux, vim, ...) starts or stops tracking the mouse. While it tracks the mouse the cursor is an arrow, and Shift gives the mouse back to the terminal
+- `wxEVT_TERMINAL_APP_SELECTION_CHANGED`: Fired when the program copies text with OSC 52 (write only, `?` queries are ignored), or when that text is cleared (left press, mouse tracking stops, `ClearAll()`)
+  - `evt.GetString()` holds the text (empty after a clear). `GetAppSelection()` returns the current text and `ClearAppSelection()` forgets it. The system clipboard is not written; the application decides what to do with the text. Copies over about 3 KB arrive cut (libtsm limits an OSC to 4 KB) and are ignored if they are no longer valid UTF-8
 
 #### Terminal Theme (`terminal_theme.h`)
 Color scheme management:

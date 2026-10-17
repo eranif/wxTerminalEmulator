@@ -13,6 +13,40 @@ bool IsDark(const wxColour &c) {
   double luminance = 0.299 * c.Red() + 0.587 * c.Green() + 0.114 * c.Blue();
   return luminance < 128.0;
 }
+
+// Status bar fields: 0 for messages, 1 for the directory of the active tab, 2
+// for the text the program in the active tab copied with OSC 52.
+constexpr int kStatusFieldDirectory = 1;
+constexpr int kStatusFieldAppSelection = 2;
+constexpr int kStatusFieldCount = 3;
+
+// Text from a program is not trusted: make it a short single line.
+wxString ToStatusBarText(const wxString &text, size_t maxLen) {
+  wxString result;
+  result.reserve(text.length());
+  for (const wxUniChar ch : text) {
+    const auto value = ch.GetValue();
+    if (value == '\n') {
+      result += wxT("↵");
+    } else if (value == '\r') {
+      continue;
+    } else if (value < 0x20 || (value >= 0x7f && value < 0xa0)) {
+      result += ' ';
+    } else {
+      result += ch;
+    }
+  }
+  if (result.length() > maxLen) {
+    result = result.Left(maxLen);
+    // Do not leave half a surrogate pair where wxString is UTF-16.
+    const auto last = result.Last().GetValue();
+    if (last >= 0xD800 && last <= 0xDBFF) {
+      result.RemoveLast();
+    }
+    result += wxT("...");
+  }
+  return result;
+}
 } // namespace
 
 MyFrame::MyFrame(const wxCmdLineParser &parser,
@@ -52,10 +86,9 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   AppPersistence::Load(m_config);
   ApplyNativeAppTheme();
 
-  // Field 0: messages. Field 1: directory of the active terminal.
-  CreateStatusBar(2);
-  const int statusWidths[] = {-1, -2};
-  SetStatusWidths(2, statusWidths);
+  CreateStatusBar(kStatusFieldCount);
+  const int statusWidths[kStatusFieldCount] = {-1, -2, -2};
+  SetStatusWidths(kStatusFieldCount, statusWidths);
   BuildMenuBar();
   long nbStyle = wxAUI_NB_DEFAULT_STYLE &
                  ~(wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS);
@@ -99,6 +132,7 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
           page->SetFocus();
         }
         UpdateDirectoryStatus();
+        UpdateAppSelectionStatus();
       });
   m_notebook->Bind(
       wxEVT_AUINOTEBOOK_TAB_RIGHT_UP,
@@ -535,6 +569,8 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   terminal->Bind(wxEVT_TERMINAL_TEXT_LINK, &MyFrame::OnTerminalLink, this);
   terminal->Bind(wxEVT_TERMINAL_BELL, &MyFrame::OnBell, this);
   terminal->Bind(wxEVT_TERMINAL_CWD_CHANGED, &MyFrame::OnCwdChanged, this);
+  terminal->Bind(wxEVT_TERMINAL_APP_SELECTION_CHANGED,
+                 &MyFrame::OnAppSelectionChanged, this);
   terminal->EnsureStarted();
   return terminal;
 }
@@ -832,9 +868,6 @@ void MyFrame::OnTerminalLink(wxTerminalEvent &event) {
   }
 }
 
-// Status bar fields: 0 for messages, 1 for the directory of the active tab.
-static constexpr int kStatusFieldDirectory = 1;
-
 void MyFrame::OnCwdChanged(wxTerminalEvent &event) {
   event.Skip();
   // Tabs in the background must not overwrite the active tab's directory.
@@ -851,6 +884,31 @@ void MyFrame::UpdateDirectoryStatus() {
   auto *view = GetActiveTerminalView();
   statusBar->SetStatusText(view ? view->GetCurrentDirectory() : wxString{},
                            kStatusFieldDirectory);
+}
+
+void MyFrame::OnAppSelectionChanged(wxTerminalEvent &event) {
+  event.Skip();
+  // Tabs in the background must not overwrite the active tab's text.
+  if (event.GetEventObject() == GetActiveTerminalView()) {
+    UpdateAppSelectionStatus();
+  }
+}
+
+void MyFrame::UpdateAppSelectionStatus() {
+  auto *statusBar = GetStatusBar();
+  if (!statusBar || statusBar->GetFieldsCount() <= kStatusFieldAppSelection) {
+    return;
+  }
+  // The field stays empty when there is no selection.
+  wxString text;
+  if (auto *view = GetActiveTerminalView()) {
+    if (auto selection = view->GetAppSelection()) {
+      constexpr size_t kMaxLen = 80;
+      text = wxString::Format(_("App Selection: %s"),
+                              ToStatusBarText(*selection, kMaxLen));
+    }
+  }
+  statusBar->SetStatusText(text, kStatusFieldAppSelection);
 }
 
 void MyFrame::OnBell(wxTerminalEvent &event) {

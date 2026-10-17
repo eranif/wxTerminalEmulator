@@ -28,6 +28,10 @@ private:
 wxDECLARE_EVENT(wxEVT_TERMINAL_TITLE_CHANGED, wxTerminalEvent);
 /// Current directory changed (OSC 7 or OSC 9;9). GetString() holds the decoded path.
 wxDECLARE_EVENT(wxEVT_TERMINAL_CWD_CHANGED, wxTerminalEvent);
+/// The program copied text with OSC 52, or the text was cleared. GetString()
+/// holds the text, or is empty after a clear. The current text is returned by
+/// wxTerminalViewCtrl::GetAppSelection().
+wxDECLARE_EVENT(wxEVT_TERMINAL_APP_SELECTION_CHANGED, wxTerminalEvent);
 /// Terminal terminated.
 wxDECLARE_EVENT(wxEVT_TERMINAL_TERMINATED, wxTerminalEvent);
 /// User used Ctrl+CLICK on a text in the terminal.

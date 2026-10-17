@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <wx/app.h>
 #include <wx/clipbrd.h>
 #include <wx/dcbuffer.h>
@@ -408,6 +409,19 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     event.SetEventObject(this);
     GetEventHandler()->AddPendingEvent(event);
   });
+  m_core.SetClipboardCallback([this](const std::string &text) {
+    // FromUTF8 gives an empty string for invalid UTF-8 (for example text cut
+    // by the OSC length limit). Keep the old value then.
+    wxString decoded = wxString::FromUTF8(text);
+    if (decoded.empty()) {
+      return;
+    }
+    m_appSelection = std::move(decoded);
+    wxTerminalEvent event{wxEVT_TERMINAL_APP_SELECTION_CHANGED};
+    event.SetString(*m_appSelection);
+    event.SetEventObject(this);
+    GetEventHandler()->AddPendingEvent(event);
+  });
   m_core.SetBellCallback([this]() {
     wxTerminalEvent event{wxEVT_TERMINAL_BELL};
     event.SetEventObject(this);
@@ -419,6 +433,11 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     // cursor for the current state.
     if (HasFocus()) {
       UpdateCursor();
+    }
+    if (!tracking) {
+      // The program that copied the text is gone, or no longer handles the
+      // mouse.
+      ClearAppSelection();
     }
     wxTerminalEvent event{tracking ? wxEVT_TERMINAL_APP_OWNS_MOUSE
                                    : wxEVT_TERMINAL_APP_RELEASE_MOUSE};
@@ -2026,6 +2045,10 @@ void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
   m_ignoreNextLeftUp = false;
   evt.Skip();
 
+  // A new press starts a new selection, so the text the program copied before
+  // is no longer current. If the program copies again, it sends a new OSC 52.
+  ClearAppSelection();
+
   // Let the owner take a link click before the application sees it.
   if (m_textClickedFilter && IsLinkClick(evt)) {
     auto clicked_text = GetTextFromMousePoint(evt.GetPosition());
@@ -3033,6 +3056,7 @@ void wxTerminalViewCtrl::ClearAll() {
   Feed("\033[2J\033[3J");
   m_userSelection.Clear();
   m_mouseSelection.Clear();
+  ClearAppSelection();
   RefreshView();
 }
 
@@ -3175,6 +3199,7 @@ std::optional<wxRect> wxTerminalViewCtrl::SelectionRectFromMousePoint(
 
 void wxTerminalViewCtrl::OnMouseLeftDoubleClick(wxMouseEvent &evt) {
   m_ignoreNextLeftUp = false;
+  ClearAppSelection();
   // The second click of a double click arrives as a DCLICK instead of a DOWN
   // event (wxMSW, wxGTK and wxOSX all drop the DOWN), so report it as a press.
   if (ReportMouse(evt)) {
@@ -3446,4 +3471,18 @@ void wxTerminalViewCtrl::OnFeedTimer(wxTimerEvent &event) {
 
 std::optional<wxString> wxTerminalViewCtrl::GetMouseSelection() const {
   return MouseSelectionToString();
+}
+
+std::optional<wxString> wxTerminalViewCtrl::GetAppSelection() const {
+  return m_appSelection;
+}
+
+void wxTerminalViewCtrl::ClearAppSelection() {
+  if (!m_appSelection.has_value()) {
+    return;
+  }
+  m_appSelection.reset();
+  wxTerminalEvent event{wxEVT_TERMINAL_APP_SELECTION_CHANGED};
+  event.SetEventObject(this);
+  GetEventHandler()->AddPendingEvent(event);
 }

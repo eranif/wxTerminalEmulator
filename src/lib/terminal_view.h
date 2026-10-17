@@ -162,6 +162,18 @@ public:
   void PasteFromPrimarySelection();
   // Return the currently selected text or nullopt if there is no selection.
   std::optional<wxString> GetMouseSelection() const;
+  // Return the text that the running program last copied with OSC 52 (for
+  // example tmux or vim, which select text themselves while they track the
+  // mouse), or nullopt if there is none. It is set when the user copies in the
+  // program, not while they select. The text is only stored (and announced by
+  // wxEVT_TERMINAL_APP_SELECTION_CHANGED): the system clipboard is not
+  // written, so the application decides what to do with it.
+  std::optional<wxString> GetAppSelection() const;
+  // Forget the text returned by GetAppSelection(). It is also cleared on a left
+  // press or double click in the terminal, when the program stops tracking the
+  // mouse, and by ClearAll(). Fires wxEVT_TERMINAL_APP_SELECTION_CHANGED (empty
+  // string) if there was text.
+  void ClearAppSelection();
 
   enum SearchFlags {
     kForward = 1 << 0,
@@ -606,6 +618,8 @@ private:
   terminal::TerminalCore m_core;
   std::unique_ptr<terminal::PtyBackend> m_backend;
   LinearSelection m_mouseSelection{};
+  // The text the program last copied with OSC 52.
+  std::optional<wxString> m_appSelection;
   ApiSelection m_userSelection;
   bool m_isDragging{false};
   // Mouse buttons (bit 1 left, 2 middle, 4 right) whose press went to the

@@ -176,6 +176,14 @@ public:
   void SetCwdCallback(std::function<void(const std::string &)> callback) {
     m_cwdCallback = callback;
   }
+  // Called with the decoded text when the program sends OSC 52 to set the
+  // clipboard (for example tmux or vim after the user copies text). The core
+  // only reports the text: it does not write the system clipboard. Clipboard
+  // read requests (OSC 52 with "?") are ignored. Texts over about 3 KB arrive
+  // cut (libtsm OSC_MAX_LEN, 4 KB), and may not be valid UTF-8.
+  void SetClipboardCallback(std::function<void(const std::string &)> callback) {
+    m_clipboardCallback = callback;
+  }
   void SetBellCallback(std::function<void()> callback) {
     m_bellCallback = callback;
   }
@@ -301,6 +309,7 @@ private:
   std::function<void(const std::string &)> m_responseCallback;
   std::function<void(const std::string &)> m_titleCallback;
   std::function<void(const std::string &)> m_cwdCallback;
+  std::function<void(const std::string &)> m_clipboardCallback;
   std::function<void()> m_bellCallback;
   std::function<void(bool entered)> m_altScreenCallback;
   std::function<void(bool tracking)> m_mouseTrackingCallback;

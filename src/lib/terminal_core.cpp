@@ -4,6 +4,8 @@
 #include <cctype>
 #include <cstring>
 
+#include <wx/base64.h>
+#include <wx/buffer.h>
 #include <wx/string.h>
 
 #include "libtsm.h"
@@ -567,6 +569,27 @@ void TerminalCore::TsmOscCb(struct tsm_vte * /*vte*/, const char *u8,
       path = path.substr(1, path.size() - 2);
     if (!path.empty() && self->m_cwdCallback)
       self->m_cwdCallback(path);
+    return;
+  }
+
+  // OSC 52;<targets>;<base64> — the program asks to set the clipboard. Only
+  // writes are supported: a query ("?") would let a program read the
+  // clipboard. libtsm drops OSC bytes past OSC_MAX_LEN (4 KB), so a larger
+  // copy (over about 3 KB of text) arrives cut; the view ignores text that is
+  // no longer valid UTF-8.
+  if (osc.rfind("52;", 0) == 0) {
+    const auto dataPos = osc.find(';', 3);
+    if (dataPos == std::string::npos || !self->m_clipboardCallback)
+      return;
+    const std::string payload = osc.substr(dataPos + 1);
+    if (payload.empty() || payload == "?")
+      return;
+    const wxMemoryBuffer decoded = wxBase64Decode(
+        payload.data(), payload.size(), wxBase64DecodeMode_SkipWS);
+    if (decoded.GetDataLen() == 0)
+      return;
+    self->m_clipboardCallback(std::string(
+        static_cast<const char *>(decoded.GetData()), decoded.GetDataLen()));
   }
 }
 

@@ -203,6 +203,9 @@ public:
   void OnCwdChanged(wxTerminalEvent &event);
   // Show the directory of the active terminal in the status bar.
   void UpdateDirectoryStatus();
+  void OnAppSelectionChanged(wxTerminalEvent &event);
+  // Show the text the program in the active terminal copied with OSC 52.
+  void UpdateAppSelectionStatus();
   void OnTimer(wxTimerEvent &event);
   void Terminate();
   void PersistSettings();
