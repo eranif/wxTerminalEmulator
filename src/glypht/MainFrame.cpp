@@ -361,6 +361,17 @@ void MyFrame::BuildMenuBar() {
   auto *searchMenu = new wxMenu();
   searchMenu->Append(wxID_FORWARD, _("Next Tab\tCtrl-RIGHT"));
   searchMenu->Append(wxID_BACKWARD, _("Previous Tab\tCtrl-LEFT"));
+#ifdef __WXMAC__
+  // macOS takes Ctrl+Tab before the app sees a key event, but it does
+  // deliver menu shortcuts.
+  searchMenu->Append(ID_TabSwitcherNext, _("Switch Tab\tRawCtrl-TAB"));
+  searchMenu->Append(ID_TabSwitcherPrev,
+                     _("Switch Tab Backwards\tRawCtrl-Shift-TAB"));
+  Bind(wxEVT_MENU, [this](wxCommandEvent &) { ShowTabSwitcher(false); },
+       ID_TabSwitcherNext);
+  Bind(wxEVT_MENU, [this](wxCommandEvent &) { ShowTabSwitcher(true); },
+       ID_TabSwitcherPrev);
+#endif
   searchMenu->AppendSeparator();
   searchMenu->Append(ID_FindText, "Find Text...\tCtrl-F");
   menuBar->Append(searchMenu, "Search");
@@ -437,6 +448,7 @@ bool MyFrame::ShowTabSwitcher(bool backwards) {
     return false;
   }
   if (m_tabSwitcher) {
+    m_tabSwitcher->Advance(backwards ? -1 : 1);
     return true;
   }
 

@@ -44,9 +44,18 @@ TabSwitcherDlg::TabSwitcherDlg(wxWindow *parent, std::vector<Item> items,
 TabSwitcherDlg::~TabSwitcherDlg() { wxEvtHandler::RemoveFilter(this); }
 
 int TabSwitcherDlg::FilterEvent(wxEvent &event) {
-  if (!m_done && event.GetEventType() == wxEVT_KEY_UP &&
-      static_cast<wxKeyEvent &>(event).GetKeyCode() == WXK_RAW_CONTROL) {
+  if (m_done) {
+    return Event_Skip;
+  }
+  const auto type = event.GetEventType();
+  auto &key = static_cast<wxKeyEvent &>(event);
+  if (type == wxEVT_KEY_UP && key.GetKeyCode() == WXK_RAW_CONTROL) {
     Finish(true);
+  } else if (type == wxEVT_CHAR_HOOK && key.GetKeyCode() == WXK_TAB) {
+    // On macOS the native list may swallow Ctrl+Tab before our own handler
+    // sees it, so take it here, where every key event passes first.
+    MoveSelection(key.ShiftDown() ? -1 : 1);
+    return Event_Processed;
   }
   return Event_Skip;
 }

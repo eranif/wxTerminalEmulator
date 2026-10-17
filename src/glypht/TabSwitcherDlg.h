@@ -38,6 +38,8 @@ public:
   void FocusList() { m_list->SetFocus(); }
   wxSize GetSavedSize() const { return GetClientSize(); }
 
+  void Advance(int delta) { MoveSelection(delta); }
+
 private:
   void OnCharHook(wxKeyEvent &event);
   void OnActivate(wxActivateEvent &event);

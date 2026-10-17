@@ -149,6 +149,8 @@ public:
     ID_SendInput,
     ID_NewTerminal,
     ID_FindText,
+    ID_TabSwitcherNext,
+    ID_TabSwitcherPrev,
     ID_CopyAll,
     ID_Exit
   };
