@@ -322,10 +322,10 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   Bind(wxEVT_KEY_DOWN, &wxTerminalViewCtrl::OnKeyDown, this);
   Bind(wxEVT_CHAR, &wxTerminalViewCtrl::OnChar, this);
   Bind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
+  Bind(wxEVT_RIGHT_DOWN, &wxTerminalViewCtrl::OnMouseRightDown, this);
   Bind(wxEVT_LEFT_DCLICK, &wxTerminalViewCtrl::OnMouseLeftDoubleClick, this);
   Bind(wxEVT_MIDDLE_DOWN, &wxTerminalViewCtrl::OnMiddleClickPaste, this);
   Bind(wxEVT_MIDDLE_DCLICK, &wxTerminalViewCtrl::OnMouse, this);
-  Bind(wxEVT_RIGHT_DOWN, &wxTerminalViewCtrl::OnMouse, this);
   Bind(wxEVT_RIGHT_DCLICK, &wxTerminalViewCtrl::OnMouse, this);
   Bind(wxEVT_MIDDLE_UP, &wxTerminalViewCtrl::OnMouse, this);
   Bind(wxEVT_RIGHT_UP, &wxTerminalViewCtrl::OnMouse, this);
@@ -445,10 +445,10 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   Unbind(wxEVT_KEY_DOWN, &wxTerminalViewCtrl::OnKeyDown, this);
   Unbind(wxEVT_CHAR, &wxTerminalViewCtrl::OnChar, this);
   Unbind(wxEVT_LEFT_DOWN, &wxTerminalViewCtrl::OnMouseLeftDown, this);
+  Unbind(wxEVT_RIGHT_DOWN, &wxTerminalViewCtrl::OnMouseRightDown, this);
   Unbind(wxEVT_LEFT_DCLICK, &wxTerminalViewCtrl::OnMouseLeftDoubleClick, this);
   Unbind(wxEVT_MIDDLE_DOWN, &wxTerminalViewCtrl::OnMiddleClickPaste, this);
   Unbind(wxEVT_MIDDLE_DCLICK, &wxTerminalViewCtrl::OnMouse, this);
-  Unbind(wxEVT_RIGHT_DOWN, &wxTerminalViewCtrl::OnMouse, this);
   Unbind(wxEVT_RIGHT_DCLICK, &wxTerminalViewCtrl::OnMouse, this);
   Unbind(wxEVT_MIDDLE_UP, &wxTerminalViewCtrl::OnMouse, this);
   Unbind(wxEVT_RIGHT_UP, &wxTerminalViewCtrl::OnMouse, this);
@@ -1973,6 +1973,14 @@ bool wxTerminalViewCtrl::ReportMouse(const wxMouseEvent &evt) {
   return owned;
 }
 
+void wxTerminalViewCtrl::OnMouseRightDown(wxMouseEvent &evt) {
+  // Always report: this records who owns the press (see OnContextMenu). Skip
+  // only when the application did not take it.
+  if (!ReportMouse(evt)) {
+    evt.Skip();
+  }
+}
+
 void wxTerminalViewCtrl::OnMouse(wxMouseEvent &evt) {
   ReportMouse(evt);
   evt.Skip();
@@ -2016,9 +2024,21 @@ void wxTerminalViewCtrl::OnMouseCaptureLost(wxMouseCaptureLostEvent &evt) {
 void wxTerminalViewCtrl::OnMouseLeftDown(wxMouseEvent &evt) {
   // Any new press ends the wait for a release that was lost with the capture.
   m_ignoreNextLeftUp = false;
-  const bool appOwned = ReportMouse(evt);
   evt.Skip();
 
+  // Let the owner take a link click before the application sees it.
+  if (m_textClickedFilter && IsLinkClick(evt)) {
+    auto clicked_text = GetTextFromMousePoint(evt.GetPosition());
+    if (clicked_text.has_value() &&
+        m_textClickedFilter(clicked_text->ToStdString(wxConvUTF8))) {
+      m_isDragging = false;
+      DoClickable(evt, false);
+      RefreshView(true);
+      return;
+    }
+  }
+
+  const bool appOwned = ReportMouse(evt);
   if (appOwned) {
     BeginAppOwnedPress();
     return;
@@ -3243,26 +3263,49 @@ void wxTerminalViewCtrl::UpdateCursor() {
                                      : wxCursor(wxCURSOR_IBEAM));
 }
 
-void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event, bool fire_event) {
-  ClearMouseSelection();
-  m_core.ClearClickedRange();
-
+std::optional<wxRect>
+wxTerminalViewCtrl::WordRectFromMousePoint(const wxPoint &pt) const {
   auto is_valid_char = [this](const wxUniChar &ch) -> bool {
     return !m_selectionDelimChars.contains(ch);
   };
 
-  auto res = SelectionRectFromMousePoint(event.GetPosition(),
-                                         std::move(is_valid_char));
+  auto res = SelectionRectFromMousePoint(pt, std::move(is_valid_char));
+  if (!res.has_value()) {
+    return std::nullopt;
+  }
+
+  // The rect is in view cells, convert the row to a buffer row.
+  wxRect rect = res.value();
+  rect.y = m_core.ViewStart() + rect.y;
+  return rect;
+}
+
+std::optional<wxString>
+wxTerminalViewCtrl::GetTextFromMousePoint(const wxPoint &pt) const {
+  auto rect = WordRectFromMousePoint(pt);
+  if (!rect.has_value()) {
+    return std::nullopt;
+  }
+
+  wxString text = m_core.GetTextRange(rect->y, rect->x, rect->width);
+  text.Trim().Trim(false);
+  if (text.empty()) {
+    return std::nullopt;
+  }
+  return text;
+}
+
+void wxTerminalViewCtrl::DoClickable(wxMouseEvent &event, bool fire_event) {
+  ClearMouseSelection();
+  m_core.ClearClickedRange();
+
+  auto res = WordRectFromMousePoint(event.GetPosition());
   if (!res.has_value()) {
     return;
   }
 
-  // rect is in pixels, convert it to cells.
-  wxRect selected_rect = res.value();
-  selected_rect.y = m_core.ViewStart() + selected_rect.y;
-
   // Remember the selected rect and fire an event.
-  m_core.SetClickedRange(selected_rect);
+  m_core.SetClickedRange(res.value());
   wxString clicked_text = m_core.GetClickedText();
   clicked_text.Trim().Trim(false);
 

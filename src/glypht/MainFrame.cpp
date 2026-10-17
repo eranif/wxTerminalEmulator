@@ -510,27 +510,33 @@ wxTerminalViewCtrl *MyFrame::GetActiveTerminalView() const {
 
 MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
                                         bool selectIt) {
-  auto *page = new MyTerminal(m_notebook, config.shellCommand,
-                              config.environment, config.workingDirectory);
-  m_notebook->AddPage(page, m_config.GetNewTabTitle(), selectIt);
-  m_tabMru.AddPage(page, selectIt);
-  ApplyThemeToTab(page);
+  auto *terminal = new MyTerminal(m_notebook, config.shellCommand,
+                                  config.environment, config.workingDirectory);
+  m_notebook->AddPage(terminal, m_config.GetNewTabTitle(), selectIt);
+  m_tabMru.AddPage(terminal, selectIt);
+  ApplyThemeToTab(terminal);
   m_config.SetSafeDrawingEnabled(m_config.IsSafeDrawingEnabled() ||
                                  wxTerminalViewCtrl::IsOpenGLEnabled());
-  page->EnableSafeDrawing(m_config.IsSafeDrawingEnabled());
+  terminal->EnableSafeDrawing(m_config.IsSafeDrawingEnabled());
   UpdateSafeDrawingMenuCheck();
-  page->RegisterKeyEventFilter([this](const wxKeyEvent &key) {
+  terminal->RegisterKeyEventFilter([this](const wxKeyEvent &key) {
     if (key.GetKeyCode() != WXK_TAB || !key.RawControlDown() || key.AltDown()) {
       return false;
     }
     return ShowTabSwitcher(key.ShiftDown());
   });
-  page->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
-  page->Bind(wxEVT_TERMINAL_TEXT_LINK, &MyFrame::OnTerminalLink, this);
-  page->Bind(wxEVT_TERMINAL_BELL, &MyFrame::OnBell, this);
-  page->Bind(wxEVT_TERMINAL_CWD_CHANGED, &MyFrame::OnCwdChanged, this);
-  page->EnsureStarted();
-  return page;
+
+  // A Ctrl/Cmd+CLICK on a word opens it as a link, even if the TUI app tracks
+  // the mouse. Blank cells are not offered, so the app still gets those.
+  terminal->RegisterTextClickedFilter(
+      [](const std::string &) -> bool { return true; });
+
+  terminal->Bind(wxEVT_TERMINAL_TERMINATED, &MyFrame::OnTerminated, this);
+  terminal->Bind(wxEVT_TERMINAL_TEXT_LINK, &MyFrame::OnTerminalLink, this);
+  terminal->Bind(wxEVT_TERMINAL_BELL, &MyFrame::OnBell, this);
+  terminal->Bind(wxEVT_TERMINAL_CWD_CHANGED, &MyFrame::OnCwdChanged, this);
+  terminal->EnsureStarted();
+  return terminal;
 }
 
 void MyFrame::UpdateSafeDrawingMenuCheck() {

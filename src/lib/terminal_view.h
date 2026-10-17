@@ -268,6 +268,15 @@ public:
     m_keyEventFilter = std::move(cb);
   }
 
+  /// A callback to be called whenever the user Ctrl/Cmd+Left-CLICK on a text in
+  /// the terminal. If the callback returns "true", the caller takes the
+  /// ownership on the event and the app running inside the terminal sees
+  /// nothing.
+  using TextClickedFilter = std::function<bool(const std::string &)>;
+  void RegisterTextClickedFilter(TextClickedFilter cb) {
+    m_textClickedFilter = std::move(cb);
+  }
+
   // Override to indicate this window can receive keyboard focus
   bool AcceptsFocus() const override { return true; }
   bool AcceptsFocusFromKeyboard() const override { return true; }
@@ -396,6 +405,7 @@ private:
   void OnMouseUp(wxMouseEvent &evt);
   /// Right/middle button events: report to libtsm and skip.
   void OnMouse(wxMouseEvent &evt);
+  void OnMouseRightDown(wxMouseEvent &evt);
   /// True if the application enabled mouse tracking and wants this event.
   /// Shift bypasses the application, so the user can still select text.
   bool AppOwnsMouse(const wxMouseEvent &evt) const;
@@ -478,9 +488,15 @@ private:
   bool ScrollViewportForSelection(int delta);
 
   void DoClickable(wxMouseEvent &event, bool fire_event);
-  /// Set the mouse cursor: an arrow while the program tracks the mouse, else the
-  /// I-beam.
+  /// Set the mouse cursor: an arrow while the program tracks the mouse, else
+  /// the I-beam.
   void UpdateCursor();
+
+  /// The word under the mouse as a rect in **buffer** coordinates (the row
+  /// includes the scrollback offset), or nullopt if there is no text there.
+  std::optional<wxRect> WordRectFromMousePoint(const wxPoint &pt) const;
+  /// The trimmed word under the mouse, or nullopt if there is none.
+  std::optional<wxString> GetTextFromMousePoint(const wxPoint &pt) const;
 
   struct ApiSelection {
     std::size_t row{0}, col{0}, endCol{0};
@@ -631,6 +647,7 @@ private:
   bool m_backendReady{false};
   OutputCallback m_outputCallback{nullptr};
   KeyEventFilter m_keyEventFilter{nullptr};
+  TextClickedFilter m_textClickedFilter{nullptr};
   std::atomic_bool m_refreshPending{false};
   size_t m_refreshRequested{0};
   size_t m_refreshExecuted{0};
