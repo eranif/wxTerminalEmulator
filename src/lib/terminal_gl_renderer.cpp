@@ -493,6 +493,10 @@ TerminalGLRenderer::RasterizeAndPack(char32_t ch, const wxFont &font,
   // the base font's line height in this very DC and scale by the exact ratio
   // needed. The glyph then fills the physical tile and is minified onto the
   // logical cell with GL_LINEAR, staying sharp on HiDPI displays.
+  // Offset that centres the visible pixels of a shrunk glyph or an emoji.
+  // Measured on the first render, reused by the second (white) render.
+  wxPoint inkShift{0, 0};
+  bool inkMeasured = false;
   auto render = [&](const wxColour &bg) -> wxImage {
     wxBitmap bmp(cellWPhys, cellHPhys, 32);
     {
@@ -523,17 +527,57 @@ TerminalGLRenderer::RasterizeAndPack(char32_t ch, const wxFont &font,
       if (!drawn) {
         dc.SetFont(scaledFont);
         wxPoint pos{0, 0};
-        if (isEmoji) {
-          // Emoji can be wider than the tile: shrink if needed, then centre
-          // them like the Direct2D path does.
-          wxSize extent = dc.GetTextExtent(text);
-          if (extent.x > cellWPhys) {
-            scaledFont = ScaleFont(scaledFont, double(cellWPhys) / extent.x);
-            dc.SetFont(scaledFont);
-            extent = dc.GetTextExtent(text);
-          }
+        // A glyph can be wider than the tile (emoji, or a symbol that the
+        // font draws wider than one cell): shrink it, or the tile clips it.
+        wxSize extent = dc.GetTextExtent(text);
+        bool shrunk = false;
+        if (extent.x > cellWPhys) {
+          shrunk = true;
+          scaledFont = ScaleFont(scaledFont, double(cellWPhys) / extent.x);
+          dc.SetFont(scaledFont);
+          extent = dc.GetTextExtent(text);
+        }
+        if (isEmoji || shrunk) {
+          // Centre emoji (like the Direct2D path does) and shrunk glyphs: the
+          // smaller font would otherwise sit at the top-left of the tile.
           pos.x = (cellWPhys - extent.x) / 2;
           pos.y = (cellHPhys - extent.y) / 2;
+          // GetTextExtent() is the advance box, not the ink. Fallback fonts
+          // often draw off-centre inside it, so centre the visible pixels.
+          if (!inkMeasured) {
+            inkMeasured = true;
+            wxBitmap probe(cellWPhys, cellHPhys, 32);
+            {
+              wxMemoryDC pdc(probe);
+              pdc.SetBackground(*wxBLACK_BRUSH);
+              pdc.Clear();
+              pdc.SetFont(scaledFont);
+              pdc.SetTextForeground(*wxWHITE);
+              pdc.SetBackgroundMode(wxBRUSHSTYLE_TRANSPARENT);
+              pdc.DrawText(text, pos);
+            }
+            const wxImage pimg = probe.ConvertToImage();
+            if (pimg.IsOk()) {
+              const unsigned char *d = pimg.GetData();
+              int minX = cellWPhys, maxX = -1, minY = cellHPhys, maxY = -1;
+              for (int y = 0; y < cellHPhys; ++y) {
+                for (int x = 0; x < cellWPhys; ++x) {
+                  const unsigned char *px = d + (y * cellWPhys + x) * 3;
+                  if (px[0] | px[1] | px[2]) {
+                    minX = std::min(minX, x);
+                    maxX = std::max(maxX, x);
+                    minY = std::min(minY, y);
+                    maxY = std::max(maxY, y);
+                  }
+                }
+              }
+              if (maxX >= minX && maxY >= minY) {
+                inkShift.x = (cellWPhys - (maxX - minX + 1)) / 2 - minX;
+                inkShift.y = (cellHPhys - (maxY - minY + 1)) / 2 - minY;
+              }
+            }
+          }
+          pos += inkShift;
         }
         dc.SetTextForeground(*wxWHITE);
         dc.SetTextBackground(bg);
