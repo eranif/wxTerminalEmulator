@@ -529,9 +529,13 @@ TerminalGLRenderer::RasterizeAndPack(char32_t ch, const wxFont &font,
         wxPoint pos{0, 0};
         // A glyph can be wider than the tile (emoji, or a symbol that the
         // font draws wider than one cell): shrink it, or the tile clips it.
+        // Never touch Latin-1 (U+0000-U+00FF): that is normal text, which
+        // must stay on the cell grid exactly as the font draws it. The same
+        // goes for any glyph that fits its tile: only emoji and glyphs that
+        // are too wide are resized and centred.
         wxSize extent = dc.GetTextExtent(text);
         bool shrunk = false;
-        if (extent.x > cellWPhys) {
+        if (ch > 0xFF && extent.x > cellWPhys) {
           shrunk = true;
           scaledFont = ScaleFont(scaledFont, double(cellWPhys) / extent.x);
           dc.SetFont(scaledFont);
