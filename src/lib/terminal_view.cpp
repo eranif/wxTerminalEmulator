@@ -2433,9 +2433,16 @@ void wxTerminalViewCtrl::OnCharHook(wxKeyEvent &evt) {
   // printed on the physical key, not the character the user typed, and they
   // can't represent umlauts or AltGr/Option symbols either. So we ask the OS
   // to translate the key through the layout that's actually active.
-  const bool isModifierKey = key == WXK_SHIFT || key == WXK_CONTROL ||
-                             key == WXK_RAW_CONTROL || key == WXK_ALT ||
-                             key == WXK_CAPITAL;
+  bool isModifierKey = key == WXK_SHIFT || key == WXK_CONTROL ||
+                       key == WXK_RAW_CONTROL || key == WXK_ALT ||
+                       key == WXK_CAPITAL;
+#ifdef __WXMAC__
+  // WXK_NONE is a modifier change with no real key. On macOS wxWidgets sends
+  // it as a key down for a flags-changed event that it cannot map, for example
+  // when the app becomes active again after Option+Tab. Its raw key code is
+  // often 0, which is the 'A' key, so translating it would type a stray "a".
+  isModifierKey = isModifierKey || key == WXK_NONE;
+#endif
 
 #ifdef __WXMAC__
   // On macOS, Option is used as the Meta key (ESC-prefix) for shell
