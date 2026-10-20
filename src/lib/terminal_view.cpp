@@ -3,6 +3,7 @@
 #include "keyboard_layout.h"
 
 #include "libtsm.h"
+#include "terminal_colour_glyph.h"
 #include "terminal_event.h"
 #include "terminal_logger.h"
 #include <algorithm>
@@ -625,9 +626,16 @@ wxTerminalViewCtrl::LayoutHeader() const {
     }
     // Keep it on one line: control characters are shown as a space.
     const char32_t shown = ch < 0x20 || ch == 0x7f ? U' ' : ch;
-    const int cols = static_cast<int>(tsm_ucs4_get_width(shown));
+    int cols = static_cast<int>(tsm_ucs4_get_width(shown));
     if (cols <= 0) {
       continue; // combining or zero-width: no cell of its own
+    }
+    // The emoji selector VS16 makes a symbol an emoji, which is two columns
+    // wide (the terminal does the same).
+    if (cols == 1 && i + 1 < m_headerText.length() &&
+        m_headerText[i + 1].GetValue() == 0xFE0F &&
+        terminal::IsEmojiGlyph(shown)) {
+      cols = 2;
     }
     int w = cols * m_charW;
     if (customFont) {
@@ -636,7 +644,7 @@ wxTerminalViewCtrl::LayoutHeader() const {
     if (x + w > width) {
       break;
     }
-    m_headerLayout.push_back({shown, x, w});
+    m_headerLayout.push_back({shown, x, w, cols > 1});
     x += w;
   }
   return m_headerLayout;
@@ -681,6 +689,18 @@ void wxTerminalViewCtrl::DrawHeader(wxDC &dc) {
     // Centre the glyph in the box it covers, like the cells of a row.
     const wxString text(wxUniChar(glyph.ch));
     const wxRect box{glyph.x, 0, glyph.w, textH};
+#ifdef __WXMSW__
+    // A wide emoji is drawn in colour with Direct2D, as in the terminal rows.
+    if (glyph.wide && terminal::IsEmojiGlyph(glyph.ch) &&
+        m_fallbackFont.IsOk()) {
+      if (auto *memDc = dynamic_cast<wxMemoryDC *>(&dc)) {
+        if (terminal::DrawColourGlyphD2D(*memDc, text, m_fallbackFont, fg,
+                                         box)) {
+          continue;
+        }
+      }
+    }
+#endif
     wxRect textRect{wxPoint{0, 0}, dc.GetTextExtent(text)};
     textRect = textRect.CentreIn(box);
     dc.DrawText(text, textRect.GetLeft(), textRect.GetTop());
@@ -1500,6 +1520,27 @@ void wxTerminalViewCtrl::RenderRowNoGrouping(
     }
 
     wxString cell_content(wxUniChar(cell.ch));
+#ifdef __WXMSW__
+    // GDI draws an emoji in one colour: draw it with Direct2D, which draws the
+    // colour glyph, scaled to fit its columns. Only a wide cell is an emoji
+    // (libtsm makes a symbol wide when it is followed by the emoji selector
+    // VS16): a symbol in one cell is text, drawn in the colour of the cell.
+    if (cell.cellWidth > 1 && terminal::IsEmojiGlyph(cell.ch)) {
+      if (auto *memDc = dynamic_cast<wxMemoryDC *>(&dc)) {
+        const wxFont &emojiFont =
+            m_fallbackFont.IsOk()
+                ? m_fallbackFont
+                : GetCachedFont(cell.attrs.bold, cell.attrs.underline);
+        const wxRect box{x, y, static_cast<int>(cell.cellWidth) * m_charW,
+                         m_charH};
+        if (terminal::DrawColourGlyphD2D(*memDc, cell_content, emojiFont,
+                                         cell.attrs.fgColor, box)) {
+          counters.draw_text_++;
+          continue;
+        }
+      }
+    }
+#endif
     const bool useFallback = UseFallbackFont(cell.ch);
     if (useFallback) {
       dc.SetFont(m_fallbackFont);

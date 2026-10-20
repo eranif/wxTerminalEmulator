@@ -336,6 +336,7 @@ private:
     char32_t ch;
     int x; ///< left edge in pixels
     int w; ///< width in pixels
+    bool wide; ///< covers more than one terminal column (an emoji, CJK)
   };
   const std::vector<HeaderGlyph> &LayoutHeader() const;
   /// Height in pixels of the text row of the header (without the separator).

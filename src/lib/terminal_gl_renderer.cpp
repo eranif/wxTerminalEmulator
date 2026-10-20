@@ -11,10 +11,7 @@
 #include <wx/bitmap.h>
 #include <wx/dcmemory.h>
 #include <wx/image.h>
-#ifdef __WXMSW__
-#include <memory>
-#include <wx/graphics.h>
-#endif
+#include "terminal_colour_glyph.h"
 
 // Platform GL headers.
 // • macOS  – OpenGL 3.2 core profile ships in the framework; no loader needed.
@@ -99,70 +96,8 @@ bool IsColourGlyphCandidate(char32_t ch) {
          (ch >= 0x3000 && ch <= 0x303F) || (ch >= 0x3290 && ch <= 0x32FF);
 }
 
-// True for emoji and symbol glyphs, which are drawn with the colour path and
-// fitted to their tile. This leaves out the CJK punctuation and circled
-// ideographs of IsColourGlyphCandidate: they have no colour.
-bool IsEmojiGlyph(char32_t ch) {
-  return ch > 0xFFFF || (ch >= 0x2300 && ch <= 0x23FF) ||
-         (ch >= 0x2600 && ch <= 0x27BF) || (ch >= 0x2B00 && ch <= 0x2BFF);
-}
-
-// The font with its size multiplied by `factor`.
-wxFont ScaleFont(wxFont font, double factor) {
-  const double pt = font.GetFractionalPointSize();
-  if (pt > 0 && factor > 0) {
-    font.SetFractionalPointSize(pt * factor);
-  }
-  return font;
-}
-
-#ifdef __WXMSW__
-// GDI draws emoji in one colour. Direct2D draws the colour glyph of the emoji
-// font, so use it for emoji. The glyph is scaled to the tile and centred in it.
-// Returns false if Direct2D is not available.
-//
-// The colour needs a wxWidgets whose Direct2D renderer draws colour fonts. It
-// was checked with the wxWidgets version of build.sh (WX_VERSION, v3.3.4). With
-// a renderer that does not, the result is grey and the caller treats it as a
-// normal glyph.
-bool DrawColourGlyphD2D(wxMemoryDC &dc, const wxString &text, wxFont font,
-                        int tileW, int tileH) {
-#if wxUSE_GRAPHICS_DIRECT2D
-  wxGraphicsRenderer *renderer = wxGraphicsRenderer::GetDirect2DRenderer();
-  if (!renderer) {
-    return false;
-  }
-  std::unique_ptr<wxGraphicsContext> gc{renderer->CreateContext(dc)};
-  if (!gc) {
-    return false;
-  }
-  wxDouble w = 0, h = 0;
-  gc->SetFont(font, *wxWHITE);
-  gc->GetTextExtent(text, &w, &h);
-  // Direct2D can convert points to pixels differently from GDI (for example on
-  // a HiDPI display), so make the line height match the tile first.
-  if (h > 0 && std::abs(h - tileH) > 1) {
-    font = ScaleFont(font, tileH / h);
-    gc->SetFont(font, *wxWHITE);
-    gc->GetTextExtent(text, &w, &h);
-  }
-  if (w > tileW) {
-    font = ScaleFont(font, tileW / w);
-    gc->SetFont(font, *wxWHITE);
-    gc->GetTextExtent(text, &w, &h);
-  }
-  gc->DrawText(text, (tileW - w) / 2, (tileH - h) / 2);
-  return true;
-#else
-  wxUnusedVar(dc);
-  wxUnusedVar(text);
-  wxUnusedVar(font);
-  wxUnusedVar(tileW);
-  wxUnusedVar(tileH);
-  return false;
-#endif
-}
-#endif // __WXMSW__
+using terminal::IsEmojiGlyph;
+using terminal::ScaleFont;
 
 // True if the white-on-black render has pixels that are not grey.
 bool HasColourPixels(const unsigned char *rgb, size_t pixelCount) {
@@ -531,7 +466,8 @@ TerminalGLRenderer::RasterizeAndPack(char32_t ch, const wxFont &font,
       bool drawn = false;
 #ifdef __WXMSW__
       if (isEmoji) {
-        drawn = DrawColourGlyphD2D(dc, text, scaledFont, cellWPhys, cellHPhys);
+        drawn = terminal::DrawColourGlyphD2D(
+            dc, text, scaledFont, *wxWHITE, wxRect(0, 0, cellWPhys, cellHPhys));
       }
 #endif
       if (!drawn) {
