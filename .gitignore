@@ -19,3 +19,7 @@
 compile_commands.json
 .kiro
 .DS_Store
+
+# Bundled ConPTY binaries
+!assets/conpty/**/*.dll
+!assets/conpty/**/*.exe

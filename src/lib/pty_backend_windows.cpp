@@ -40,6 +40,7 @@ using ClosePseudoConsoleDirectFn = void(WINAPI *)(HPCON);
 struct ConPtyApi {
   HMODULE hKernel{nullptr};
   HMODULE hKernelBase{nullptr};
+  HMODULE hBundled{nullptr};
   CreatePseudoConsoleFn CreatePseudoConsole{nullptr};
   ResizePseudoConsoleFn ResizePseudoConsole{nullptr};
   ClosePseudoConsoleFn ClosePseudoConsole{nullptr};
@@ -47,13 +48,55 @@ struct ConPtyApi {
   ResizePseudoConsoleDirectFn ResizePseudoConsoleDirect{nullptr};
   ClosePseudoConsoleDirectFn ClosePseudoConsoleDirect{nullptr};
 
+  // The ConPTY of Windows does not pass queries like OSC 11 to the terminal.
+  // The newer conpty.dll that is installed next to the executable does. It
+  // starts OpenConsole.exe from the same folder.
+  bool LoadBundled() {
+    wchar_t exePath[MAX_PATH];
+    const DWORD len = GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+    if (len == 0 || len >= MAX_PATH)
+      return false;
+
+    const std::filesystem::path dir =
+        std::filesystem::path(exePath).parent_path();
+    std::error_code ec;
+    if (!std::filesystem::exists(dir / L"OpenConsole.exe", ec))
+      return false;
+
+    HMODULE h = LoadLibraryW((dir / L"conpty.dll").c_str());
+    if (!h)
+      return false;
+
+    auto create = reinterpret_cast<CreatePseudoConsoleFn>(
+        GetProcAddress(h, "CreatePseudoConsole"));
+    auto resize = reinterpret_cast<ResizePseudoConsoleFn>(
+        GetProcAddress(h, "ResizePseudoConsole"));
+    auto close = reinterpret_cast<ClosePseudoConsoleFn>(
+        GetProcAddress(h, "ClosePseudoConsole"));
+    if (!create || !resize || !close) {
+      FreeLibrary(h);
+      return false;
+    }
+
+    hBundled = h;
+    CreatePseudoConsole = create;
+    ResizePseudoConsole = resize;
+    ClosePseudoConsole = close;
+    return true;
+  }
+
   bool Load() {
     static std::mutex loadMutex;
     std::lock_guard<std::mutex> lock(loadMutex);
 
     // Check again after acquiring lock
-    if (hKernel && hKernelBase)
+    if (hBundled || (hKernel && hKernelBase))
       return true;
+
+    if (LoadBundled()) {
+      TLOG_INFO() << "[Using the bundled conpty.dll]" << std::endl;
+      return true;
+    }
 
     if (!hKernel && !(hKernel = LoadLibraryW(L"kernel32.dll")))
       return false;
@@ -84,6 +127,10 @@ struct ConPtyApi {
   }
 
   ~ConPtyApi() {
+    if (hBundled) {
+      FreeLibrary(hBundled);
+      hBundled = nullptr;
+    }
     if (hKernel) {
       FreeLibrary(hKernel);
       hKernel = nullptr;

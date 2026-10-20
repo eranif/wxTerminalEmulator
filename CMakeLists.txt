@@ -300,6 +300,24 @@ if(BUILD_GLYPHT)
       COMMENT "Copying wxWidgets DLL next to glypht executable"
       VERBATIM)
 
+    # Copy the newer ConPTY (conpty.dll and OpenConsole.exe) next to the
+    # executable. See assets/conpty/README.md.
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")
+      set(_CONPTY_ARCH "arm64")
+    else()
+      set(_CONPTY_ARCH "x64")
+    endif()
+    add_custom_command(
+      TARGET glypht
+      POST_BUILD
+      COMMAND
+        ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/conpty/${_CONPTY_ARCH}/conpty.dll"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/conpty/${_CONPTY_ARCH}/OpenConsole.exe"
+        "$<TARGET_FILE_DIR:glypht>/"
+      COMMENT "Copying conpty.dll and OpenConsole.exe next to glypht executable"
+      VERBATIM)
+
     # Step 2: copy all transitive toolchain DLLs (MinGW runtime, GLEW, etc.) by
     # walking the import table of the exe against the toolchain bin dir.
     add_custom_command(
