@@ -166,7 +166,11 @@ public:
           std::optional<wxString> workingDirectory = std::nullopt);
   ~MyFrame() override;
 
-  void ShowTabMenu();
+  // Show the context menu of a tab. @p tabIdx is the tab that was clicked.
+  void ShowTabMenu(int tabIdx = wxNOT_FOUND);
+  // Ask for a text and show it as the header strip of a tab, with random
+  // colours. An empty text keeps the current header.
+  void SetTabHeader(size_t tabIdx);
   static std::optional<EnvironmentList> ParseEnvironmentList(const wxString &s);
   void BuildMenuBar();
   void OnNextTabUI(wxUpdateUIEvent &event);

@@ -279,7 +279,7 @@ one for keyboard layout translation).
 | Event | Fired When | Handler Signature |
 |-------|-----------|-------------------|
 | `wxEVT_TERMINAL_TITLE_CHANGED` | OSC 0/2 title sequence | `evt.GetTitle()` |
-| `wxEVT_TERMINAL_CWD_CHANGED` | OSC 7 or OSC 9;9 current directory | `evt.GetString()` (decoded path); also `GetCurrentDirectory()` |
+| `wxEVT_TERMINAL_CWD_CHANGED` | OSC 7 or OSC 9;9 current directory | `evt.GetString()` (decoded path); also `GetCurrentDir()` |
 | `wxEVT_TERMINAL_TERMINATED` | Child process exits | No payload |
 | `wxEVT_TERMINAL_TEXT_LINK` | Ctrl+click on text | `evt.GetClickedText()` |
 | `wxEVT_TERMINAL_BELL` | BEL character received | No payload |
@@ -326,7 +326,13 @@ one for keyboard layout translation).
    (`DrawColourGlyphD2D()` in `terminal_gl_renderer.cpp`) to get colour; it was
    checked with wxWidgets v3.3.4.
 
-9. **CI option name is stale**: the workflows still pass
+9. **Header strip**: `AddHeader()` reserves a strip above the grid. All pixel to
+   cell conversions must go through `HeaderHeight()`: `GetTerminalRect()` starts
+   below the header, `PointToCell()` and `ClampToGrid()` subtract it, and both
+   renderers start their rows (and the cursor) at `HeaderHeight()`. The header
+   is drawn by `DrawHeader()` (wxDC) and `DrawHeaderGL()`, from `LayoutHeader()`.
+
+10. **CI option name is stale**: the workflows still pass
    `-DBUILD_WXTERMINAL_DEMO=OFF`. That option no longer exists; the current name
    is `BUILD_GLYPHT`, so that CI job builds the demo anyway.
 

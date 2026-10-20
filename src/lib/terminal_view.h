@@ -106,7 +106,7 @@ public:
 
   /// Last directory the program reported with OSC 7 or OSC 9;9, or an empty
   /// string.
-  wxString GetCurrentDirectory() const { return m_currentDirectory; }
+  wxString GetCurrentDir() const { return m_currentDirectory; }
 
   static bool IsOpenGLEnabled();
 
@@ -301,7 +301,52 @@ public:
   // terminal is placed in a hidden window.
   inline void EnsureStarted() { InitialiseAndStart(nullptr); }
 
+  /// Reserve a strip at the top of the view and show `text` in it. The strip is
+  /// one text row high, followed by a thin separator line. It is not part of
+  /// the terminal: it is always visible (it never scrolls), the program in the
+  /// terminal does not see its rows (the terminal gets that many fewer rows),
+  /// and the mouse does not select or report anything over it. Calling it
+  /// again replaces the text.
+  ///
+  /// @param fg text colour; the default is the foreground of the theme.
+  /// @param bg background colour of the strip; the default is the theme
+  /// background, slightly lightened (or darkened) towards the foreground.
+  /// @param font font of the text; the default is the terminal font. With
+  /// another font the strip is as high as that font, and the text is laid out
+  /// with the width of its characters, not on the cell grid.
+  void AddHeader(const wxString &text, const wxColour &fg = wxNullColour,
+                 const wxColour &bg = wxNullColour,
+                 const wxFont &font = wxNullFont);
+  /// Remove the strip added by AddHeader() and give its rows back to the
+  /// terminal.
+  void RemoveHeader();
+  bool HasHeader() const { return m_hasHeader; }
+  const wxString &GetHeaderText() const { return m_headerText; }
+
 private:
+  /// Height in pixels of the header strip and its separator, 0 if there is no
+  /// header (or the font is not measured yet).
+  int HeaderHeight() const;
+  /// Called after the header changed: re-layout the terminal and repaint.
+  void OnHeaderChanged();
+  /// The header text laid out in pixels (the same layout for both renderers):
+  /// one entry per visible character, on the cell grid when the header uses
+  /// the terminal font. The result is cached.
+  struct HeaderGlyph {
+    char32_t ch;
+    int x; ///< left edge in pixels
+    int w; ///< width in pixels
+  };
+  const std::vector<HeaderGlyph> &LayoutHeader() const;
+  /// Height in pixels of the text row of the header (without the separator).
+  int HeaderTextHeight() const;
+  /// The effective colours of the header: its own or derived from the theme.
+  void GetHeaderColours(wxColour &bg, wxColour &fg, wxColour &separator) const;
+  void DrawHeader(wxDC &dc);
+#if USE_OPENGL
+  void DrawHeaderGL();
+#endif
+
   wxRect GetTerminalRect() const;
   wxSize GetTerminalSize() const;
   std::optional<wxString> MouseSelectionToString() const;
@@ -464,8 +509,8 @@ private:
     int col{0};  ///< first column of the character (its owner for a filler)
     int cols{1}; ///< columns covered: the width of a wide character, else 1
   };
-  /// Find the cell at column `x` of `row`. A cursor on the filler cell of a wide
-  /// character snaps to the wide cell that owns it.
+  /// Find the cell at column `x` of `row`. A cursor on the filler cell of a
+  /// wide character snaps to the wide cell that owns it.
   static CursorCellInfo CursorCellAt(const std::vector<terminal::Cell> &row,
                                      int x);
 
@@ -676,6 +721,17 @@ private:
 #endif
   std::unordered_set<wxChar> m_selectionDelimChars;
   bool m_hasFocusBorder{false};
+  bool m_hasHeader{false};
+  wxString m_headerText;
+  wxColour m_headerFg;       // invalid: use the theme
+  wxColour m_headerBg;       // invalid: derive from the theme
+  wxFont m_headerFont;       // invalid: use the terminal font
+  int m_headerFontHeight{0}; // line height of m_headerFont, in pixels
+  // Cache of LayoutHeader().
+  mutable std::vector<HeaderGlyph> m_headerLayout;
+  mutable bool m_headerLayoutValid{false};
+  mutable int m_headerLayoutWidth{0};
+  mutable int m_headerLayoutCharW{0};
   std::vector<wxString> m_pendingCommands;
   bool m_backendReady{false};
   OutputCallback m_outputCallback{nullptr};

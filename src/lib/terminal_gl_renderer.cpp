@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
+#include <string>
 #include <wx/bitmap.h>
 #include <wx/dcmemory.h>
 #include <wx/image.h>
@@ -417,8 +419,8 @@ void TerminalGLRenderer::AddSolidRect(int x, int y, int w, int h,
 
 void TerminalGLRenderer::AddGlyph(char32_t ch, bool bold, bool underlined,
                                   int x, int y, int cellW, int cellH,
-                                  const wxColour &fg) {
-  const GlyphInfo &g = GetGlyph(ch, bold, underlined, cellW, cellH);
+                                  const wxColour &fg, const wxFont *font) {
+  const GlyphInfo &g = GetGlyph(ch, bold, underlined, cellW, cellH, font);
   if (!g.ok)
     return;
 
@@ -437,7 +439,7 @@ void TerminalGLRenderer::AddGlyph(char32_t ch, bool bold, bool underlined,
 
 const TerminalGLRenderer::GlyphInfo &
 TerminalGLRenderer::GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,
-                             int cellH) {
+                             int cellH, const wxFont *customFont) {
   static const GlyphInfo kBlank{};
 
   // Whitespace contributes no glyph quad.
@@ -445,7 +447,14 @@ TerminalGLRenderer::GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,
     return kBlank;
   }
 
-  const std::uint64_t key = MakeKey(ch, bold, underlined, cellW);
+  std::uint64_t key = MakeKey(ch, bold, underlined, cellW);
+  if (customFont) {
+    // The tile also depends on the font and on the tile height (a custom font
+    // has its own line height), so mix both into the key.
+    const std::string desc = customFont->GetNativeFontInfoDesc().ToStdString() +
+                             "@" + std::to_string(cellH);
+    key ^= std::hash<std::string>{}(desc) * 0x9E3779B97F4A7C15ull;
+  }
   auto it = m_glyphs.find(key);
   if (it != m_glyphs.end()) {
     return it->second;
@@ -460,7 +469,8 @@ TerminalGLRenderer::GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,
   bool preferFallback{false};
 #endif
 
-  const wxFont &font = preferFallback         ? m_fontFallback
+  const wxFont &font = customFont             ? *customFont
+                       : preferFallback       ? m_fontFallback
                        : (bold && underlined) ? m_fontBoldUnderlined
                        : bold                 ? m_fontBold
                        : underlined           ? m_fontUnderlined

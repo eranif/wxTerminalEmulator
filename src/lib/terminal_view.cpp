@@ -530,11 +530,161 @@ wxRect wxTerminalViewCtrl::GetTerminalRect() const {
 
   wxRect r{GetSize()}; // this size is fixed - without or with the scrollbars.
   r.SetWidth(r.GetWidth() - kScrollbarWidth);
+  // The terminal grid starts below the header strip.
+  const int header = HeaderHeight();
+  r.SetY(header);
+  r.SetHeight(std::max(0, r.GetHeight() - header));
   return r;
 }
 
 wxSize wxTerminalViewCtrl::GetTerminalSize() const {
   return GetTerminalRect().GetSize();
+}
+
+int wxTerminalViewCtrl::HeaderTextHeight() const {
+  return m_headerFont.IsOk() ? m_headerFontHeight : m_charH;
+}
+
+int wxTerminalViewCtrl::HeaderHeight() const {
+  const int text = HeaderTextHeight();
+  if (!m_hasHeader || text <= 0) {
+    return 0;
+  }
+  // One text row, plus a one pixel separator line.
+  return text + 1;
+}
+
+void wxTerminalViewCtrl::AddHeader(const wxString &text, const wxColour &fg,
+                                   const wxColour &bg, const wxFont &font) {
+  m_headerText = text;
+  m_headerFg = fg;
+  m_headerBg = bg;
+  m_headerFont = font;
+  m_headerFontHeight = 0;
+  if (m_headerFont.IsOk()) {
+    wxClientDC dc(this);
+    dc.SetFont(m_headerFont);
+    m_headerFontHeight = dc.GetTextExtent("Xg").GetHeight();
+  }
+  m_hasHeader = true;
+  OnHeaderChanged();
+}
+
+void wxTerminalViewCtrl::RemoveHeader() {
+  if (!m_hasHeader) {
+    return;
+  }
+  m_hasHeader = false;
+  m_headerText.clear();
+  m_headerFont = wxNullFont;
+  OnHeaderChanged();
+}
+
+void wxTerminalViewCtrl::OnHeaderChanged() {
+  m_headerLayoutValid = false;
+  // The number of terminal rows depends on the header height.
+  SetTerminalSizeFromClient();
+  InvalidateRenderCache();
+  RefreshView(true);
+}
+
+const std::vector<wxTerminalViewCtrl::HeaderGlyph> &
+wxTerminalViewCtrl::LayoutHeader() const {
+  const int width = GetTerminalRect().GetWidth();
+  if (m_headerLayoutValid && m_headerLayoutWidth == width &&
+      m_headerLayoutCharW == m_charW) {
+    return m_headerLayout;
+  }
+  m_headerLayout.clear();
+  m_headerLayoutValid = true;
+  m_headerLayoutWidth = width;
+  m_headerLayoutCharW = m_charW;
+  if (!m_hasHeader || m_charW <= 0) {
+    return m_headerLayout;
+  }
+
+  // With the terminal font the text sits on the cell grid, one cell from the
+  // left edge. With another font the characters keep their own width.
+  const bool customFont = m_headerFont.IsOk();
+  wxClientDC dc(const_cast<wxTerminalViewCtrl *>(this));
+  if (customFont) {
+    dc.SetFont(m_headerFont);
+  }
+  int x = m_charW;
+  for (size_t i = 0; i < m_headerText.length(); ++i) {
+    char32_t ch = static_cast<char32_t>(m_headerText[i].GetValue());
+    // Where wxString is UTF-16 (Windows) a character above U+FFFF is a
+    // surrogate pair: join it into one code point.
+    if (ch >= 0xD800 && ch <= 0xDBFF && i + 1 < m_headerText.length()) {
+      const char32_t low =
+          static_cast<char32_t>(m_headerText[i + 1].GetValue());
+      if (low >= 0xDC00 && low <= 0xDFFF) {
+        ch = 0x10000 + ((ch - 0xD800) << 10) + (low - 0xDC00);
+        ++i;
+      }
+    }
+    // Keep it on one line: control characters are shown as a space.
+    const char32_t shown = ch < 0x20 || ch == 0x7f ? U' ' : ch;
+    const int cols = static_cast<int>(tsm_ucs4_get_width(shown));
+    if (cols <= 0) {
+      continue; // combining or zero-width: no cell of its own
+    }
+    int w = cols * m_charW;
+    if (customFont) {
+      w = dc.GetTextExtent(wxString(wxUniChar(shown))).GetWidth();
+    }
+    if (x + w > width) {
+      break;
+    }
+    m_headerLayout.push_back({shown, x, w});
+    x += w;
+  }
+  return m_headerLayout;
+}
+
+void wxTerminalViewCtrl::GetHeaderColours(wxColour &bg, wxColour &fg,
+                                          wxColour &separator) const {
+  const auto &theme = m_core.GetTheme();
+  auto blend = [](const wxColour &a, const wxColour &b, int percent) {
+    auto mix = [percent](int x, int y) { return x + (y - x) * percent / 100; };
+    return wxColour(mix(a.Red(), b.Red()), mix(a.Green(), b.Green()),
+                    mix(a.Blue(), b.Blue()));
+  };
+  fg = m_headerFg.IsOk() ? m_headerFg : theme.fg;
+  bg = m_headerBg.IsOk() ? m_headerBg : blend(theme.bg, theme.fg, 12);
+  separator = blend(bg, fg, 35);
+}
+
+void wxTerminalViewCtrl::DrawHeader(wxDC &dc) {
+  const int height = HeaderHeight();
+  if (height == 0) {
+    return;
+  }
+  const int textH = HeaderTextHeight();
+  wxColour bg, fg, separator;
+  GetHeaderColours(bg, fg, separator);
+  const int width = GetClientSize().GetWidth();
+
+  dc.SetPen(*wxTRANSPARENT_PEN);
+  dc.SetBrush(wxBrush(bg));
+  dc.DrawRectangle(0, 0, width, textH);
+  dc.SetBrush(wxBrush(separator));
+  dc.DrawRectangle(0, textH, width, height - textH);
+
+  dc.SetFont(m_headerFont.IsOk() ? m_headerFont : m_defaultFont);
+  dc.SetTextForeground(fg);
+  dc.SetBackgroundMode(wxBRUSHSTYLE_TRANSPARENT);
+  for (const auto &glyph : LayoutHeader()) {
+    if (glyph.ch == U' ') {
+      continue;
+    }
+    // Centre the glyph in the box it covers, like the cells of a row.
+    const wxString text(wxUniChar(glyph.ch));
+    const wxRect box{glyph.x, 0, glyph.w, textH};
+    wxRect textRect{wxPoint{0, 0}, dc.GetTextExtent(text)};
+    textRect = textRect.CentreIn(box);
+    dc.DrawText(text, textRect.GetLeft(), textRect.GetTop());
+  }
 }
 
 std::optional<wxString> wxTerminalViewCtrl::MouseSelectionToString() const {
@@ -921,10 +1071,12 @@ bool wxTerminalViewCtrl::HasActiveSelection() const {
 
 std::optional<wxPoint>
 wxTerminalViewCtrl::PointToCell(const wxPoint &pt) const {
-  if (m_charW <= 0 || m_charH <= 0 || pt.x < 0 || pt.y < 0) {
+  // The grid starts below the header: a point over the header is not a cell.
+  const int y = pt.y - HeaderHeight();
+  if (m_charW <= 0 || m_charH <= 0 || pt.x < 0 || y < 0) {
     return std::nullopt;
   }
-  return wxPoint{std::max(pt.x, 0) / m_charW, std::max(pt.y, 0) / m_charH};
+  return wxPoint{pt.x / m_charW, y / m_charH};
 }
 
 void wxTerminalViewCtrl::UpdateFontCache() {
@@ -1547,8 +1699,12 @@ void wxTerminalViewCtrl::OnPaintDC() {
     TLOG_DEBUG() << "Drawing " << rowCount << " lines" << std::endl;
   }
 
+  // The header strip is not part of the grid: draw it, then start the rows
+  // below it.
+  DrawHeader(dc);
+
   const wxBrush bgBrush(theme.bg);
-  int y = 0;
+  int y = HeaderHeight();
   for (int rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
     const auto &row = *viewArea[rowIdx];
     auto result = PrepareRowForDrawing(row, rowIdx);
@@ -1590,7 +1746,7 @@ void wxTerminalViewCtrl::OnPaintDC() {
   // viewport is visible
   if (cursorScreenRow >= 0) {
     int screenRow = cursorScreenRow;
-    int cy = screenRow * m_charH;
+    int cy = HeaderHeight() + screenRow * m_charH;
 
     CursorCellInfo cursorInfo;
     cursorInfo.col = cursor.x;
@@ -1748,7 +1904,8 @@ void wxTerminalViewCtrl::OnPaintGL() {
 
   // GL renders the whole visible grid each frame (no incremental backing
   // store); the batched two-pass draw makes this cheap.
-  int y = 0;
+  DrawHeaderGL();
+  int y = HeaderHeight();
   for (int rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
     RenderRowGL(y, rowIdx, *viewArea[rowIdx], theme.bg);
     y += m_charH;
@@ -1756,7 +1913,7 @@ void wxTerminalViewCtrl::OnPaintGL() {
 
   // Cursor (block caret), drawn after cells so it sits on top.
   if (cursorScreenRow >= 0) {
-    const int cy = cursorScreenRow * m_charH;
+    const int cy = HeaderHeight() + cursorScreenRow * m_charH;
 
     CursorCellInfo cursorInfo;
     cursorInfo.col = cursor.x;
@@ -1795,6 +1952,28 @@ void wxTerminalViewCtrl::OnPaintGL() {
   m_glRenderer.EndFrame();
   SwapBuffers();
   m_lastCursorScreenRow = cursorScreenRow;
+}
+
+void wxTerminalViewCtrl::DrawHeaderGL() {
+  const int height = HeaderHeight();
+  if (height == 0) {
+    return;
+  }
+  const int textH = HeaderTextHeight();
+  wxColour bg, fg, separator;
+  GetHeaderColours(bg, fg, separator);
+  const int width = GetClientSize().GetWidth();
+  const wxFont *font = m_headerFont.IsOk() ? &m_headerFont : nullptr;
+
+  m_glRenderer.AddSolidRect(0, 0, width, textH, bg);
+  m_glRenderer.AddSolidRect(0, textH, width, height - textH, separator);
+  for (const auto &glyph : LayoutHeader()) {
+    if (glyph.ch == U' ') {
+      continue;
+    }
+    m_glRenderer.AddGlyph(glyph.ch, false, false, glyph.x, 0, glyph.w, textH,
+                          fg, font);
+  }
 }
 
 void wxTerminalViewCtrl::PaintResizeOverlayGL() {
@@ -1874,8 +2053,10 @@ bool wxTerminalViewCtrl::AppOwnsMouse(const wxMouseEvent &evt) const {
 wxPoint wxTerminalViewCtrl::ClampToGrid(const wxPoint &pos) const {
   const int cols = std::max(static_cast<int>(m_core.Cols()), 1);
   const int rows = std::max(static_cast<int>(m_core.Rows()), 1);
+  // The result is relative to the top of the grid, not of the window.
   return {std::clamp(pos.x, 0, std::max(cols * m_charW - 1, 0)),
-          std::clamp(pos.y, 0, std::max(rows * m_charH - 1, 0))};
+          std::clamp(pos.y - HeaderHeight(), 0,
+                     std::max(rows * m_charH - 1, 0))};
 }
 
 namespace {
@@ -1975,10 +2156,14 @@ bool wxTerminalViewCtrl::ReportMouse(const wxMouseEvent &evt) {
   // the drag and the release that match its press, even if Shift changes
   // meanwhile.
   bool owned;
+  // Over the header strip the application owns nothing: it does not see the
+  // strip. (While a button is captured the mouse may leave the grid: that is
+  // clamped, not ignored.)
+  const bool inHeader = !HasCapture() && evt.GetY() < HeaderHeight();
   unsigned button = TsmButton(evt.GetButton());
   unsigned type = TSM_MOUSE_EVENT_PRESSED;
   if (evt.ButtonDown() || evt.ButtonDClick()) {
-    owned = AppOwnsMouse(evt);
+    owned = !inHeader && AppOwnsMouse(evt);
     if (const unsigned bit = AppOwnedBit(evt.GetButton())) {
       m_appOwnedButtons =
           owned ? (m_appOwnedButtons | bit) : (m_appOwnedButtons & ~bit);
@@ -2000,7 +2185,7 @@ bool wxTerminalViewCtrl::ReportMouse(const wxMouseEvent &evt) {
       button = 32 + TsmButton(held);
     } else {
       // A plain hover is reported as 3.
-      owned = AppOwnsMouse(evt);
+      owned = !inHeader && AppOwnsMouse(evt);
       button = 3;
     }
   }
@@ -2151,7 +2336,8 @@ void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
     return;
   }
 
-  int mouseY = evt.GetY();
+  // Relative to the top of the grid (below the header).
+  int mouseY = evt.GetY() - HeaderHeight();
   int rows = static_cast<int>(m_core.Rows());
   int clientH = rows * m_charH;
 
@@ -2165,7 +2351,7 @@ void wxTerminalViewCtrl::OnMouseMove(wxMouseEvent &evt) {
   // Clamp the cell position to valid viewport range
   int clampedY = std::clamp(mouseY, 0, clientH - 1);
   int clampedX = std::max(evt.GetX(), 0);
-  auto cell = PointToCell(wxPoint{clampedX, clampedY});
+  auto cell = PointToCell(wxPoint{clampedX, clampedY + HeaderHeight()});
   if (cell.has_value()) {
     if (!m_mouseSelection.active && cell.value() != m_mouseSelection.anchor) {
       m_mouseSelection.active = true;

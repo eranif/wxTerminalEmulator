@@ -1,7 +1,9 @@
 #include "MainFrame.h"
 #include "SettingsDlg.hpp"
 #include <algorithm>
+#include <random>
 #include <wx/choicdlg.h>
+#include <wx/image.h>
 #include <wx/msgdlg.h>
 #include <wx/xrc/xmlres.h>
 // The wxAUI layout serializer header (wx/aui/serializer.h) is pulled in
@@ -12,6 +14,19 @@ bool IsDark(const wxColour &c) {
   // Perceived luminance (ITU-R BT.601)
   double luminance = 0.299 * c.Red() + 0.587 * c.Green() + 0.114 * c.Blue();
   return luminance < 128.0;
+}
+
+// Random header colours: a random background, and white text on a dark
+// background or black text on a light one, so the text is always readable.
+void RandomHeaderColours(wxColour &fg, wxColour &bg) {
+  static std::mt19937 rng{std::random_device{}()};
+  std::uniform_real_distribution<double> hue(0.0, 1.0);
+  std::uniform_real_distribution<double> saturation(0.4, 0.8);
+  std::uniform_real_distribution<double> value(0.25, 1.0);
+  const auto rgb = wxImage::HSVtoRGB(
+      wxImage::HSVValue(hue(rng), saturation(rng), value(rng)));
+  bg = wxColour(rgb.red, rgb.green, rgb.blue);
+  fg = IsDark(bg) ? *wxWHITE : *wxBLACK;
 }
 
 // Status bar fields: 0 for messages, 1 for the directory of the active tab, 2
@@ -134,9 +149,10 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
         UpdateDirectoryStatus();
         UpdateAppSelectionStatus();
       });
-  m_notebook->Bind(
-      wxEVT_AUINOTEBOOK_TAB_RIGHT_UP,
-      [this](wxAuiNotebookEvent &event) { CallAfter(&MyFrame::ShowTabMenu); });
+  m_notebook->Bind(wxEVT_AUINOTEBOOK_TAB_RIGHT_UP,
+                   [this](wxAuiNotebookEvent &event) {
+                     CallAfter(&MyFrame::ShowTabMenu, event.GetSelection());
+                   });
   if (GetActiveTerminalView() && !command.empty()) {
     GetActiveTerminalView()->SendCommand(command);
   }
@@ -168,7 +184,7 @@ void MyFrame::SaveLayout() {
     // Prefer the directory the shell reported last. It is a local path only if
     // the shell is local, so a directory that does not exist here (for example
     // one on a remote host) is not saved.
-    info.workingDirectory = terminal->GetCurrentDirectory();
+    info.workingDirectory = terminal->GetCurrentDir();
     if (info.workingDirectory.empty() || !wxDirExists(info.workingDirectory)) {
       info.workingDirectory = terminal->GetWorkingDirectory();
       if (!wxDirExists(info.workingDirectory)) {
@@ -282,10 +298,40 @@ bool MyFrame::RestoreLayout() {
   return m_notebook->GetPageCount() > 0;
 }
 
-void MyFrame::ShowTabMenu() {
+void MyFrame::ShowTabMenu(int tabIdx) {
+  if (tabIdx == wxNOT_FOUND) {
+    tabIdx = m_notebook->HitTest(::wxGetMousePosition());
+  }
+  auto *clickedTerminal = tabIdx == wxNOT_FOUND
+                              ? nullptr
+                              : dynamic_cast<MyTerminal *>(m_notebook->GetPage(
+                                    static_cast<size_t>(tabIdx)));
+
   wxMenu menu;
   menu.Append(XRCID("rename-tab"), _("Set Label..."));
   menu.Append(wxID_CLEAR, _("Reset Label..."));
+  menu.AppendSeparator();
+  menu.Append(XRCID("set-header"), _("Set Header..."));
+  menu.Append(XRCID("remove-header"), _("Remove Header"));
+  menu.Enable(XRCID("set-header"), clickedTerminal != nullptr);
+  menu.Enable(XRCID("remove-header"),
+              clickedTerminal != nullptr && clickedTerminal->HasHeader());
+  menu.Bind(
+      wxEVT_MENU,
+      [this, tabIdx](wxCommandEvent &) {
+        if (tabIdx != wxNOT_FOUND) {
+          SetTabHeader(static_cast<size_t>(tabIdx));
+        }
+      },
+      XRCID("set-header"));
+  menu.Bind(
+      wxEVT_MENU,
+      [clickedTerminal](wxCommandEvent &) {
+        if (clickedTerminal) {
+          clickedTerminal->RemoveHeader();
+        }
+      },
+      XRCID("remove-header"));
   menu.Bind(
       wxEVT_MENU,
       [this](wxCommandEvent &) {
@@ -321,6 +367,21 @@ void MyFrame::ShowTabMenu() {
       },
       wxID_CLEAR);
   m_notebook->PopupMenu(&menu);
+}
+
+void MyFrame::SetTabHeader(size_t tabIdx) {
+  auto *terminal = dynamic_cast<MyTerminal *>(m_notebook->GetPage(tabIdx));
+  if (terminal == nullptr) {
+    return;
+  }
+  const wxString text = ::wxGetTextFromUser(_("Header text:"), _("Set Header"),
+                                            terminal->GetHeaderText(), this);
+  if (text.empty()) {
+    return;
+  }
+  wxColour fg, bg;
+  RandomHeaderColours(fg, bg);
+  terminal->AddHeader(text, fg, bg);
 }
 
 std::optional<EnvironmentList>
@@ -367,10 +428,12 @@ void MyFrame::BuildMenuBar() {
   searchMenu->Append(ID_TabSwitcherNext, _("Switch Tab\tRawCtrl-TAB"));
   searchMenu->Append(ID_TabSwitcherPrev,
                      _("Switch Tab Backwards\tRawCtrl-Shift-TAB"));
-  Bind(wxEVT_MENU, [this](wxCommandEvent &) { ShowTabSwitcher(false); },
-       ID_TabSwitcherNext);
-  Bind(wxEVT_MENU, [this](wxCommandEvent &) { ShowTabSwitcher(true); },
-       ID_TabSwitcherPrev);
+  Bind(
+      wxEVT_MENU, [this](wxCommandEvent &) { ShowTabSwitcher(false); },
+      ID_TabSwitcherNext);
+  Bind(
+      wxEVT_MENU, [this](wxCommandEvent &) { ShowTabSwitcher(true); },
+      ID_TabSwitcherPrev);
 #endif
   searchMenu->AppendSeparator();
   searchMenu->Append(ID_FindText, "Find Text...\tCtrl-F");
@@ -464,7 +527,7 @@ bool MyFrame::ShowTabSwitcher(bool backwards) {
     item.label = m_notebook->GetPageText(
         static_cast<size_t>(m_notebook->FindPage(page)));
     if (auto *view = dynamic_cast<wxTerminalViewCtrl *>(page)) {
-      item.directory = view->GetCurrentDirectory();
+      item.directory = view->GetCurrentDir();
     }
     item.page = page;
     items.push_back(std::move(item));
@@ -894,7 +957,7 @@ void MyFrame::UpdateDirectoryStatus() {
     return;
   }
   auto *view = GetActiveTerminalView();
-  statusBar->SetStatusText(view ? view->GetCurrentDirectory() : wxString{},
+  statusBar->SetStatusText(view ? view->GetCurrentDir() : wxString{},
                            kStatusFieldDirectory);
 }
 

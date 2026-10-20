@@ -65,9 +65,12 @@ public:
   /// Queue a solid colored rectangle (logical pixel coordinates).
   void AddSolidRect(int x, int y, int w, int h, const wxColour &color);
 
-  /// Queue a glyph drawn at the top-left of a logical cell rectangle.
+  /// Queue a glyph drawn at the top-left of a logical cell rectangle. With
+  /// @p font the glyph is drawn with that font instead of the terminal fonts
+  /// (the header strip uses it); @p bold and @p underlined are then ignored.
   void AddGlyph(char32_t ch, bool bold, bool underlined, int x, int y,
-                int cellW, int cellH, const wxColour &fg);
+                int cellW, int cellH, const wxColour &fg,
+                const wxFont *font = nullptr);
 
   /// Upload the queued geometry and issue the batched draw calls.
   void EndFrame();
@@ -92,7 +95,7 @@ private:
 
   // Look up (or rasterize + insert) a glyph for the given cell size.
   const GlyphInfo &GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,
-                            int cellH);
+                            int cellH, const wxFont *customFont = nullptr);
 
   // Rasterize a single glyph into a coverage buffer and pack it into the
   // atlas. Returns the resulting GlyphInfo.
