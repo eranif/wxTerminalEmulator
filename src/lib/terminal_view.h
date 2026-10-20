@@ -320,32 +320,71 @@ public:
   /// Remove the strip added by AddHeader() and give its rows back to the
   /// terminal.
   void RemoveHeader();
-  bool HasHeader() const { return m_hasHeader; }
-  const wxString &GetHeaderText() const { return m_headerText; }
+  bool HasHeader() const { return m_header.present; }
+  const wxString &GetHeaderText() const { return m_header.text; }
+
+  /// Like AddHeader(), for a strip at the bottom of the view. The separator
+  /// line is above the text. A view can have a header and a footer at the same
+  /// time.
+  void AddFooter(const wxString &text, const wxColour &fg = wxNullColour,
+                 const wxColour &bg = wxNullColour,
+                 const wxFont &font = wxNullFont);
+  /// Remove the strip added by AddFooter() and give its rows back to the
+  /// terminal.
+  void RemoveFooter();
+  bool HasFooter() const { return m_footer.present; }
+  const wxString &GetFooterText() const { return m_footer.text; }
 
 private:
-  /// Height in pixels of the header strip and its separator, 0 if there is no
-  /// header (or the font is not measured yet).
-  int HeaderHeight() const;
-  /// Called after the header changed: re-layout the terminal and repaint.
-  void OnHeaderChanged();
-  /// The header text laid out in pixels (the same layout for both renderers):
-  /// one entry per visible character, on the cell grid when the header uses
-  /// the terminal font. The result is cached.
-  struct HeaderGlyph {
+  /// The text of a header or footer laid out in pixels (the same layout for
+  /// both renderers): one entry per visible character, on the cell grid when
+  /// the strip uses the terminal font.
+  struct StripGlyph {
     char32_t ch;
-    int x; ///< left edge in pixels
-    int w; ///< width in pixels
+    int x;     ///< left edge in pixels
+    int w;     ///< width in pixels
     bool wide; ///< covers more than one terminal column (an emoji, CJK)
   };
-  const std::vector<HeaderGlyph> &LayoutHeader() const;
-  /// Height in pixels of the text row of the header (without the separator).
-  int HeaderTextHeight() const;
-  /// The effective colours of the header: its own or derived from the theme.
-  void GetHeaderColours(wxColour &bg, wxColour &fg, wxColour &separator) const;
-  void DrawHeader(wxDC &dc);
+  /// A strip of text above (header) or below (footer) the terminal grid.
+  struct Strip {
+    bool present{false};
+    wxString text;
+    wxColour fg;         // invalid: use the theme
+    wxColour bg;         // invalid: derive from the theme
+    wxFont font;         // invalid: use the terminal font
+    int fontHeight{0};   // line height of `font`, in pixels
+    // Cache of LayoutStrip().
+    mutable std::vector<StripGlyph> layout;
+    mutable bool layoutValid{false};
+    mutable int layoutWidth{0};
+    mutable int layoutCharW{0};
+  };
+  /// Where the parts of a strip are, in client coordinates.
+  struct StripRects {
+    wxRect text;
+    wxRect separator;
+  };
+
+  /// Height in pixels of the text row of a strip (without the separator).
+  int StripTextHeight(const Strip &strip) const;
+  /// Height in pixels of a strip with its separator, 0 if there is none (or the
+  /// font is not measured yet).
+  int StripHeight(const Strip &strip) const;
+  int HeaderHeight() const { return StripHeight(m_header); }
+  int FooterHeight() const { return StripHeight(m_footer); }
+  /// Set or remove a strip, then re-layout the terminal and repaint.
+  void SetStrip(Strip &strip, const wxString &text, const wxColour &fg,
+                const wxColour &bg, const wxFont &font);
+  void ClearStrip(Strip &strip);
+  void OnStripChanged();
+  const std::vector<StripGlyph> &LayoutStrip(const Strip &strip) const;
+  /// The effective colours of a strip: its own or derived from the theme.
+  void GetStripColours(const Strip &strip, wxColour &bg, wxColour &fg,
+                       wxColour &separator) const;
+  StripRects GetStripRects(const Strip &strip, bool footer) const;
+  void DrawStrip(wxDC &dc, const Strip &strip, bool footer);
 #if USE_OPENGL
-  void DrawHeaderGL();
+  void DrawStripGL(const Strip &strip, bool footer);
 #endif
 
   wxRect GetTerminalRect() const;
@@ -722,17 +761,8 @@ private:
 #endif
   std::unordered_set<wxChar> m_selectionDelimChars;
   bool m_hasFocusBorder{false};
-  bool m_hasHeader{false};
-  wxString m_headerText;
-  wxColour m_headerFg;       // invalid: use the theme
-  wxColour m_headerBg;       // invalid: derive from the theme
-  wxFont m_headerFont;       // invalid: use the terminal font
-  int m_headerFontHeight{0}; // line height of m_headerFont, in pixels
-  // Cache of LayoutHeader().
-  mutable std::vector<HeaderGlyph> m_headerLayout;
-  mutable bool m_headerLayoutValid{false};
-  mutable int m_headerLayoutWidth{0};
-  mutable int m_headerLayoutCharW{0};
+  Strip m_header;
+  Strip m_footer;
   std::vector<wxString> m_pendingCommands;
   bool m_backendReady{false};
   OutputCallback m_outputCallback{nullptr};

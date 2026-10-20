@@ -326,11 +326,13 @@ one for keyboard layout translation).
    (`DrawColourGlyphD2D()` in `terminal_gl_renderer.cpp`) to get colour; it was
    checked with wxWidgets v3.3.4.
 
-9. **Header strip**: `AddHeader()` reserves a strip above the grid. All pixel to
-   cell conversions must go through `HeaderHeight()`: `GetTerminalRect()` starts
-   below the header, `PointToCell()` and `ClampToGrid()` subtract it, and both
-   renderers start their rows (and the cursor) at `HeaderHeight()`. The header
-   is drawn by `DrawHeader()` (wxDC) and `DrawHeaderGL()`, from `LayoutHeader()`.
+9. **Header and footer strips**: `AddHeader()` and `AddFooter()` reserve a strip
+   above and below the grid (both are a `Strip`). All pixel to cell conversions
+   must go through `HeaderHeight()` and `FooterHeight()`: `GetTerminalRect()` is
+   between the strips, `PointToCell()` and `ClampToGrid()` subtract the header
+   (and ignore the footer), and both renderers start their rows (and the
+   cursor) at `HeaderHeight()`. A strip is drawn by `DrawStrip()` (wxDC) and
+   `DrawStripGL()`, from `LayoutStrip()`.
 
 10. **CI option name is stale**: the workflows still pass
    `-DBUILD_WXTERMINAL_DEMO=OFF`. That option no longer exists; the current name

@@ -531,10 +531,10 @@ wxRect wxTerminalViewCtrl::GetTerminalRect() const {
 
   wxRect r{GetSize()}; // this size is fixed - without or with the scrollbars.
   r.SetWidth(r.GetWidth() - kScrollbarWidth);
-  // The terminal grid starts below the header strip.
+  // The terminal grid is between the header and the footer strips.
   const int header = HeaderHeight();
   r.SetY(header);
-  r.SetHeight(std::max(0, r.GetHeight() - header));
+  r.SetHeight(std::max(0, r.GetHeight() - header - FooterHeight()));
   return r;
 }
 
@@ -542,83 +542,98 @@ wxSize wxTerminalViewCtrl::GetTerminalSize() const {
   return GetTerminalRect().GetSize();
 }
 
-int wxTerminalViewCtrl::HeaderTextHeight() const {
-  return m_headerFont.IsOk() ? m_headerFontHeight : m_charH;
+int wxTerminalViewCtrl::StripTextHeight(const Strip &strip) const {
+  return strip.font.IsOk() ? strip.fontHeight : m_charH;
 }
 
-int wxTerminalViewCtrl::HeaderHeight() const {
-  const int text = HeaderTextHeight();
-  if (!m_hasHeader || text <= 0) {
+int wxTerminalViewCtrl::StripHeight(const Strip &strip) const {
+  const int text = StripTextHeight(strip);
+  if (!strip.present || text <= 0) {
     return 0;
   }
   // One text row, plus a one pixel separator line.
   return text + 1;
 }
 
-void wxTerminalViewCtrl::AddHeader(const wxString &text, const wxColour &fg,
-                                   const wxColour &bg, const wxFont &font) {
-  m_headerText = text;
-  m_headerFg = fg;
-  m_headerBg = bg;
-  m_headerFont = font;
-  m_headerFontHeight = 0;
-  if (m_headerFont.IsOk()) {
+void wxTerminalViewCtrl::SetStrip(Strip &strip, const wxString &text,
+                                  const wxColour &fg, const wxColour &bg,
+                                  const wxFont &font) {
+  strip.text = text;
+  strip.fg = fg;
+  strip.bg = bg;
+  strip.font = font;
+  strip.fontHeight = 0;
+  if (strip.font.IsOk()) {
     wxClientDC dc(this);
-    dc.SetFont(m_headerFont);
-    m_headerFontHeight = dc.GetTextExtent("Xg").GetHeight();
+    dc.SetFont(strip.font);
+    strip.fontHeight = dc.GetTextExtent("Xg").GetHeight();
   }
-  m_hasHeader = true;
-  OnHeaderChanged();
+  strip.present = true;
+  OnStripChanged();
 }
 
-void wxTerminalViewCtrl::RemoveHeader() {
-  if (!m_hasHeader) {
+void wxTerminalViewCtrl::ClearStrip(Strip &strip) {
+  if (!strip.present) {
     return;
   }
-  m_hasHeader = false;
-  m_headerText.clear();
-  m_headerFont = wxNullFont;
-  OnHeaderChanged();
+  strip.present = false;
+  strip.text.clear();
+  strip.font = wxNullFont;
+  OnStripChanged();
 }
 
-void wxTerminalViewCtrl::OnHeaderChanged() {
-  m_headerLayoutValid = false;
-  // The number of terminal rows depends on the header height.
+void wxTerminalViewCtrl::OnStripChanged() {
+  m_header.layoutValid = false;
+  m_footer.layoutValid = false;
+  // The number of terminal rows depends on the height of the strips.
   SetTerminalSizeFromClient();
   InvalidateRenderCache();
   RefreshView(true);
 }
 
-const std::vector<wxTerminalViewCtrl::HeaderGlyph> &
-wxTerminalViewCtrl::LayoutHeader() const {
+void wxTerminalViewCtrl::AddHeader(const wxString &text, const wxColour &fg,
+                                   const wxColour &bg, const wxFont &font) {
+  SetStrip(m_header, text, fg, bg, font);
+}
+
+void wxTerminalViewCtrl::RemoveHeader() { ClearStrip(m_header); }
+
+void wxTerminalViewCtrl::AddFooter(const wxString &text, const wxColour &fg,
+                                   const wxColour &bg, const wxFont &font) {
+  SetStrip(m_footer, text, fg, bg, font);
+}
+
+void wxTerminalViewCtrl::RemoveFooter() { ClearStrip(m_footer); }
+
+const std::vector<wxTerminalViewCtrl::StripGlyph> &
+wxTerminalViewCtrl::LayoutStrip(const Strip &strip) const {
   const int width = GetTerminalRect().GetWidth();
-  if (m_headerLayoutValid && m_headerLayoutWidth == width &&
-      m_headerLayoutCharW == m_charW) {
-    return m_headerLayout;
+  if (strip.layoutValid && strip.layoutWidth == width &&
+      strip.layoutCharW == m_charW) {
+    return strip.layout;
   }
-  m_headerLayout.clear();
-  m_headerLayoutValid = true;
-  m_headerLayoutWidth = width;
-  m_headerLayoutCharW = m_charW;
-  if (!m_hasHeader || m_charW <= 0) {
-    return m_headerLayout;
+  strip.layout.clear();
+  strip.layoutValid = true;
+  strip.layoutWidth = width;
+  strip.layoutCharW = m_charW;
+  if (!strip.present || m_charW <= 0) {
+    return strip.layout;
   }
 
   // With the terminal font the text sits on the cell grid, one cell from the
   // left edge. With another font the characters keep their own width.
-  const bool customFont = m_headerFont.IsOk();
+  const bool customFont = strip.font.IsOk();
   wxClientDC dc(const_cast<wxTerminalViewCtrl *>(this));
   if (customFont) {
-    dc.SetFont(m_headerFont);
+    dc.SetFont(strip.font);
   }
   int x = m_charW;
-  for (size_t i = 0; i < m_headerText.length(); ++i) {
-    char32_t ch = static_cast<char32_t>(m_headerText[i].GetValue());
+  for (size_t i = 0; i < strip.text.length(); ++i) {
+    char32_t ch = static_cast<char32_t>(strip.text[i].GetValue());
     // Where wxString is UTF-16 (Windows) a character above U+FFFF is a
     // surrogate pair: join it into one code point.
-    if (ch >= 0xD800 && ch <= 0xDBFF && i + 1 < m_headerText.length()) {
-      const char32_t low =
-          static_cast<char32_t>(m_headerText[i + 1].GetValue());
+    if (ch >= 0xD800 && ch <= 0xDBFF && i + 1 < strip.text.length()) {
+      const char32_t low = static_cast<char32_t>(strip.text[i + 1].GetValue());
       if (low >= 0xDC00 && low <= 0xDFFF) {
         ch = 0x10000 + ((ch - 0xD800) << 10) + (low - 0xDC00);
         ++i;
@@ -632,8 +647,8 @@ wxTerminalViewCtrl::LayoutHeader() const {
     }
     // The emoji selector VS16 makes a symbol an emoji, which is two columns
     // wide (the terminal does the same).
-    if (cols == 1 && i + 1 < m_headerText.length() &&
-        m_headerText[i + 1].GetValue() == 0xFE0F &&
+    if (cols == 1 && i + 1 < strip.text.length() &&
+        strip.text[i + 1].GetValue() == 0xFE0F &&
         terminal::IsEmojiGlyph(shown)) {
       cols = 2;
     }
@@ -644,51 +659,64 @@ wxTerminalViewCtrl::LayoutHeader() const {
     if (x + w > width) {
       break;
     }
-    m_headerLayout.push_back({shown, x, w, cols > 1});
+    strip.layout.push_back({shown, x, w, cols > 1});
     x += w;
   }
-  return m_headerLayout;
+  return strip.layout;
 }
 
-void wxTerminalViewCtrl::GetHeaderColours(wxColour &bg, wxColour &fg,
-                                          wxColour &separator) const {
+void wxTerminalViewCtrl::GetStripColours(const Strip &strip, wxColour &bg,
+                                         wxColour &fg,
+                                         wxColour &separator) const {
   const auto &theme = m_core.GetTheme();
   auto blend = [](const wxColour &a, const wxColour &b, int percent) {
     auto mix = [percent](int x, int y) { return x + (y - x) * percent / 100; };
     return wxColour(mix(a.Red(), b.Red()), mix(a.Green(), b.Green()),
                     mix(a.Blue(), b.Blue()));
   };
-  fg = m_headerFg.IsOk() ? m_headerFg : theme.fg;
-  bg = m_headerBg.IsOk() ? m_headerBg : blend(theme.bg, theme.fg, 12);
+  fg = strip.fg.IsOk() ? strip.fg : theme.fg;
+  bg = strip.bg.IsOk() ? strip.bg : blend(theme.bg, theme.fg, 12);
   separator = blend(bg, fg, 35);
 }
 
-void wxTerminalViewCtrl::DrawHeader(wxDC &dc) {
-  const int height = HeaderHeight();
-  if (height == 0) {
+wxTerminalViewCtrl::StripRects
+wxTerminalViewCtrl::GetStripRects(const Strip &strip, bool footer) const {
+  const int height = StripHeight(strip);
+  const int textH = StripTextHeight(strip);
+  const int width = GetClientSize().GetWidth();
+  // The separator is on the side of the terminal grid: below the header, above
+  // the footer.
+  const int top = footer ? GetClientSize().GetHeight() - height : 0;
+  StripRects r;
+  r.text = wxRect(0, footer ? top + (height - textH) : top, width, textH);
+  r.separator = wxRect(0, footer ? top : top + textH, width, height - textH);
+  return r;
+}
+
+void wxTerminalViewCtrl::DrawStrip(wxDC &dc, const Strip &strip, bool footer) {
+  if (StripHeight(strip) == 0) {
     return;
   }
-  const int textH = HeaderTextHeight();
   wxColour bg, fg, separator;
-  GetHeaderColours(bg, fg, separator);
-  const int width = GetClientSize().GetWidth();
+  GetStripColours(strip, bg, fg, separator);
+  const StripRects rects = GetStripRects(strip, footer);
 
   dc.SetPen(*wxTRANSPARENT_PEN);
   dc.SetBrush(wxBrush(bg));
-  dc.DrawRectangle(0, 0, width, textH);
+  dc.DrawRectangle(rects.text);
   dc.SetBrush(wxBrush(separator));
-  dc.DrawRectangle(0, textH, width, height - textH);
+  dc.DrawRectangle(rects.separator);
 
-  dc.SetFont(m_headerFont.IsOk() ? m_headerFont : m_defaultFont);
+  dc.SetFont(strip.font.IsOk() ? strip.font : m_defaultFont);
   dc.SetTextForeground(fg);
   dc.SetBackgroundMode(wxBRUSHSTYLE_TRANSPARENT);
-  for (const auto &glyph : LayoutHeader()) {
+  for (const auto &glyph : LayoutStrip(strip)) {
     if (glyph.ch == U' ') {
       continue;
     }
     // Centre the glyph in the box it covers, like the cells of a row.
     const wxString text(wxUniChar(glyph.ch));
-    const wxRect box{glyph.x, 0, glyph.w, textH};
+    const wxRect box{glyph.x, rects.text.y, glyph.w, rects.text.height};
 #ifdef __WXMSW__
     // A wide emoji is drawn in colour with Direct2D, as in the terminal rows.
     if (glyph.wide && terminal::IsEmojiGlyph(glyph.ch) &&
@@ -1091,9 +1119,11 @@ bool wxTerminalViewCtrl::HasActiveSelection() const {
 
 std::optional<wxPoint>
 wxTerminalViewCtrl::PointToCell(const wxPoint &pt) const {
-  // The grid starts below the header: a point over the header is not a cell.
+  // The grid starts below the header: a point over the header (or over the
+  // footer) is not a cell.
   const int y = pt.y - HeaderHeight();
-  if (m_charW <= 0 || m_charH <= 0 || pt.x < 0 || y < 0) {
+  if (m_charW <= 0 || m_charH <= 0 || pt.x < 0 || y < 0 ||
+      pt.y >= GetClientSize().GetHeight() - FooterHeight()) {
     return std::nullopt;
   }
   return wxPoint{pt.x / m_charW, y / m_charH};
@@ -1740,9 +1770,10 @@ void wxTerminalViewCtrl::OnPaintDC() {
     TLOG_DEBUG() << "Drawing " << rowCount << " lines" << std::endl;
   }
 
-  // The header strip is not part of the grid: draw it, then start the rows
-  // below it.
-  DrawHeader(dc);
+  // The header and footer strips are not part of the grid: draw them, then
+  // start the rows below the header.
+  DrawStrip(dc, m_header, false);
+  DrawStrip(dc, m_footer, true);
 
   const wxBrush bgBrush(theme.bg);
   int y = HeaderHeight();
@@ -1945,7 +1976,8 @@ void wxTerminalViewCtrl::OnPaintGL() {
 
   // GL renders the whole visible grid each frame (no incremental backing
   // store); the batched two-pass draw makes this cheap.
-  DrawHeaderGL();
+  DrawStripGL(m_header, false);
+  DrawStripGL(m_footer, true);
   int y = HeaderHeight();
   for (int rowIdx = 0; rowIdx < rowCount; ++rowIdx) {
     RenderRowGL(y, rowIdx, *viewArea[rowIdx], theme.bg);
@@ -1995,25 +2027,26 @@ void wxTerminalViewCtrl::OnPaintGL() {
   m_lastCursorScreenRow = cursorScreenRow;
 }
 
-void wxTerminalViewCtrl::DrawHeaderGL() {
-  const int height = HeaderHeight();
-  if (height == 0) {
+void wxTerminalViewCtrl::DrawStripGL(const Strip &strip, bool footer) {
+  if (StripHeight(strip) == 0) {
     return;
   }
-  const int textH = HeaderTextHeight();
   wxColour bg, fg, separator;
-  GetHeaderColours(bg, fg, separator);
-  const int width = GetClientSize().GetWidth();
-  const wxFont *font = m_headerFont.IsOk() ? &m_headerFont : nullptr;
+  GetStripColours(strip, bg, fg, separator);
+  const StripRects rects = GetStripRects(strip, footer);
+  const wxFont *font = strip.font.IsOk() ? &strip.font : nullptr;
 
-  m_glRenderer.AddSolidRect(0, 0, width, textH, bg);
-  m_glRenderer.AddSolidRect(0, textH, width, height - textH, separator);
-  for (const auto &glyph : LayoutHeader()) {
+  m_glRenderer.AddSolidRect(rects.text.x, rects.text.y, rects.text.width,
+                            rects.text.height, bg);
+  m_glRenderer.AddSolidRect(rects.separator.x, rects.separator.y,
+                            rects.separator.width, rects.separator.height,
+                            separator);
+  for (const auto &glyph : LayoutStrip(strip)) {
     if (glyph.ch == U' ') {
       continue;
     }
-    m_glRenderer.AddGlyph(glyph.ch, false, false, glyph.x, 0, glyph.w, textH,
-                          fg, font);
+    m_glRenderer.AddGlyph(glyph.ch, false, false, glyph.x, rects.text.y,
+                          glyph.w, rects.text.height, fg, font);
   }
 }
 
@@ -2197,14 +2230,17 @@ bool wxTerminalViewCtrl::ReportMouse(const wxMouseEvent &evt) {
   // the drag and the release that match its press, even if Shift changes
   // meanwhile.
   bool owned;
-  // Over the header strip the application owns nothing: it does not see the
-  // strip. (While a button is captured the mouse may leave the grid: that is
-  // clamped, not ignored.)
-  const bool inHeader = !HasCapture() && evt.GetY() < HeaderHeight();
+  // Over the header or the footer strip the application owns nothing: it does
+  // not see the strips. (While a button is captured the mouse may leave the
+  // grid: that is clamped, not ignored.)
+  const bool inStrip =
+      !HasCapture() &&
+      (evt.GetY() < HeaderHeight() ||
+       evt.GetY() >= GetClientSize().GetHeight() - FooterHeight());
   unsigned button = TsmButton(evt.GetButton());
   unsigned type = TSM_MOUSE_EVENT_PRESSED;
   if (evt.ButtonDown() || evt.ButtonDClick()) {
-    owned = !inHeader && AppOwnsMouse(evt);
+    owned = !inStrip && AppOwnsMouse(evt);
     if (const unsigned bit = AppOwnedBit(evt.GetButton())) {
       m_appOwnedButtons =
           owned ? (m_appOwnedButtons | bit) : (m_appOwnedButtons & ~bit);
@@ -2226,7 +2262,7 @@ bool wxTerminalViewCtrl::ReportMouse(const wxMouseEvent &evt) {
       button = 32 + TsmButton(held);
     } else {
       // A plain hover is reported as 3.
-      owned = !inHeader && AppOwnsMouse(evt);
+      owned = !inStrip && AppOwnsMouse(evt);
       button = 3;
     }
   }

@@ -94,6 +94,7 @@ wxWidgets panel that provides the visual interface:
 - Auto-updates display with timer-based refresh
 - Supports safe drawing mode, buffer navigation, and line centering
 - `AddHeader(text, fg, bg, font)` / `RemoveHeader()`: a strip (one text row high; colours and font are optional) with a separator line at the top of the view. It is not part of the terminal: it never scrolls, the program gets that many fewer rows, and the mouse does not select or report over it. Works in both the OpenGL and the wxDC renderers
+- `AddFooter(text, fg, bg, font)` / `RemoveFooter()`: the same, at the bottom of the view (the separator line is above the text). A view can have both
 
 #### PTY Backend (`pty_backend.h`)
 Abstract interface for platform-specific pseudo-terminal implementations:

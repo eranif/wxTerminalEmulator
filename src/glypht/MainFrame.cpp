@@ -311,27 +311,39 @@ void MyFrame::ShowTabMenu(int tabIdx) {
   menu.Append(XRCID("rename-tab"), _("Set Label..."));
   menu.Append(wxID_CLEAR, _("Reset Label..."));
   menu.AppendSeparator();
-  menu.Append(XRCID("set-header"), _("Set Header..."));
-  menu.Append(XRCID("remove-header"), _("Remove Header"));
-  menu.Enable(XRCID("set-header"), clickedTerminal != nullptr);
-  menu.Enable(XRCID("remove-header"),
-              clickedTerminal != nullptr && clickedTerminal->HasHeader());
-  menu.Bind(
-      wxEVT_MENU,
-      [this, tabIdx](wxCommandEvent &) {
-        if (tabIdx != wxNOT_FOUND) {
-          SetTabHeader(static_cast<size_t>(tabIdx));
-        }
-      },
-      XRCID("set-header"));
-  menu.Bind(
-      wxEVT_MENU,
-      [clickedTerminal](wxCommandEvent &) {
-        if (clickedTerminal) {
-          clickedTerminal->RemoveHeader();
-        }
-      },
-      XRCID("remove-header"));
+  // The header and the footer have the same two items.
+  for (const bool footer : {false, true}) {
+    const int setId = XRCID(footer ? "set-footer" : "set-header");
+    const int removeId = XRCID(footer ? "remove-footer" : "remove-header");
+    menu.Append(setId, footer ? _("Set Footer...") : _("Set Header..."));
+    menu.Append(removeId, footer ? _("Remove Footer") : _("Remove Header"));
+    menu.Enable(setId, clickedTerminal != nullptr);
+    menu.Enable(removeId,
+                clickedTerminal != nullptr &&
+                    (footer ? clickedTerminal->HasFooter()
+                            : clickedTerminal->HasHeader()));
+    menu.Bind(
+        wxEVT_MENU,
+        [this, tabIdx, footer](wxCommandEvent &) {
+          if (tabIdx != wxNOT_FOUND) {
+            SetTabStrip(static_cast<size_t>(tabIdx), footer);
+          }
+        },
+        setId);
+    menu.Bind(
+        wxEVT_MENU,
+        [clickedTerminal, footer](wxCommandEvent &) {
+          if (!clickedTerminal) {
+            return;
+          }
+          if (footer) {
+            clickedTerminal->RemoveFooter();
+          } else {
+            clickedTerminal->RemoveHeader();
+          }
+        },
+        removeId);
+  }
   menu.Bind(
       wxEVT_MENU,
       [this](wxCommandEvent &) {
@@ -369,19 +381,25 @@ void MyFrame::ShowTabMenu(int tabIdx) {
   m_notebook->PopupMenu(&menu);
 }
 
-void MyFrame::SetTabHeader(size_t tabIdx) {
+void MyFrame::SetTabStrip(size_t tabIdx, bool footer) {
   auto *terminal = dynamic_cast<MyTerminal *>(m_notebook->GetPage(tabIdx));
   if (terminal == nullptr) {
     return;
   }
-  const wxString text = ::wxGetTextFromUser(_("Header text:"), _("Set Header"),
-                                            terminal->GetHeaderText(), this);
+  const wxString text = ::wxGetTextFromUser(
+      footer ? _("Footer text:") : _("Header text:"),
+      footer ? _("Set Footer") : _("Set Header"),
+      footer ? terminal->GetFooterText() : terminal->GetHeaderText(), this);
   if (text.empty()) {
     return;
   }
   wxColour fg, bg;
   RandomHeaderColours(fg, bg);
-  terminal->AddHeader(text, fg, bg);
+  if (footer) {
+    terminal->AddFooter(text, fg, bg);
+  } else {
+    terminal->AddHeader(text, fg, bg);
+  }
 }
 
 std::optional<EnvironmentList>
