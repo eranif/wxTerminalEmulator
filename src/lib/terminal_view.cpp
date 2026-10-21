@@ -2677,7 +2677,12 @@ void wxTerminalViewCtrl::OnCharHook(wxKeyEvent &evt) {
     }
     return;
   } else if (key == WXK_TAB) {
-    SendTab();
+    if (evt.ShiftDown()) {
+      // Back-tab (CBT), used by shells, vim, fzf and TUI forms.
+      SendInput("\x1b[Z");
+    } else {
+      SendTab();
+    }
     return;
   } else if (key == WXK_ESCAPE) {
     if (m_mouseSelection.HasSelection()) {
