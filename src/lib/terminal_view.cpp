@@ -410,6 +410,15 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     event.SetEventObject(this);
     GetEventHandler()->AddPendingEvent(event);
   });
+  m_core.SetProgressCallback([this](wxTerminalProgressState state, int value) {
+    m_progressState = state;
+    m_progressValue = value;
+    wxTerminalEvent event{wxEVT_TERMINAL_PROGRESS};
+    event.SetProgressState(state);
+    event.SetProgressValue(value);
+    event.SetEventObject(this);
+    GetEventHandler()->AddPendingEvent(event);
+  });
   m_core.SetClipboardCallback([this](const std::string &text) {
     // FromUTF8 gives an empty string for invalid UTF-8 (for example text cut
     // by the OSC length limit). Keep the old value then.

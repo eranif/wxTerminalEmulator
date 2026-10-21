@@ -285,6 +285,7 @@ one for keyboard layout translation).
 | `wxEVT_TERMINAL_BELL` | BEL character received | No payload |
 | `wxEVT_TERMINAL_APP_OWNS_MOUSE` | Program turns mouse tracking on (DECSET 9/1000/1002/1003) | No payload |
 | `wxEVT_TERMINAL_APP_RELEASE_MOUSE` | Program turns mouse tracking off, or the terminal is reset | No payload |
+| `wxEVT_TERMINAL_PROGRESS` | Program sets or clears a progress bar with OSC 9;4 | `evt.GetProgressState()` (`wxTerminalProgressState`), `evt.GetProgressValue()` (0-100), `evt.ShowProgress()` / `evt.HideProgress()` |
 | `wxEVT_TERMINAL_APP_SELECTION_CHANGED` | Program copies text with OSC 52, or the text is cleared | `evt.GetString()` (empty after a clear); also `GetAppSelection()` / `ClearAppSelection()` |
 
 ## Common Gotchas

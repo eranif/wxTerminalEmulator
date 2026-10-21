@@ -9,6 +9,8 @@
 #include "terminal_logger.h"
 #include "terminal_view.h"
 
+#include <wx/gauge.h>
+
 #include <deque>
 #include <optional>
 #include <vector>
@@ -209,6 +211,10 @@ public:
   void OnCwdChanged(wxTerminalEvent &event);
   // Show the directory of the active terminal in the status bar.
   void UpdateDirectoryStatus();
+  void OnProgress(wxTerminalEvent &event);
+  void PositionProgressGauge();
+  void UpdateProgressStatus();
+  wxGauge *m_progressGauge{nullptr};
   void OnAppSelectionChanged(wxTerminalEvent &event);
   // Show the text the program in the active terminal copied with OSC 52.
   void UpdateAppSelectionStatus();

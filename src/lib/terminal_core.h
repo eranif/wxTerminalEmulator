@@ -1,5 +1,6 @@
 #pragma once
 
+#include "terminal_event.h"
 #include "terminal_theme.h"
 #include "wx/colour.h"
 #include <cstddef>
@@ -184,6 +185,13 @@ public:
   void SetClipboardCallback(std::function<void(const std::string &)> callback) {
     m_clipboardCallback = callback;
   }
+  // Called with (state, value) when the program sends OSC 9;4 (progress bar,
+  // iTerm2 / ConEmu / Windows Terminal). Value is 0-100 (0 for the states
+  // Hidden and Indeterminate).
+  void SetProgressCallback(
+      std::function<void(wxTerminalProgressState, int)> callback) {
+    m_progressCallback = callback;
+  }
   void SetBellCallback(std::function<void()> callback) {
     m_bellCallback = callback;
   }
@@ -309,6 +317,7 @@ private:
   std::function<void(const std::string &)> m_responseCallback;
   std::function<void(const std::string &)> m_titleCallback;
   std::function<void(const std::string &)> m_cwdCallback;
+  std::function<void(wxTerminalProgressState, int)> m_progressCallback;
   std::function<void(const std::string &)> m_clipboardCallback;
   std::function<void()> m_bellCallback;
   std::function<void(bool entered)> m_altScreenCallback;

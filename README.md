@@ -57,6 +57,7 @@ All you need is **wxWidgets** and **CMake** — no third-party libraries are req
 - **Alternate screen buffer** support
 - **Scroll regions** and cursor save/restore handling
 - **OSC/CSI processing**, including title updates and terminal responses
+- **Progress bar (OSC 9;4)**, as in iTerm2, ConEmu and Windows Terminal: the program reports a state and a percent, the application draws the bar
 
 ### Platform Support
 - **Windows**: ConPTY-based backend with OpenGL rendering support
@@ -116,6 +117,8 @@ Custom wxWidgets events for terminal-specific notifications:
 - `wxEVT_TERMINAL_TEXT_LINK`: Fired when user Ctrl+clicks on text to select a token/link
   - The event carries the clicked text string for custom handling (e.g., opening URLs, file paths)
 - `wxEVT_TERMINAL_APP_OWNS_MOUSE` / `wxEVT_TERMINAL_APP_RELEASE_MOUSE`: Fired when the program in the terminal (tmux, vim, ...) starts or stops tracking the mouse. While it tracks the mouse the cursor is an arrow, and Shift gives the mouse back to the terminal
+- `wxEVT_TERMINAL_PROGRESS`: Fired when the program sets or clears a progress bar with OSC 9;4 (`ESC ] 9 ; 4 ; <state> ; <value> BEL`)
+  - `evt.GetProgressState()` returns a `wxTerminalProgressState` (`Hidden`, `Normal`, `Error`, `Indeterminate`, `Warning`) and `evt.GetProgressValue()` returns 0-100. `wxTerminalViewCtrl::GetProgressState()` / `GetProgressValue()` return the current values. `evt.ShowProgress()` / `evt.HideProgress()` are shortcuts for "state is not / is `Hidden`". The library does not draw the bar; the application does
 - `wxEVT_TERMINAL_APP_SELECTION_CHANGED`: Fired when the program copies text with OSC 52 (write only, `?` queries are ignored), or when that text is cleared (left press, mouse tracking stops, `ClearAll()`)
   - `evt.GetString()` holds the text (empty after a clear). `GetAppSelection()` returns the current text and `ClearAppSelection()` forgets it. The system clipboard is not written; the application decides what to do with the text. Copies over about 3 KB arrive cut (libtsm limits an OSC to 4 KB) and are ignored if they are no longer valid UTF-8
 
@@ -322,7 +325,19 @@ terminal->Bind(wxEVT_TERMINAL_TEXT_LINK, [](wxTerminalEvent& evt) {
     }
     // Add custom handling for file paths, error locations, etc.
 });
+
+// Handle progress (OSC 9;4)
+terminal->Bind(wxEVT_TERMINAL_PROGRESS, [](wxTerminalEvent& evt) {
+    if (evt.HideProgress()) {
+        // Hide the bar
+    } else { // evt.ShowProgress() is true
+        int percent = evt.GetProgressValue(); // 0-100
+        // Show the bar; Indeterminate means busy, no percent
+    }
+});
 ```
+
+Test it from a shell: `printf '\e]9;4;1;50\a'` shows 50%, `printf '\e]9;4;0\a'` hides the bar.
 
 ## GlyphT — Demo Application
 
@@ -343,6 +358,8 @@ The included demo application (`main.cpp`) showcases the library features:
   - Link click event handling with message box display
 - Multiple terminal tabs in a notebook control
 - Automatic terminal title updates
+- Progress bar in the status bar (OSC 9;4) for the active tab
+- Tab switcher dialog (Ctrl+Tab, most recently used first; on macOS it is a menu shortcut in the Search menu)
 - Process termination handling that closes tabs and exits when the last one closes
 - Command-line log level control
 - Optional shell override and environment list support

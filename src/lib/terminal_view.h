@@ -108,6 +108,10 @@ public:
   /// string.
   wxString GetCurrentDir() const { return m_currentDirectory; }
 
+  /// Progress the program reported with OSC 9;4. Value is 0-100.
+  wxTerminalProgressState GetProgressState() const { return m_progressState; }
+  int GetProgressValue() const { return m_progressValue; }
+
   static bool IsOpenGLEnabled();
 
   // Helper methods for sending special characters
@@ -753,6 +757,8 @@ private:
   std::optional<EnvironmentList> m_environment{std::nullopt};
   std::optional<std::string> m_workingDirectory{std::nullopt};
   wxString m_currentDirectory;
+  wxTerminalProgressState m_progressState{wxTerminalProgressState::Hidden};
+  int m_progressValue{0};
   bool m_safeDrawing{false};
 #if USE_TIMER_REFRESH
   std::atomic_bool m_needsRepaint{true};

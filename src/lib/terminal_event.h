@@ -2,6 +2,15 @@
 
 #include <wx/event.h>
 
+/// Progress bar state, set by the program with OSC 9;4.
+enum class wxTerminalProgressState {
+  Hidden = 0,        ///< No progress bar.
+  Normal = 1,        ///< Normal progress, value is 0-100.
+  Error = 2,         ///< Error, value is 0-100.
+  Indeterminate = 3, ///< Busy, no percent known.
+  Warning = 4,       ///< Warning or paused, value is 0-100.
+};
+
 class wxTerminalEvent : public wxCommandEvent {
 public:
   wxTerminalEvent(wxEventType type = wxEVT_NULL, int id = 0)
@@ -19,7 +28,27 @@ public:
   }
   const wxString &GetClickedText() const { return m_clickedText; }
 
+  void SetProgressState(wxTerminalProgressState state) {
+    m_progressState = state;
+  }
+  wxTerminalProgressState GetProgressState() const { return m_progressState; }
+
+  /// Progress value, 0-100.
+  void SetProgressValue(int value) { m_progressValue = value; }
+  int GetProgressValue() const { return m_progressValue; }
+
+  /// True if the progress bar should be shown (any state but Hidden).
+  bool ShowProgress() const {
+    return m_progressState != wxTerminalProgressState::Hidden;
+  }
+  /// True if the progress bar should be hidden.
+  bool HideProgress() const {
+    return m_progressState == wxTerminalProgressState::Hidden;
+  }
+
 private:
+  wxTerminalProgressState m_progressState{wxTerminalProgressState::Hidden};
+  int m_progressValue{0};
   wxString m_title;
   wxString m_clickedText;
 };
@@ -28,6 +57,10 @@ private:
 wxDECLARE_EVENT(wxEVT_TERMINAL_TITLE_CHANGED, wxTerminalEvent);
 /// Current directory changed (OSC 7 or OSC 9;9). GetString() holds the decoded path.
 wxDECLARE_EVENT(wxEVT_TERMINAL_CWD_CHANGED, wxTerminalEvent);
+/// The program set or cleared a progress bar with OSC 9;4. See
+/// GetProgressState() and GetProgressValue() of the event, and
+/// wxTerminalViewCtrl::GetProgressState() for the current state.
+wxDECLARE_EVENT(wxEVT_TERMINAL_PROGRESS, wxTerminalEvent);
 /// The program copied text with OSC 52, or the text was cleared. GetString()
 /// holds the text, or is empty after a clear. The current text is returned by
 /// wxTerminalViewCtrl::GetAppSelection().

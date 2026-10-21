@@ -33,7 +33,8 @@ void RandomHeaderColours(wxColour &fg, wxColour &bg) {
 // for the text the program in the active tab copied with OSC 52.
 constexpr int kStatusFieldDirectory = 1;
 constexpr int kStatusFieldAppSelection = 2;
-constexpr int kStatusFieldCount = 3;
+constexpr int kStatusFieldProgress = 3;
+constexpr int kStatusFieldCount = 4;
 
 // Text from a program is not trusted: make it a short single line.
 wxString ToStatusBarText(const wxString &text, size_t maxLen) {
@@ -102,8 +103,16 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   ApplyNativeAppTheme();
 
   CreateStatusBar(kStatusFieldCount);
-  const int statusWidths[kStatusFieldCount] = {-1, -2, -2};
+  const int statusWidths[kStatusFieldCount] = {-1, -2, -2, 160};
   SetStatusWidths(kStatusFieldCount, statusWidths);
+  m_progressGauge = new wxGauge(GetStatusBar(), wxID_ANY, 100,
+                                wxDefaultPosition, wxDefaultSize,
+                                wxGA_HORIZONTAL | wxGA_SMOOTH);
+  m_progressGauge->Hide();
+  GetStatusBar()->Bind(wxEVT_SIZE, [this](wxSizeEvent &event) {
+    event.Skip();
+    PositionProgressGauge();
+  });
   BuildMenuBar();
   long nbStyle = wxAUI_NB_DEFAULT_STYLE &
                  ~(wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS);
@@ -147,6 +156,7 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
           page->SetFocus();
         }
         UpdateDirectoryStatus();
+        UpdateProgressStatus();
         UpdateAppSelectionStatus();
       });
   m_notebook->Bind(wxEVT_AUINOTEBOOK_TAB_RIGHT_UP,
@@ -662,6 +672,7 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   terminal->Bind(wxEVT_TERMINAL_TEXT_LINK, &MyFrame::OnTerminalLink, this);
   terminal->Bind(wxEVT_TERMINAL_BELL, &MyFrame::OnBell, this);
   terminal->Bind(wxEVT_TERMINAL_CWD_CHANGED, &MyFrame::OnCwdChanged, this);
+  terminal->Bind(wxEVT_TERMINAL_PROGRESS, &MyFrame::OnProgress, this);
   terminal->Bind(wxEVT_TERMINAL_APP_SELECTION_CHANGED,
                  &MyFrame::OnAppSelectionChanged, this);
   terminal->EnsureStarted();
@@ -977,6 +988,46 @@ void MyFrame::UpdateDirectoryStatus() {
   auto *view = GetActiveTerminalView();
   statusBar->SetStatusText(view ? view->GetCurrentDir() : wxString{},
                            kStatusFieldDirectory);
+}
+
+void MyFrame::OnProgress(wxTerminalEvent &event) {
+  event.Skip();
+  // Tabs in the background must not change the active tab's bar.
+  if (event.GetEventObject() == GetActiveTerminalView()) {
+    UpdateProgressStatus();
+  }
+}
+
+void MyFrame::PositionProgressGauge() {
+  auto *statusBar = GetStatusBar();
+  if (!m_progressGauge || !statusBar) {
+    return;
+  }
+  wxRect rect;
+  if (statusBar->GetFieldRect(kStatusFieldProgress, rect)) {
+    rect.Deflate(2);
+    m_progressGauge->SetSize(rect);
+  }
+}
+
+void MyFrame::UpdateProgressStatus() {
+  if (!m_progressGauge) {
+    return;
+  }
+  auto *view = GetActiveTerminalView();
+  const auto state =
+      view ? view->GetProgressState() : wxTerminalProgressState::Hidden;
+  if (state == wxTerminalProgressState::Hidden) {
+    m_progressGauge->Hide();
+    return;
+  }
+  PositionProgressGauge();
+  if (state == wxTerminalProgressState::Indeterminate) {
+    m_progressGauge->Pulse();
+  } else {
+    m_progressGauge->SetValue(view->GetProgressValue());
+  }
+  m_progressGauge->Show();
 }
 
 void MyFrame::OnAppSelectionChanged(wxTerminalEvent &event) {

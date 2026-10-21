@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <cstring>
 
 #include <wx/base64.h>
@@ -558,6 +559,24 @@ void TerminalCore::TsmOscCb(struct tsm_vte * /*vte*/, const char *u8,
     std::string path = DecodeOsc7Uri(osc.substr(2));
     if (!path.empty() && self->m_cwdCallback)
       self->m_cwdCallback(path);
+    return;
+  }
+
+  // OSC 9;4;<state>;<value> — progress bar (ConEmu, Windows Terminal, iTerm2).
+  if (osc.rfind("9;4", 0) == 0 && (osc.size() == 3 || osc[3] == ';')) {
+    if (!self->m_progressCallback)
+      return;
+    int state = 0;
+    int value = 0;
+    const char *p = osc.c_str() + (osc.size() > 4 ? 4 : osc.size());
+    char *end = nullptr;
+    state = static_cast<int>(std::strtol(p, &end, 10));
+    if (end && *end == ';')
+      value = static_cast<int>(std::strtol(end + 1, nullptr, 10));
+    if (state < 0 || state > 4)
+      return;
+    self->m_progressCallback(static_cast<wxTerminalProgressState>(state),
+                             std::clamp(value, 0, 100));
     return;
   }
 
