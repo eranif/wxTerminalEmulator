@@ -95,11 +95,11 @@ bool PosixPtyBackend::Start(const std::string &command,
   bool hasEnv = environment.has_value();
   if (hasEnv) {
     TLOG_INFO() << "Starting with env: " << *environment << std::endl;
-    envp.reserve(environment->size() + 4);
+    envp.reserve(environment->size() + 5);
     bool hasLang = false;
     bool hasLcCtype = false;
     for (const auto &entry : *environment) {
-      if (entry.starts_with("TERM="))
+      if (entry.starts_with("TERM=") || entry.starts_with("ConEmuANSI="))
         continue;
       if (entry.starts_with("LANG="))
         hasLang = true;
@@ -109,7 +109,11 @@ bool PosixPtyBackend::Start(const std::string &command,
     }
     static constexpr char kTermEnv[] = "TERM=xterm-256color";
     static constexpr char kLangEnv[] = "LANG=en_US.UTF-8";
+    // Tells programs (for example Claude Code) that OSC 9;4 progress bars are
+    // supported.
+    static constexpr char kConEmuEnv[] = "ConEmuANSI=ON";
     envp.push_back(const_cast<char *>(kTermEnv));
+    envp.push_back(const_cast<char *>(kConEmuEnv));
     if (!hasLang && !hasLcCtype)
       envp.push_back(const_cast<char *>(kLangEnv));
     envp.push_back(nullptr);
@@ -147,6 +151,7 @@ bool PosixPtyBackend::Start(const std::string &command,
 #endif
     } else {
       setenv("TERM", "xterm-256color", 1);
+      setenv("ConEmuANSI", "ON", 1);
       execvp(shell_argv[0], shell_argv.data());
     }
     _exit(127);

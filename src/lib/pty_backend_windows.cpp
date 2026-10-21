@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <cwchar>
 #include <deque>
 #include <filesystem>
 #include <memory>
@@ -173,21 +174,34 @@ std::string GetDefaultShell() {
   return CMD_SHELL.ToStdString(wxConvUTF8);
 }
 
+// Names are case-insensitive on Windows.
+bool IsConEmuAnsiEntry(const std::wstring &entry) {
+  static constexpr wchar_t kName[] = L"ConEmuANSI=";
+  constexpr size_t kLen = (sizeof(kName) / sizeof(wchar_t)) - 1;
+  return entry.size() >= kLen && _wcsnicmp(entry.c_str(), kName, kLen) == 0;
+}
+
+// Builds the environment block for the child. It always contains
+// ConEmuANSI=ON, which tells programs (for example Claude Code) that OSC 9;4
+// progress bars are supported. Without a custom environment the block starts
+// from the environment of this process.
 std::vector<wchar_t>
 BuildEnvironmentBlock(const std::optional<PtyBackend::EnvironmentList> &env) {
-  if (!env.has_value())
-    return {};
-
-  if (env->empty())
-    return {L'\0', L'\0'};
-
   std::vector<std::wstring> envWide;
-  envWide.reserve(env->size());
+  if (env.has_value()) {
+    envWide.reserve(env->size() + 1);
+    for (const auto &entry : *env)
+      envWide.push_back(Utf8ToWide(entry));
+  } else if (wchar_t *current = GetEnvironmentStringsW()) {
+    for (const wchar_t *p = current; *p; p += wcslen(p) + 1)
+      envWide.emplace_back(p);
+    FreeEnvironmentStringsW(current);
+  }
+  std::erase_if(envWide, IsConEmuAnsiEntry);
+  envWide.emplace_back(L"ConEmuANSI=ON");
 
   std::vector<wchar_t> block;
-  for (const auto &entry : *env) {
-    envWide.push_back(Utf8ToWide(entry));
-    const auto &wide = envWide.back();
+  for (const auto &wide : envWide) {
     block.insert(block.end(), wide.begin(), wide.end());
     block.push_back(L'\0');
   }
