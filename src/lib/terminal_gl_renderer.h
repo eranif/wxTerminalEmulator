@@ -45,7 +45,10 @@ public:
   /// Compile the shader program and allocate the atlas texture + vertex
   /// buffers. Requires a current GL context. Returns false (and logs) on
   /// failure; subsequent frames become no-ops.
-  bool Init();
+  ///
+  /// With @p withGlyphs false there is no atlas: only AddSolidRect() can be
+  /// used (the progress bar draws nothing else). It saves the 4 MB texture.
+  bool Init(bool withGlyphs = true);
   void Destroy();
   bool IsInitialized() const { return m_program != 0; }
 

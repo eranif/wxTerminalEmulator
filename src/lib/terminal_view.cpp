@@ -648,6 +648,12 @@ void wxTerminalViewCtrl::AddFooter(const wxString &text, const wxColour &fg,
 
 void wxTerminalViewCtrl::RemoveFooter() { ClearStrip(m_footer); }
 
+// How often an indeterminate gauge is pulsed. The OpenGL gauge moves by the
+// time that passed, so it can be redrawn often: 120 Hz. The native wxGauge
+// does not need it. wxTimer has the resolution of the system timer, so on
+// Windows (about 15 ms) the real rate can be lower.
+static constexpr int kProgressPulseMs = USE_OPENGL ? 8 : 60;
+
 void wxTerminalViewCtrl::ShowProgressBar(bool show) {
   if (show == m_showProgressBar) {
     return;
@@ -662,8 +668,9 @@ void wxTerminalViewCtrl::ShowProgressBar(bool show) {
     if (!sizer || dynamic_cast<wxBookCtrlBase *>(parent)) {
       return;
     }
-    m_progress = new wxGauge(parent, wxID_ANY, 100, wxDefaultPosition,
-                             wxDefaultSize, wxGA_HORIZONTAL | wxGA_SMOOTH);
+    m_progress = new Gauge(parent, wxID_ANY, 100, wxDefaultPosition,
+                           wxDefaultSize, wxGA_HORIZONTAL | wxGA_SMOOTH);
+    ApplyProgressBarColours();
     // A thin bar, hidden until there is progress to show.
     m_progress->SetMinSize(wxSize(-1, FromDIP(4)));
     m_progress->SetMaxSize(wxSize(-1, FromDIP(4)));
@@ -679,6 +686,24 @@ void wxTerminalViewCtrl::ShowProgressBar(bool show) {
   }
   UpdateProgressBarVisibility(IsShown());
   OnProgressChanged();
+}
+
+void wxTerminalViewCtrl::ApplyProgressBarColours() {
+#if USE_OPENGL
+  if (!m_progress) {
+    return;
+  }
+  // The bar is the selection colour, which the theme makes visible on its
+  // background. The track is the background, a little towards the text colour:
+  // the same tint as the header and footer strips.
+  const auto &theme = m_core.GetTheme();
+  auto mix = [](int bg, int fg) { return bg + (fg - bg) * 12 / 100; };
+  m_progress->SetBackgroundColour(wxColour(
+      mix(theme.bg.Red(), theme.fg.Red()),
+      mix(theme.bg.Green(), theme.fg.Green()),
+      mix(theme.bg.Blue(), theme.fg.Blue())));
+  m_progress->SetForegroundColour(theme.selectionBg);
+#endif
 }
 
 void wxTerminalViewCtrl::UpdateProgressBarVisibility(bool viewShown) {
@@ -753,7 +778,7 @@ void wxTerminalViewCtrl::OnProgressChanged() {
     // Some ports move the gauge one step for each call.
     m_progress->Pulse();
     if (!m_progressTimer.IsRunning()) {
-      m_progressTimer.Start(60);
+      m_progressTimer.Start(kProgressPulseMs);
     }
     return;
   }
@@ -1202,6 +1227,7 @@ std::size_t wxTerminalViewCtrl::GetLastLine() const {
 
 void wxTerminalViewCtrl::SetTheme(const wxTerminalTheme &theme) {
   m_core.SetTheme(theme);
+  ApplyProgressBarColours();
   UpdateFontCache();
   m_charH = m_charW = 0; // This needs to be recalculated based on the new font.
   RefreshView();

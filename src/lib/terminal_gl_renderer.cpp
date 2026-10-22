@@ -121,7 +121,7 @@ TerminalGLRenderer::~TerminalGLRenderer() {
   Destroy();
 }
 
-bool TerminalGLRenderer::Init() {
+bool TerminalGLRenderer::Init(bool withGlyphs) {
   if (m_program != 0) {
     return true;
   }
@@ -192,6 +192,12 @@ bool TerminalGLRenderer::Init() {
   glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                         (void *)offsetof(Vertex, r));
   glBindVertexArray(0);
+
+  if (!withGlyphs) {
+    TLOG_DEBUG() << "TerminalGLRenderer initialized (solid quads only)"
+                 << std::endl;
+    return true;
+  }
 
   // Premultiplied RGBA atlas (see the fragment shader).
   m_atlasW = kAtlasSize;

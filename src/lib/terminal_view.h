@@ -9,6 +9,7 @@
 
 #include "pty_backend.h"
 #include "terminal_core.h"
+#include "terminal_gauge.h"
 #include "terminal_gl_renderer.h"
 #if USE_TIMER_REFRESH
 #include <thread>
@@ -30,7 +31,6 @@
 #include <optional>
 #include <unordered_set>
 #include <wx/arrstr.h>
-#include <wx/gauge.h>
 #include <wx/sizer.h>
 #include <wx/weakref.h>
 #include <wx/wupdlock.h>
@@ -348,11 +348,13 @@ public:
   bool HasFooter() const { return m_footer.present; }
   const wxString &GetFooterText() const { return m_footer.text; }
 
-  /// Show a thin, native progress bar (a wxGauge) next to the view. It shows
-  /// the progress the program reports with OSC 9;4, or else with OSC 7501 (a
-  /// working or blocked program): a bar with a percent, or a moving bar when
-  /// there is no percent. The colour of the gauge is the one of the system, so
-  /// an error or a warning does not change it.
+  /// Show a thin progress bar next to the view. It is a Gauge: the native
+  /// wxGauge, or, when OpenGL is used (USE_OPENGL), a gauge drawn with OpenGL
+  /// (see terminal_gauge.h). It shows the progress the program reports with
+  /// OSC 9;4, or else with OSC 7501 (a working or blocked program): a bar with
+  /// a percent, or a moving bar when there is no percent. The native gauge has
+  /// the colour of the system; the OpenGL gauge uses the colours of the theme.
+  /// An error or a warning does not change the colour.
   ///
   /// The gauge is a child of the parent window, added to the sizer of the
   /// parent: call this after the parent has its sizer, which is normally
@@ -412,6 +414,8 @@ private:
   void GetEffectiveProgress(wxTerminalProgressState &state, int &value) const;
   /// Update the gauge after the progress changed.
   void OnProgressChanged();
+  /// Give the OpenGL gauge the colours of the theme (the native one has none).
+  void ApplyProgressBarColours();
   /// Show the gauge only while the bar is enabled, the view is shown and there
   /// is progress to show.
   void UpdateProgressBarVisibility(bool viewShown);
@@ -867,7 +871,7 @@ private:
   wxTimer m_feedTimer;
   wxTimer
       m_progressTimer; // moves the gauge while the progress is indeterminate
-  wxGauge *m_progress{nullptr};
+  Gauge *m_progress{nullptr};
   bool m_showProgressBar{false};
   std::mutex m_feedMutex;
   std::string m_feedBuffer;
