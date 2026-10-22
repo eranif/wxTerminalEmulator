@@ -348,23 +348,24 @@ public:
   bool HasFooter() const { return m_footer.present; }
   const wxString &GetFooterText() const { return m_footer.text; }
 
-  /// Show a thin, native progress bar (a wxGauge) above the view. It shows the
-  /// progress the program reports with OSC 9;4, or else with OSC 7501 (a
+  /// Show a thin, native progress bar (a wxGauge) next to the view. It shows
+  /// the progress the program reports with OSC 9;4, or else with OSC 7501 (a
   /// working or blocked program): a bar with a percent, or a moving bar when
   /// there is no percent. The colour of the gauge is the one of the system, so
   /// an error or a warning does not change it.
   ///
-  /// The gauge is a child of the parent window, inserted at the start of the
-  /// sizer of the parent: call this after the parent has its sizer, which is
-  /// normally vertical. Nothing happens, and IsShowProgressBar() stays false,
-  /// when the parent has no sizer, or when the parent is a wxBookCtrlBase (a
-  /// notebook: its pages share the parent).
+  /// The gauge is a child of the parent window, added to the sizer of the
+  /// parent: call this after the parent has its sizer, which is normally
+  /// vertical. Nothing happens, and IsShowProgressBar() stays false, when the
+  /// parent has no sizer, or when the parent is a wxBookCtrlBase (a notebook:
+  /// its pages share the parent).
   ///
   /// The gauge is created once, the first time the bar is shown. After that
-  /// ShowProgressBar() only shows or hides it, and it is also hidden while the
-  /// view is hidden. While the bar is shown the gauge stays, empty when there
-  /// is no progress, so the terminal does not change size when a progress
-  /// starts or ends. It is destroyed with the view. It is off by default.
+  /// it is only shown or hidden: it is shown while there is progress (and the
+  /// view is shown), and hidden otherwise, when it takes no room in the sizer.
+  /// The terminal is a few pixels smaller while the gauge is shown, so its
+  /// number of rows changes only if that crosses a row boundary. The gauge is
+  /// destroyed with the view. The bar is off by default.
   void ShowProgressBar(bool show);
   /// True if the progress bar was asked for and could be created.
   bool IsShowProgressBar() const { return m_showProgressBar; }
@@ -411,7 +412,8 @@ private:
   void GetEffectiveProgress(wxTerminalProgressState &state, int &value) const;
   /// Update the gauge after the progress changed.
   void OnProgressChanged();
-  /// Show the gauge only while the bar is enabled and the view is shown.
+  /// Show the gauge only while the bar is enabled, the view is shown and there
+  /// is progress to show.
   void UpdateProgressBarVisibility(bool viewShown);
   void OnShow(wxShowEvent &event);
   /// Keeps an indeterminate gauge moving.

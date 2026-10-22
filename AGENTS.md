@@ -337,8 +337,10 @@ one for keyboard layout translation).
    `DrawStripGL()`, from `LayoutStrip()`.
 
    The progress bar of `ShowProgressBar()` is not a strip: it is a native
-   `wxGauge`, a child of the parent window, inserted at index 0 of the sizer of
-   the parent. The sizer does the layout, so none of the code above knows it.
+   `wxGauge`, a child of the parent window, added to the sizer of the parent.
+   It is created once and is shown only while there is progress; a hidden
+   gauge takes no room. The sizer does the layout, so none of the code above
+   knows it.
 
 10. **CI option name is stale**: the workflows still pass
    `-DBUILD_WXTERMINAL_DEMO=OFF`. That option no longer exists; the current name

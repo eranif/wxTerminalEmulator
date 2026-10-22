@@ -664,9 +664,10 @@ void wxTerminalViewCtrl::ShowProgressBar(bool show) {
     }
     m_progress = new wxGauge(parent, wxID_ANY, 100, wxDefaultPosition,
                              wxDefaultSize, wxGA_HORIZONTAL | wxGA_SMOOTH);
-    // A thin bar.
+    // A thin bar, hidden until there is progress to show.
     m_progress->SetMinSize(wxSize(-1, FromDIP(4)));
     m_progress->SetMaxSize(wxSize(-1, FromDIP(4)));
+    m_progress->Hide();
     sizer->Add(m_progress, wxSizerFlags(0).Expand());
     sizer->Layout();
   }
@@ -681,7 +682,13 @@ void wxTerminalViewCtrl::ShowProgressBar(bool show) {
 }
 
 void wxTerminalViewCtrl::UpdateProgressBarVisibility(bool viewShown) {
-  const bool visible = m_showProgressBar && viewShown;
+  // A hidden gauge takes no room in the sizer, so the terminal gets the space
+  // back when there is no progress.
+  wxTerminalProgressState state;
+  int value;
+  GetEffectiveProgress(state, value);
+  const bool visible = m_showProgressBar && viewShown &&
+                       state != wxTerminalProgressState::Hidden;
   if (!m_progress || m_progress->IsShown() == visible) {
     return;
   }
@@ -740,6 +747,8 @@ void wxTerminalViewCtrl::OnProgressChanged() {
   wxTerminalProgressState state;
   int value;
   GetEffectiveProgress(state, value);
+  // Show the gauge while there is progress, hide it when there is none.
+  UpdateProgressBarVisibility(IsShown());
   if (state == wxTerminalProgressState::Indeterminate) {
     // Some ports move the gauge one step for each call.
     m_progress->Pulse();
