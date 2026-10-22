@@ -374,13 +374,12 @@ public:
   bool IsShowProgressBar() const { return m_showProgressBar; }
 
   /// The colour of the progress bar. The default (also after passing
-  /// wxNullColour) is *wxGREEN. The progress bar does not use the colours of
-  /// the theme. Only the OpenGL gauge has colours of its own: the native
-  /// wxGauge keeps the colours of the system. They can be set before the bar is
-  /// shown.
+  /// wxNullColour) is the green of the theme, and it follows the theme. Only
+  /// the OpenGL gauge has colours of its own: the native wxGauge keeps the
+  /// colours of the system. They can be set before the bar is shown.
   void SetProgressColour(const wxColour &colour);
-  /// The colour the bar uses now: the one that was set, else *wxGREEN. It is
-  /// never invalid.
+  /// The colour the bar uses now: the one that was set, else the green of the
+  /// theme. It is never invalid.
   wxColour GetProgressColour() const;
 
   /// The background of the progress bar, behind the bar. The default (also
@@ -893,7 +892,7 @@ private:
       m_progressTimer; // moves the gauge while the progress is indeterminate
   Gauge *m_progress{nullptr};
   bool m_showProgressBar{false};
-  wxColour m_progressColour;   // invalid: *wxGREEN
+  wxColour m_progressColour;   // invalid: the green of the theme
   wxColour m_progressBgColour; // invalid: the background of the theme
   std::mutex m_feedMutex;
   std::string m_feedBuffer;

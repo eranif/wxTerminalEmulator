@@ -705,7 +705,7 @@ void wxTerminalViewCtrl::SetProgressColour(const wxColour &colour) {
 }
 
 wxColour wxTerminalViewCtrl::GetProgressColour() const {
-  return m_progressColour.IsOk() ? m_progressColour : *wxGREEN;
+  return m_progressColour.IsOk() ? m_progressColour : m_core.GetTheme().green;
 }
 
 void wxTerminalViewCtrl::SetProgressBackgroundColour(const wxColour &colour) {
