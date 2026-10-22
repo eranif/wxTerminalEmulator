@@ -9,8 +9,6 @@
 #include "terminal_logger.h"
 #include "terminal_view.h"
 
-#include <wx/gauge.h>
-
 #include <deque>
 #include <optional>
 #include <vector>
@@ -81,13 +79,16 @@ static wxIconBundle LoadAppIcons() {
 
 class MyTerminal : public wxTerminalViewCtrl {
 public:
-  MyTerminal(wxAuiNotebook *parent, const wxString &shellCommand,
+  // @p parent is the panel of the tab (see TerminalPanel), which is the page of
+  // @p notebook.
+  MyTerminal(wxWindow *parent, wxAuiNotebook *notebook,
+             const wxString &shellCommand,
              const std::optional<EnvironmentList> &environment,
              std::optional<wxString> workingDirectory = std::nullopt,
              bool showScrollBar = true)
       : wxTerminalViewCtrl(parent, shellCommand, environment, workingDirectory,
                            showScrollBar),
-        m_notebook{parent} {
+        m_notebook{notebook} {
     Bind(wxEVT_TERMINAL_TITLE_CHANGED, &MyTerminal::OnTitleChanged, this);
   }
 
@@ -103,7 +104,7 @@ public:
     if (title.empty()) {
       title = _("Terminal");
     }
-    int sel = m_notebook->FindPage(this);
+    int sel = m_notebook->FindPage(GetParent());
     if (sel != wxNOT_FOUND) {
       m_notebook->SetPageText(sel, title);
     }
@@ -116,7 +117,7 @@ public:
       return;
     }
     m_customLabel = l;
-    int sel = m_notebook->FindPage(this);
+    int sel = m_notebook->FindPage(GetParent());
     if (sel != wxNOT_FOUND) {
       m_notebook->SetPageText(sel, m_customLabel);
     }
@@ -127,7 +128,7 @@ public:
       return;
     }
     m_customLabel.clear();
-    int sel = m_notebook->FindPage(this);
+    int sel = m_notebook->FindPage(GetParent());
     if (sel != wxNOT_FOUND) {
       m_notebook->SetPageText(sel, _("Terminal"));
     }
@@ -139,6 +140,33 @@ public:
 private:
   wxAuiNotebook *m_notebook{nullptr};
   wxString m_customLabel;
+};
+
+// A tab of the notebook: a panel with a vertical sizer that holds the terminal.
+// The sizer lets the terminal put its progress bar above itself (the notebook
+// is a wxBookCtrlBase, so the terminal can't use it as the parent for that).
+class TerminalPanel : public wxPanel {
+public:
+  TerminalPanel(wxAuiNotebook *notebook, const wxString &shellCommand,
+                const std::optional<EnvironmentList> &environment,
+                std::optional<wxString> workingDirectory)
+      : wxPanel(notebook) {
+    m_terminal = new MyTerminal(this, notebook, shellCommand, environment,
+                                workingDirectory);
+    auto *sizer = new wxBoxSizer(wxVERTICAL);
+    sizer->Add(m_terminal, wxSizerFlags(1).Expand());
+    SetSizer(sizer);
+    // After SetSizer(): the progress bar is added to the sizer of the parent.
+    m_terminal->ShowProgressBar(true);
+  }
+
+  MyTerminal *GetTerminal() const { return m_terminal; }
+
+  // The terminal takes the focus of the tab.
+  void SetFocus() override { m_terminal->SetFocus(); }
+
+private:
+  MyTerminal *m_terminal{nullptr};
 };
 
 class MyFrame : public wxFrame {
@@ -185,6 +213,8 @@ public:
   bool ShowTabSwitcher(bool backwards);
   void ApplySettings();
   wxTerminalViewCtrl *GetActiveTerminalView() const;
+  // The terminal of a notebook page (a TerminalPanel), or nullptr.
+  static MyTerminal *TerminalOf(wxWindow *page);
   MyTerminal *CreateTerminalPage(const TerminalPageConfig &config,
                                  bool selectIt);
   void UpdateSafeDrawingMenuCheck();

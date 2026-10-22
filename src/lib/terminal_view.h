@@ -867,7 +867,6 @@ private:
       m_progressTimer; // moves the gauge while the progress is indeterminate
   wxGauge *m_progress{nullptr};
   bool m_showProgressBar{false};
-
   std::mutex m_feedMutex;
   std::string m_feedBuffer;
   std::atomic_bool m_feedShuttingDown{false};

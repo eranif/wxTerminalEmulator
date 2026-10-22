@@ -667,7 +667,7 @@ void wxTerminalViewCtrl::ShowProgressBar(bool show) {
     // A thin bar.
     m_progress->SetMinSize(wxSize(-1, FromDIP(4)));
     m_progress->SetMaxSize(wxSize(-1, FromDIP(4)));
-    sizer->Insert(0, m_progress, wxSizerFlags(0).Expand());
+    sizer->Add(m_progress, wxSizerFlags(0).Expand());
     sizer->Layout();
   }
 
@@ -686,9 +686,7 @@ void wxTerminalViewCtrl::UpdateProgressBarVisibility(bool viewShown) {
     return;
   }
   m_progress->Show(visible);
-  if (wxSizer *sizer = m_progress->GetContainingSizer()) {
-    sizer->Layout();
-  }
+  GetParent()->SendSizeEvent();
 }
 
 void wxTerminalViewCtrl::OnShow(wxShowEvent &event) {
@@ -2252,8 +2250,6 @@ void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
     RefreshView();
   }
 
-  if (GetParent()->GetSizer())
-    GetParent()->GetSizer()->Layout();
   evt.Skip();
 }
 

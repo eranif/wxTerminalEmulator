@@ -177,7 +177,7 @@ void MyFrame::SaveLayout() {
   // the AUI serializer below match this same order.
   std::vector<LayoutPersistence::TabInfo> tabs;
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
-    auto *terminal = dynamic_cast<MyTerminal *>(m_notebook->GetPage(i));
+    auto *terminal = TerminalOf(m_notebook->GetPage(i));
     if (!terminal) {
       continue;
     }
@@ -275,7 +275,7 @@ bool MyFrame::RestoreLayout() {
       auto page = m_notebook->GetPage(i);
       if (m_notebook->GetPageText(i) == layout->activeTitle) {
         page->CallAfter(&wxWindow::SetFocus);
-        activeTab = dynamic_cast<MyTerminal *>(page);
+        activeTab = TerminalOf(page);
         break;
       }
     }
@@ -304,10 +304,10 @@ void MyFrame::ShowTabMenu(int tabIdx) {
   if (tabIdx == wxNOT_FOUND) {
     tabIdx = m_notebook->HitTest(::wxGetMousePosition());
   }
-  auto *clickedTerminal = tabIdx == wxNOT_FOUND
-                              ? nullptr
-                              : dynamic_cast<MyTerminal *>(m_notebook->GetPage(
-                                    static_cast<size_t>(tabIdx)));
+  auto *clickedTerminal =
+      tabIdx == wxNOT_FOUND
+          ? nullptr
+          : TerminalOf(m_notebook->GetPage(static_cast<size_t>(tabIdx)));
 
   wxMenu menu;
   menu.Append(XRCID("rename-tab"), _("Set Label..."));
@@ -357,8 +357,8 @@ void MyFrame::ShowTabMenu(int tabIdx) {
         if (name.empty()) {
           return;
         }
-        auto *terminal = dynamic_cast<MyTerminal *>(
-            m_notebook->GetPage(static_cast<size_t>(tabIdx)));
+        auto *terminal =
+            TerminalOf(m_notebook->GetPage(static_cast<size_t>(tabIdx)));
         if (terminal == nullptr) {
           return;
         }
@@ -372,8 +372,8 @@ void MyFrame::ShowTabMenu(int tabIdx) {
         if (tabIdx == wxNOT_FOUND) {
           return;
         }
-        auto *terminal = dynamic_cast<MyTerminal *>(
-            m_notebook->GetPage(static_cast<size_t>(tabIdx)));
+        auto *terminal =
+            TerminalOf(m_notebook->GetPage(static_cast<size_t>(tabIdx)));
         if (terminal == nullptr) {
           return;
         }
@@ -384,7 +384,7 @@ void MyFrame::ShowTabMenu(int tabIdx) {
 }
 
 void MyFrame::SetTabStrip(size_t tabIdx, bool footer) {
-  auto *terminal = dynamic_cast<MyTerminal *>(m_notebook->GetPage(tabIdx));
+  auto *terminal = TerminalOf(m_notebook->GetPage(tabIdx));
   if (terminal == nullptr) {
     return;
   }
@@ -546,7 +546,7 @@ bool MyFrame::ShowTabSwitcher(bool backwards) {
     TabSwitcherDlg::Item item;
     item.label = m_notebook->GetPageText(
         static_cast<size_t>(m_notebook->FindPage(page)));
-    if (auto *view = dynamic_cast<wxTerminalViewCtrl *>(page)) {
+    if (auto *view = TerminalOf(page)) {
       item.directory = view->GetCurrentDir();
     }
     item.page = page;
@@ -599,8 +599,7 @@ void MyFrame::ApplySettings() {
   }
   ApplyThemeToAllTabs(theme);
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
-    if (auto *view =
-            dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetPage(i))) {
+    if (auto *view = TerminalOf(m_notebook->GetPage(i))) {
       view->EnableSafeDrawing(m_config.IsSafeDrawingEnabled());
     }
   }
@@ -622,8 +621,7 @@ void MyFrame::ApplyThemeToAllTabs(const wxTerminalTheme &theme) {
     return;
   }
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
-    if (auto *view =
-            dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetPage(i))) {
+    if (auto *view = TerminalOf(m_notebook->GetPage(i))) {
       view->SetTheme(theme);
       view->Refresh();
     }
@@ -634,15 +632,22 @@ wxTerminalViewCtrl *MyFrame::GetActiveTerminalView() const {
   if (!m_notebook || m_notebook->GetPageCount() == 0) {
     return nullptr;
   }
-  return dynamic_cast<wxTerminalViewCtrl *>(m_notebook->GetCurrentPage());
+  return TerminalOf(m_notebook->GetCurrentPage());
+}
+
+MyTerminal *MyFrame::TerminalOf(wxWindow *page) {
+  auto *panel = dynamic_cast<TerminalPanel *>(page);
+  return panel ? panel->GetTerminal() : nullptr;
 }
 
 MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
                                         bool selectIt) {
-  auto *terminal = new MyTerminal(m_notebook, config.shellCommand,
+  // The page of the notebook is the panel, the terminal is inside it.
+  auto *panel = new TerminalPanel(m_notebook, config.shellCommand,
                                   config.environment, config.workingDirectory);
-  m_notebook->AddPage(terminal, m_config.GetNewTabTitle(), selectIt);
-  m_tabMru.AddPage(terminal, selectIt);
+  MyTerminal *terminal = panel->GetTerminal();
+  m_notebook->AddPage(panel, m_config.GetNewTabTitle(), selectIt);
+  m_tabMru.AddPage(panel, selectIt);
   ApplyThemeToTab(terminal);
   m_config.SetSafeDrawingEnabled(m_config.IsSafeDrawingEnabled() ||
                                  wxTerminalViewCtrl::IsOpenGLEnabled());
@@ -936,7 +941,7 @@ void MyFrame::OnTerminated(wxTerminalEvent &event) {
   }
   int tabIndex = wxNOT_FOUND;
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
-    if (m_notebook->GetPage(i) == view) {
+    if (TerminalOf(m_notebook->GetPage(i)) == view) {
       tabIndex = static_cast<int>(i);
       break;
     }
