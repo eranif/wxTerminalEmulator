@@ -79,6 +79,7 @@ private:
 
 class Gauge : public wxGauge {
 public:
+  using wxGauge::wxGauge;
   void SetTrackColour(const wxColour &colour) { wxUnusedVar(colour); }
 };
 
