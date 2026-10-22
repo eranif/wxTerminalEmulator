@@ -102,6 +102,7 @@ enum class CellFlags {
   kUnderlined = (1 << 1),
   kReverse = (1 << 2),
   kClicked = (1 << 3),
+  kDim = (1 << 4),
 };
 
 struct Cell {
@@ -113,6 +114,8 @@ struct Cell {
 
   inline void SetBold(bool b) { SetFlag(flags, CellFlags::kBold, b); }
   inline bool IsBold() const { return IsFlagSet(flags, CellFlags::kBold); }
+  inline void SetDim(bool b) { SetFlag(flags, CellFlags::kDim, b); }
+  inline bool IsDim() const { return IsFlagSet(flags, CellFlags::kDim); }
   inline void SetUnderlined(bool b) {
     SetFlag(flags, CellFlags::kUnderlined, b);
   }

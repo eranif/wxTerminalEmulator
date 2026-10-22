@@ -1472,6 +1472,18 @@ wxTerminalViewCtrl::PrepareRowForDrawing(const std::vector<terminal::Cell> &row,
       std::swap(bgColor, fgColor);
     }
 
+    // Faint text (SGR 2): blend the foreground toward the background.
+    if (cell.IsDim()) {
+      constexpr int kFgPercent = 60;
+      auto mix = [](unsigned char f, unsigned char b) {
+        return static_cast<unsigned char>(
+            (f * kFgPercent + b * (100 - kFgPercent)) / 100);
+      };
+      fgColor = wxColour(mix(fgColor.Red(), bgColor.Red()),
+                         mix(fgColor.Green(), bgColor.Green()),
+                         mix(fgColor.Blue(), bgColor.Blue()));
+    }
+
     CellInfo info;
     info.colIdx = colIdx;
     info.ch = cell.ch;

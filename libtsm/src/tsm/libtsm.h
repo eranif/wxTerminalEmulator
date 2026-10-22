@@ -169,6 +169,7 @@ struct tsm_screen_attr {
 	uint8_t bg;			/* background green */
 	uint8_t bb;			/* background blue */
 	unsigned int bold : 1;		/* bold character */
+	unsigned int dim : 1;		/* faint (dim) character */
 	unsigned int italic : 1;	/* italics character */
 	unsigned int underline : 1;	/* underlined character */
 	unsigned int inverse : 1;	/* inverse colors */

@@ -1408,6 +1408,7 @@ static void csi_attribute(struct tsm_vte *vte)
 			copy_fcolor(&vte->cattr, &vte->def_attr);
 			copy_bcolor(&vte->cattr, &vte->def_attr);
 			vte->cattr.bold = 0;
+			vte->cattr.dim = 0;
 			vte->cattr.italic = 0;
 			vte->cattr.underline = 0;
 			vte->cattr.inverse = 0;
@@ -1415,6 +1416,9 @@ static void csi_attribute(struct tsm_vte *vte)
 			break;
 		case 1:
 			vte->cattr.bold = 1;
+			break;
+		case 2:
+			vte->cattr.dim = 1;
 			break;
 		case 3:
 			vte->cattr.italic = 1;
@@ -1440,6 +1444,7 @@ static void csi_attribute(struct tsm_vte *vte)
 			break;
 		case 22:
 			vte->cattr.bold = 0;
+			vte->cattr.dim = 0;
 			break;
 		case 23:
 			vte->cattr.italic = 0;

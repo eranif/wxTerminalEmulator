@@ -65,6 +65,8 @@ static Cell ConvertTsmCell(const struct tsm_screen_cell &tsmCell) {
 
   if (tsmCell.attr.bold)
     cell.SetBold(true);
+  if (tsmCell.attr.dim)
+    cell.SetDim(true);
   if (tsmCell.attr.underline)
     cell.SetUnderlined(true);
   if (tsmCell.attr.inverse)
@@ -807,6 +809,8 @@ int TerminalCore::TsmDrawCb(struct tsm_screen * /*con*/, uint64_t /*id*/,
 
   if (attr->bold)
     cell.SetBold(true);
+  if (attr->dim)
+    cell.SetDim(true);
   if (attr->underline)
     cell.SetUnderlined(true);
   if (attr->inverse)
