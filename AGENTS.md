@@ -336,6 +336,10 @@ one for keyboard layout translation).
    cursor) at `HeaderHeight()`. A strip is drawn by `DrawStrip()` (wxDC) and
    `DrawStripGL()`, from `LayoutStrip()`.
 
+   The progress bar of `ShowProgressBar()` is not a strip: it is a native
+   `wxGauge`, a child of the parent window, inserted at index 0 of the sizer of
+   the parent. The sizer does the layout, so none of the code above knows it.
+
 10. **CI option name is stale**: the workflows still pass
    `-DBUILD_WXTERMINAL_DEMO=OFF`. That option no longer exists; the current name
    is `BUILD_GLYPHT`, so that CI job builds the demo anyway.

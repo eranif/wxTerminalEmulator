@@ -16,6 +16,7 @@
 #include <unordered_set>
 #include <utility>
 #include <wx/app.h>
+#include <wx/bookctrl.h>
 #include <wx/clipbrd.h>
 #include <wx/dcbuffer.h>
 #include <wx/dcgraph.h>
@@ -346,6 +347,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     if (m_programStatus.state == wxTerminalProgramState::Working ||
         m_programStatus.state == wxTerminalProgramState::Blocked) {
       m_programStatus = wxTerminalProgramStatus{};
+      OnProgressChanged();
     }
   });
   Bind(wxEVT_SCROLLWIN_TOP, &wxTerminalViewCtrl::OnScroll, this);
@@ -365,6 +367,11 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   m_feedTimer.SetOwner(this);
   Bind(wxEVT_TIMER, &wxTerminalViewCtrl::OnFeedTimer, this,
        m_feedTimer.GetId());
+
+  Bind(wxEVT_SHOW, &wxTerminalViewCtrl::OnShow, this);
+  m_progressTimer.SetOwner(this);
+  Bind(wxEVT_TIMER, &wxTerminalViewCtrl::OnProgressTimer, this,
+       m_progressTimer.GetId());
 
   m_shell_command = shellCommand;
   m_environment = std::move(environment);
@@ -423,22 +430,25 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   m_core.SetProgressCallback([this](wxTerminalProgressState state, int value) {
     m_progressState = state;
     m_progressValue = value;
+    OnProgressChanged();
     wxTerminalEvent event{wxEVT_TERMINAL_PROGRESS};
     event.SetProgressState(state);
     event.SetProgressValue(value);
     event.SetEventObject(this);
     GetEventHandler()->AddPendingEvent(event);
   });
-  m_core.SetProgramStatusCallback([this](const wxTerminalProgramStatus &status) {
-    // Only the root record is kept; the application gets every report.
-    if (status.id.empty()) {
-      m_programStatus = status;
-    }
-    wxTerminalEvent event{wxEVT_TERMINAL_PROGRAM_STATUS};
-    event.SetProgramStatus(status);
-    event.SetEventObject(this);
-    GetEventHandler()->AddPendingEvent(event);
-  });
+  m_core.SetProgramStatusCallback(
+      [this](const wxTerminalProgramStatus &status) {
+        // Only the root record is kept; the application gets every report.
+        if (status.id.empty()) {
+          m_programStatus = status;
+          OnProgressChanged();
+        }
+        wxTerminalEvent event{wxEVT_TERMINAL_PROGRAM_STATUS};
+        event.SetProgramStatus(status);
+        event.SetEventObject(this);
+        GetEventHandler()->AddPendingEvent(event);
+      });
   m_core.SetClipboardCallback([this](const std::string &text) {
     // FromUTF8 gives an empty string for invalid UTF-8 (for example text cut
     // by the OSC length limit). Keep the old value then.
@@ -524,6 +534,10 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   }
   Unbind(wxEVT_TIMER, &wxTerminalViewCtrl::OnFeedTimer, this,
          m_feedTimer.GetId());
+  DestroyProgressBar();
+  Unbind(wxEVT_SHOW, &wxTerminalViewCtrl::OnShow, this);
+  Unbind(wxEVT_TIMER, &wxTerminalViewCtrl::OnProgressTimer, this,
+         m_progressTimer.GetId());
   {
     std::unique_lock lk{m_feedMutex};
     m_feedBuffer.clear();
@@ -633,6 +647,121 @@ void wxTerminalViewCtrl::AddFooter(const wxString &text, const wxColour &fg,
 }
 
 void wxTerminalViewCtrl::RemoveFooter() { ClearStrip(m_footer); }
+
+void wxTerminalViewCtrl::ShowProgressBar(bool show) {
+  if (show == m_showProgressBar) {
+    return;
+  }
+
+  if (show && !m_progress) {
+    // The bar is a native gauge above the view, in the sizer of the parent. A
+    // book control (wxNotebook, wxAuiNotebook...) is left alone: it lays out
+    // its pages itself, and all of them share the parent.
+    wxWindow *parent = GetParent();
+    wxSizer *sizer = parent ? parent->GetSizer() : nullptr;
+    if (!sizer || dynamic_cast<wxBookCtrlBase *>(parent)) {
+      return;
+    }
+    m_progress = new wxGauge(parent, wxID_ANY, 100, wxDefaultPosition,
+                             wxDefaultSize, wxGA_HORIZONTAL | wxGA_SMOOTH);
+    // A thin bar.
+    m_progress->SetMinSize(wxSize(-1, FromDIP(4)));
+    m_progress->SetMaxSize(wxSize(-1, FromDIP(4)));
+    sizer->Insert(0, m_progress, wxSizerFlags(0).Expand());
+    sizer->Layout();
+  }
+
+  // The gauge is created once. After that it is only shown or hidden.
+  m_showProgressBar = show;
+  if (!show && m_progressTimer.IsRunning()) {
+    m_progressTimer.Stop();
+  }
+  UpdateProgressBarVisibility(IsShown());
+  OnProgressChanged();
+}
+
+void wxTerminalViewCtrl::UpdateProgressBarVisibility(bool viewShown) {
+  const bool visible = m_showProgressBar && viewShown;
+  if (!m_progress || m_progress->IsShown() == visible) {
+    return;
+  }
+  m_progress->Show(visible);
+  if (wxSizer *sizer = m_progress->GetContainingSizer()) {
+    sizer->Layout();
+  }
+}
+
+void wxTerminalViewCtrl::OnShow(wxShowEvent &event) {
+  event.Skip();
+  UpdateProgressBarVisibility(event.IsShown());
+}
+
+void wxTerminalViewCtrl::DestroyProgressBar() {
+  if (m_progressTimer.IsRunning()) {
+    m_progressTimer.Stop();
+  }
+  if (!m_progress) {
+    return;
+  }
+  // The gauge belongs to the parent, which may outlive this view.
+  wxWindow *parent = m_progress->GetParent();
+  if (wxSizer *sizer = m_progress->GetContainingSizer()) {
+    sizer->Detach(m_progress);
+  }
+  m_progress->Destroy();
+  m_progress = nullptr;
+  if (parent && !parent->IsBeingDeleted()) {
+    parent->Layout();
+  }
+}
+
+void wxTerminalViewCtrl::GetEffectiveProgress(wxTerminalProgressState &state,
+                                              int &value) const {
+  state = m_progressState;
+  value = m_progressValue;
+  if (state != wxTerminalProgressState::Hidden) {
+    return; // OSC 9;4
+  }
+  // OSC 7501: a working program without a percent is indeterminate. A blocked
+  // program shows its percent, or an empty bar.
+  const auto &status = m_programStatus;
+  if (status.state == wxTerminalProgramState::Working) {
+    state = status.progress < 0 ? wxTerminalProgressState::Indeterminate
+                                : wxTerminalProgressState::Normal;
+    value = std::max(status.progress, 0);
+  } else if (status.state == wxTerminalProgramState::Blocked) {
+    state = wxTerminalProgressState::Warning;
+    value = std::max(status.progress, 0);
+  }
+}
+
+void wxTerminalViewCtrl::OnProgressChanged() {
+  if (!m_progress || !m_showProgressBar) {
+    return;
+  }
+  wxTerminalProgressState state;
+  int value;
+  GetEffectiveProgress(state, value);
+  if (state == wxTerminalProgressState::Indeterminate) {
+    // Some ports move the gauge one step for each call.
+    m_progress->Pulse();
+    if (!m_progressTimer.IsRunning()) {
+      m_progressTimer.Start(60);
+    }
+    return;
+  }
+  if (m_progressTimer.IsRunning()) {
+    m_progressTimer.Stop();
+  }
+  m_progress->SetValue(
+      state == wxTerminalProgressState::Hidden ? 0 : std::clamp(value, 0, 100));
+}
+
+void wxTerminalViewCtrl::OnProgressTimer(wxTimerEvent &) {
+  if (m_progress) {
+    m_progress->Pulse();
+  }
+}
 
 const std::vector<wxTerminalViewCtrl::StripGlyph> &
 wxTerminalViewCtrl::LayoutStrip(const Strip &strip) const {
@@ -2122,6 +2251,9 @@ void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
     m_resizeEndTimer.StartOnce(150);
     RefreshView();
   }
+
+  if (GetParent()->GetSizer())
+    GetParent()->GetSizer()->Layout();
   evt.Skip();
 }
 
@@ -2157,9 +2289,9 @@ wxPoint wxTerminalViewCtrl::ClampToGrid(const wxPoint &pos) const {
   const int cols = std::max(static_cast<int>(m_core.Cols()), 1);
   const int rows = std::max(static_cast<int>(m_core.Rows()), 1);
   // The result is relative to the top of the grid, not of the window.
-  return {std::clamp(pos.x, 0, std::max(cols * m_charW - 1, 0)),
-          std::clamp(pos.y - HeaderHeight(), 0,
-                     std::max(rows * m_charH - 1, 0))};
+  return {
+      std::clamp(pos.x, 0, std::max(cols * m_charW - 1, 0)),
+      std::clamp(pos.y - HeaderHeight(), 0, std::max(rows * m_charH - 1, 0))};
 }
 
 namespace {

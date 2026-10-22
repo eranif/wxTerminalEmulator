@@ -103,16 +103,8 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   ApplyNativeAppTheme();
 
   CreateStatusBar(kStatusFieldCount);
-  const int statusWidths[kStatusFieldCount] = {-1, -2, -2, 160};
+  const int statusWidths[kStatusFieldCount] = {-1, -2, -2, -2};
   SetStatusWidths(kStatusFieldCount, statusWidths);
-  m_progressGauge = new wxGauge(GetStatusBar(), wxID_ANY, 100,
-                                wxDefaultPosition, wxDefaultSize,
-                                wxGA_HORIZONTAL | wxGA_SMOOTH);
-  m_progressGauge->Hide();
-  GetStatusBar()->Bind(wxEVT_SIZE, [this](wxSizeEvent &event) {
-    event.Skip();
-    PositionProgressGauge();
-  });
   BuildMenuBar();
   long nbStyle = wxAUI_NB_DEFAULT_STYLE &
                  ~(wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS);
@@ -999,50 +991,37 @@ void MyFrame::OnProgress(wxTerminalEvent &event) {
   }
 }
 
-void MyFrame::PositionProgressGauge() {
-  auto *statusBar = GetStatusBar();
-  if (!m_progressGauge || !statusBar) {
-    return;
-  }
-  wxRect rect;
-  if (statusBar->GetFieldRect(kStatusFieldProgress, rect)) {
-    rect.Deflate(2);
-    m_progressGauge->SetSize(rect);
-  }
-}
-
+// The terminal view draws the progress bar. The status bar only says which
+// event the active terminal received last.
 void MyFrame::UpdateProgressStatus() {
-  if (!m_progressGauge) {
+  auto *statusBar = GetStatusBar();
+  if (!statusBar || statusBar->GetFieldsCount() <= kStatusFieldProgress) {
     return;
   }
-  auto *view = GetActiveTerminalView();
-  auto state =
-      view ? view->GetProgressState() : wxTerminalProgressState::Hidden;
-  int value = view ? view->GetProgressValue() : 0;
-
-  // No OSC 9;4 progress: show the OSC 7501 status (Kiro CLI) instead. A working
-  // or blocked program is a bar; without a percent it is a pulsing bar.
-  if (view && state == wxTerminalProgressState::Hidden) {
+  wxString text;
+  if (auto *view = GetActiveTerminalView()) {
+    const auto progress = view->GetProgressState();
     const auto &status = view->GetProgramStatus();
-    if (status.state == wxTerminalProgramState::Working ||
-        status.state == wxTerminalProgramState::Blocked) {
-      state = status.progress < 0 ? wxTerminalProgressState::Indeterminate
-                                  : wxTerminalProgressState::Normal;
-      value = std::max(status.progress, 0);
+    if (progress != wxTerminalProgressState::Hidden) {
+      static const char *const kNames[] = {"hidden", "normal", "error",
+                                           "indeterminate", "warning"};
+      text = wxString::Format("OSC 9;4 event: %s %d%%",
+                              kNames[static_cast<int>(progress)],
+                              view->GetProgressValue());
+    } else if (status.state != wxTerminalProgramState::Clear) {
+      static const char *const kNames[] = {"idle",    "working", "done",
+                                           "blocked", "error",   "clear"};
+      text = wxString::Format("OSC 7501 event: %s",
+                              kNames[static_cast<int>(status.state)]);
+      if (status.progress >= 0) {
+        text << wxString::Format(" %d%%", status.progress);
+      }
+      if (!status.app.empty()) {
+        text << " (" << status.app << ")";
+      }
     }
   }
-
-  if (state == wxTerminalProgressState::Hidden) {
-    m_progressGauge->Hide();
-    return;
-  }
-  PositionProgressGauge();
-  if (state == wxTerminalProgressState::Indeterminate) {
-    m_progressGauge->Pulse();
-  } else {
-    m_progressGauge->SetValue(value);
-  }
-  m_progressGauge->Show();
+  statusBar->SetStatusText(text, kStatusFieldProgress);
 }
 
 void MyFrame::OnAppSelectionChanged(wxTerminalEvent &event) {

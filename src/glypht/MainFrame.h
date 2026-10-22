@@ -212,9 +212,8 @@ public:
   // Show the directory of the active terminal in the status bar.
   void UpdateDirectoryStatus();
   void OnProgress(wxTerminalEvent &event);
-  void PositionProgressGauge();
+  // Show the last progress or program status event of the active terminal.
   void UpdateProgressStatus();
-  wxGauge *m_progressGauge{nullptr};
   void OnAppSelectionChanged(wxTerminalEvent &event);
   // Show the text the program in the active terminal copied with OSC 52.
   void UpdateAppSelectionStatus();

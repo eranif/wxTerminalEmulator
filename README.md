@@ -97,6 +97,7 @@ wxWidgets panel that provides the visual interface:
 - Supports safe drawing mode, buffer navigation, and line centering
 - `AddHeader(text, fg, bg, font)` / `RemoveHeader()`: a strip (one text row high; colours and font are optional) with a separator line at the top of the view. It is not part of the terminal: it never scrolls, the program gets that many fewer rows, and the mouse does not select or report over it. Works in both the OpenGL and the wxDC renderers
 - `AddFooter(text, fg, bg, font)` / `RemoveFooter()`: the same, at the bottom of the view (the separator line is above the text). A view can have both
+- `ShowProgressBar(bool)` / `IsShowProgressBar()`: show a thin native progress bar (a `wxGauge`) above the view. It shows the progress of the program (OSC 9;4, or OSC 7501 for a working or blocked program): a bar with a percent, or a moving bar when there is no percent. The gauge is a child of the parent window and is inserted at the start of the parent's sizer, so call this after the parent has its (vertical) sizer. If the parent has no sizer, or is a `wxBookCtrlBase` (a notebook, whose pages share the parent), nothing happens and `IsShowProgressBar()` stays false. The gauge is created once; after that it is only shown or hidden (it is also hidden while the view is hidden). While it is shown it stays, so the terminal does not change size when progress starts or ends. Off by default
 
 #### PTY Backend (`pty_backend.h`)
 Abstract interface for platform-specific pseudo-terminal implementations:
@@ -361,7 +362,7 @@ The included demo application (`main.cpp`) showcases the library features:
   - Link click event handling with message box display
 - Multiple terminal tabs in a notebook control
 - Automatic terminal title updates
-- Progress bar in the status bar (OSC 9;4) for the active tab
+- A status bar message about the last progress event (OSC 9;4 or OSC 7501) of the active tab
 - Tab switcher dialog (Ctrl+Tab, most recently used first; on macOS it is a menu shortcut in the Search menu)
 - Process termination handling that closes tabs and exits when the last one closes
 - Command-line log level control

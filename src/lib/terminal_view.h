@@ -30,6 +30,9 @@
 #include <optional>
 #include <unordered_set>
 #include <wx/arrstr.h>
+#include <wx/gauge.h>
+#include <wx/sizer.h>
+#include <wx/weakref.h>
 #include <wx/wupdlock.h>
 
 // When the OpenGL path is enabled the control is a wxGLCanvas (still a
@@ -345,6 +348,27 @@ public:
   bool HasFooter() const { return m_footer.present; }
   const wxString &GetFooterText() const { return m_footer.text; }
 
+  /// Show a thin, native progress bar (a wxGauge) above the view. It shows the
+  /// progress the program reports with OSC 9;4, or else with OSC 7501 (a
+  /// working or blocked program): a bar with a percent, or a moving bar when
+  /// there is no percent. The colour of the gauge is the one of the system, so
+  /// an error or a warning does not change it.
+  ///
+  /// The gauge is a child of the parent window, inserted at the start of the
+  /// sizer of the parent: call this after the parent has its sizer, which is
+  /// normally vertical. Nothing happens, and IsShowProgressBar() stays false,
+  /// when the parent has no sizer, or when the parent is a wxBookCtrlBase (a
+  /// notebook: its pages share the parent).
+  ///
+  /// The gauge is created once, the first time the bar is shown. After that
+  /// ShowProgressBar() only shows or hides it, and it is also hidden while the
+  /// view is hidden. While the bar is shown the gauge stays, empty when there
+  /// is no progress, so the terminal does not change size when a progress
+  /// starts or ends. It is destroyed with the view. It is off by default.
+  void ShowProgressBar(bool show);
+  /// True if the progress bar was asked for and could be created.
+  bool IsShowProgressBar() const { return m_showProgressBar; }
+
 private:
   /// The text of a header or footer laid out in pixels (the same layout for
   /// both renderers): one entry per visible character, on the cell grid when
@@ -359,10 +383,10 @@ private:
   struct Strip {
     bool present{false};
     wxString text;
-    wxColour fg;         // invalid: use the theme
-    wxColour bg;         // invalid: derive from the theme
-    wxFont font;         // invalid: use the terminal font
-    int fontHeight{0};   // line height of `font`, in pixels
+    wxColour fg;       // invalid: use the theme
+    wxColour bg;       // invalid: derive from the theme
+    wxFont font;       // invalid: use the terminal font
+    int fontHeight{0}; // line height of `font`, in pixels
     // Cache of LayoutStrip().
     mutable std::vector<StripGlyph> layout;
     mutable bool layoutValid{false};
@@ -382,6 +406,20 @@ private:
   int StripHeight(const Strip &strip) const;
   int HeaderHeight() const { return StripHeight(m_header); }
   int FooterHeight() const { return StripHeight(m_footer); }
+  /// The progress to show: OSC 9;4 first, else OSC 7501. The state is Hidden
+  /// when there is nothing to show; the value is 0-100.
+  void GetEffectiveProgress(wxTerminalProgressState &state, int &value) const;
+  /// Update the gauge after the progress changed.
+  void OnProgressChanged();
+  /// Show the gauge only while the bar is enabled and the view is shown.
+  void UpdateProgressBarVisibility(bool viewShown);
+  void OnShow(wxShowEvent &event);
+  /// Keeps an indeterminate gauge moving.
+  void OnProgressTimer(wxTimerEvent &event);
+  /// Remove the gauge from the sizer of the parent and destroy it. Only the
+  /// destructor does this: the gauge belongs to the parent, which can outlive
+  /// the view.
+  void DestroyProgressBar();
   /// Set or remove a strip, then re-layout the terminal and repaint.
   void SetStrip(Strip &strip, const wxString &text, const wxColour &fg,
                 const wxColour &bg, const wxFont &font);
@@ -825,6 +863,10 @@ private:
 #endif
   wxTimer m_resizeEndTimer;
   wxTimer m_feedTimer;
+  wxTimer
+      m_progressTimer; // moves the gauge while the progress is indeterminate
+  wxGauge *m_progress{nullptr};
+  bool m_showProgressBar{false};
 
   std::mutex m_feedMutex;
   std::string m_feedBuffer;
