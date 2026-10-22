@@ -673,6 +673,7 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   terminal->Bind(wxEVT_TERMINAL_BELL, &MyFrame::OnBell, this);
   terminal->Bind(wxEVT_TERMINAL_CWD_CHANGED, &MyFrame::OnCwdChanged, this);
   terminal->Bind(wxEVT_TERMINAL_PROGRESS, &MyFrame::OnProgress, this);
+  terminal->Bind(wxEVT_TERMINAL_PROGRAM_STATUS, &MyFrame::OnProgress, this);
   terminal->Bind(wxEVT_TERMINAL_APP_SELECTION_CHANGED,
                  &MyFrame::OnAppSelectionChanged, this);
   terminal->EnsureStarted();
@@ -1015,8 +1016,22 @@ void MyFrame::UpdateProgressStatus() {
     return;
   }
   auto *view = GetActiveTerminalView();
-  const auto state =
+  auto state =
       view ? view->GetProgressState() : wxTerminalProgressState::Hidden;
+  int value = view ? view->GetProgressValue() : 0;
+
+  // No OSC 9;4 progress: show the OSC 7501 status (Kiro CLI) instead. A working
+  // or blocked program is a bar; without a percent it is a pulsing bar.
+  if (view && state == wxTerminalProgressState::Hidden) {
+    const auto &status = view->GetProgramStatus();
+    if (status.state == wxTerminalProgramState::Working ||
+        status.state == wxTerminalProgramState::Blocked) {
+      state = status.progress < 0 ? wxTerminalProgressState::Indeterminate
+                                  : wxTerminalProgressState::Normal;
+      value = std::max(status.progress, 0);
+    }
+  }
+
   if (state == wxTerminalProgressState::Hidden) {
     m_progressGauge->Hide();
     return;
@@ -1025,7 +1040,7 @@ void MyFrame::UpdateProgressStatus() {
   if (state == wxTerminalProgressState::Indeterminate) {
     m_progressGauge->Pulse();
   } else {
-    m_progressGauge->SetValue(view->GetProgressValue());
+    m_progressGauge->SetValue(value);
   }
   m_progressGauge->Show();
 }

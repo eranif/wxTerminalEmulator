@@ -338,6 +338,16 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   Bind(wxEVT_MOUSEWHEEL, &wxTerminalViewCtrl::OnMouseWheel, this);
   Bind(wxEVT_SET_FOCUS, &wxTerminalViewCtrl::OnFocus, this);
   Bind(wxEVT_KILL_FOCUS, &wxTerminalViewCtrl::OnLostFocus, this);
+  // Bound before the application can bind: a program that has ended is neither
+  // working nor blocked. "done" and "error" would stay (OSC 7501 rev 0.4), but
+  // only the root record is kept and the view has no record table to age.
+  Bind(wxEVT_TERMINAL_TERMINATED, [this](wxTerminalEvent &event) {
+    event.Skip();
+    if (m_programStatus.state == wxTerminalProgramState::Working ||
+        m_programStatus.state == wxTerminalProgramState::Blocked) {
+      m_programStatus = wxTerminalProgramStatus{};
+    }
+  });
   Bind(wxEVT_SCROLLWIN_TOP, &wxTerminalViewCtrl::OnScroll, this);
   Bind(wxEVT_SCROLLWIN_BOTTOM, &wxTerminalViewCtrl::OnScroll, this);
   Bind(wxEVT_SCROLLWIN_LINEUP, &wxTerminalViewCtrl::OnScroll, this);
@@ -416,6 +426,16 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     wxTerminalEvent event{wxEVT_TERMINAL_PROGRESS};
     event.SetProgressState(state);
     event.SetProgressValue(value);
+    event.SetEventObject(this);
+    GetEventHandler()->AddPendingEvent(event);
+  });
+  m_core.SetProgramStatusCallback([this](const wxTerminalProgramStatus &status) {
+    // Only the root record is kept; the application gets every report.
+    if (status.id.empty()) {
+      m_programStatus = status;
+    }
+    wxTerminalEvent event{wxEVT_TERMINAL_PROGRAM_STATUS};
+    event.SetProgramStatus(status);
     event.SetEventObject(this);
     GetEventHandler()->AddPendingEvent(event);
   });

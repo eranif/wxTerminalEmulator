@@ -112,6 +112,12 @@ public:
   wxTerminalProgressState GetProgressState() const { return m_progressState; }
   int GetProgressValue() const { return m_progressValue; }
 
+  /// Latest OSC 7501 report of the root record (a report without an id). The
+  /// state is Clear when there is none, or when the program has ended.
+  const wxTerminalProgramStatus &GetProgramStatus() const {
+    return m_programStatus;
+  }
+
   static bool IsOpenGLEnabled();
 
   // Helper methods for sending special characters
@@ -759,6 +765,7 @@ private:
   wxString m_currentDirectory;
   wxTerminalProgressState m_progressState{wxTerminalProgressState::Hidden};
   int m_progressValue{0};
+  wxTerminalProgramStatus m_programStatus;
   bool m_safeDrawing{false};
 #if USE_TIMER_REFRESH
   std::atomic_bool m_needsRepaint{true};

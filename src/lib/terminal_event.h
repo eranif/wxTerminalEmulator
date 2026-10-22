@@ -11,6 +11,35 @@ enum class wxTerminalProgressState {
   Warning = 4,       ///< Warning or paused, value is 0-100.
 };
 
+/// State a program reports with OSC 7501 (Program Status Protocol, rev 0.4).
+enum class wxTerminalProgramState {
+  Idle,    ///< Waiting for the user, or the user cancelled.
+  Working, ///< Busy. GetProgramProgress() may hold a percent.
+  Done,    ///< Finished. Stays until the next report.
+  Blocked, ///< Waits for the user. See wxTerminalBlockedKind.
+  Error,   ///< Failed. Stays until the next report.
+  Clear,   ///< The record was removed: nothing to show.
+};
+
+/// Why a program is blocked (the "kind" key of OSC 7501).
+enum class wxTerminalBlockedKind {
+  None,
+  Permission,
+  Question,
+  Auth,
+};
+
+/// One OSC 7501 report. A default-constructed value means "no status".
+struct wxTerminalProgramStatus {
+  wxTerminalProgramState state{wxTerminalProgramState::Clear};
+  wxTerminalBlockedKind kind{wxTerminalBlockedKind::None};
+  int progress{-1};  ///< 0-100, or -1 when unknown (indeterminate).
+  wxString id;       ///< Record path such as "build/test". Empty: root record.
+  wxString app;      ///< Name of the program, may be empty.
+  wxString title;    ///< Decoded title, may be empty.
+  wxString message;  ///< Decoded message, may be empty.
+};
+
 class wxTerminalEvent : public wxCommandEvent {
 public:
   wxTerminalEvent(wxEventType type = wxEVT_NULL, int id = 0)
@@ -46,9 +75,28 @@ public:
     return m_progressState == wxTerminalProgressState::Hidden;
   }
 
+  /// The OSC 7501 report of a wxEVT_TERMINAL_PROGRAM_STATUS event.
+  void SetProgramStatus(const wxTerminalProgramStatus &status) {
+    m_programStatus = status;
+  }
+  const wxTerminalProgramStatus &GetProgramStatus() const {
+    return m_programStatus;
+  }
+  wxTerminalProgramState GetProgramState() const {
+    return m_programStatus.state;
+  }
+  wxTerminalBlockedKind GetBlockedKind() const { return m_programStatus.kind; }
+  /// 0-100, or -1 when the program did not report a percent.
+  int GetProgramProgress() const { return m_programStatus.progress; }
+  const wxString &GetProgramId() const { return m_programStatus.id; }
+  const wxString &GetProgramApp() const { return m_programStatus.app; }
+  const wxString &GetProgramTitle() const { return m_programStatus.title; }
+  const wxString &GetProgramMessage() const { return m_programStatus.message; }
+
 private:
   wxTerminalProgressState m_progressState{wxTerminalProgressState::Hidden};
   int m_progressValue{0};
+  wxTerminalProgramStatus m_programStatus;
   wxString m_title;
   wxString m_clickedText;
 };
@@ -61,6 +109,12 @@ wxDECLARE_EVENT(wxEVT_TERMINAL_CWD_CHANGED, wxTerminalEvent);
 /// GetProgressState() and GetProgressValue() of the event, and
 /// wxTerminalViewCtrl::GetProgressState() for the current state.
 wxDECLARE_EVENT(wxEVT_TERMINAL_PROGRESS, wxTerminalEvent);
+/// The program sent a status report with OSC 7501 (Program Status Protocol, for
+/// example Kiro CLI). The event is posted once for each valid report. See
+/// GetProgramStatus() of the event; it holds the id, state, kind, progress, app,
+/// title and message of the report. wxTerminalViewCtrl::GetProgramStatus()
+/// returns the latest report of the root record (no id).
+wxDECLARE_EVENT(wxEVT_TERMINAL_PROGRAM_STATUS, wxTerminalEvent);
 /// The program copied text with OSC 52, or the text was cleared. GetString()
 /// holds the text, or is empty after a clear. The current text is returned by
 /// wxTerminalViewCtrl::GetAppSelection().

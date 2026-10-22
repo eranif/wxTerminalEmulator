@@ -58,6 +58,7 @@ All you need is **wxWidgets** and **CMake** — no third-party libraries are req
 - **Scroll regions** and cursor save/restore handling
 - **OSC/CSI processing**, including title updates and terminal responses
 - **Progress bar (OSC 9;4)**, as in iTerm2, ConEmu and Windows Terminal: the program reports a state and a percent, the application draws the bar
+- **Program status (OSC 7501)**, the [Program Status Protocol](https://www.swareco.com/blog/osc-7501-program-status-protocol) (revision 0.4) used by Kiro CLI: `idle`, `working`, `done`, `blocked`, `error` and `clear`, with an optional percent, id, app, title and message. The terminal also answers the support query `ESC ] 7501 ; ? ESC \`
 
 ### Platform Support
 - **Windows**: ConPTY-based backend with OpenGL rendering support
@@ -117,6 +118,8 @@ Custom wxWidgets events for terminal-specific notifications:
 - `wxEVT_TERMINAL_TEXT_LINK`: Fired when user Ctrl+clicks on text to select a token/link
   - The event carries the clicked text string for custom handling (e.g., opening URLs, file paths)
 - `wxEVT_TERMINAL_APP_OWNS_MOUSE` / `wxEVT_TERMINAL_APP_RELEASE_MOUSE`: Fired when the program in the terminal (tmux, vim, ...) starts or stops tracking the mouse. While it tracks the mouse the cursor is an arrow, and Shift gives the mouse back to the terminal
+- `wxEVT_TERMINAL_PROGRAM_STATUS`: Fired for each valid OSC 7501 report (`ESC ] 7501 ; state=working:progress=40 BEL`)
+  - `evt.GetProgramStatus()` returns a `wxTerminalProgramStatus` with `state` (`wxTerminalProgramState`: `Idle`, `Working`, `Done`, `Blocked`, `Error`, `Clear`), `kind` (`wxTerminalBlockedKind`), `progress` (0-100, or -1 when unknown), `id`, `app`, `title` and `message`. The same values are available through `evt.GetProgramState()`, `GetBlockedKind()`, `GetProgramProgress()`, `GetProgramId()`, `GetProgramApp()`, `GetProgramTitle()` and `GetProgramMessage()`. The library keeps no records: every report is an event. `wxTerminalViewCtrl::GetProgramStatus()` returns the latest report without an id (the root record); it is cleared when a working or blocked program ends
 - `wxEVT_TERMINAL_PROGRESS`: Fired when the program sets or clears a progress bar with OSC 9;4 (`ESC ] 9 ; 4 ; <state> ; <value> BEL`)
   - `evt.GetProgressState()` returns a `wxTerminalProgressState` (`Hidden`, `Normal`, `Error`, `Indeterminate`, `Warning`) and `evt.GetProgressValue()` returns 0-100. `wxTerminalViewCtrl::GetProgressState()` / `GetProgressValue()` return the current values. `evt.ShowProgress()` / `evt.HideProgress()` are shortcuts for "state is not / is `Hidden`". The library does not draw the bar; the application does
 - `wxEVT_TERMINAL_APP_SELECTION_CHANGED`: Fired when the program copies text with OSC 52 (write only, `?` queries are ignored), or when that text is cleared (left press, mouse tracking stops, `ClearAll()`)

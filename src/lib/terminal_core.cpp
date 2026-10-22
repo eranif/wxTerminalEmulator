@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 
 #include <wx/base64.h>
 #include <wx/buffer.h>
@@ -525,6 +526,161 @@ static std::string DecodeOsc7Uri(const std::string &uri) {
   return path;
 }
 
+// --- OSC 7501: Program Status Protocol (revision 0.4) ---
+// OSC 7501 ; key=value : key=value ... ST
+
+static bool IsStatusNameChar(char c) {
+  return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '.' ||
+         c == '+' || c == '-';
+}
+
+// 1-32 characters: the "app" value and one segment of an "id".
+static bool IsStatusName(const std::string &s) {
+  return !s.empty() && s.size() <= 32 &&
+         std::all_of(s.begin(), s.end(), IsStatusNameChar);
+}
+
+// Slash separated path: up to 8 segments, up to 128 bytes.
+static bool IsStatusRecordId(const std::string &id) {
+  if (id.size() > 128)
+    return false;
+  int levels = 0;
+  std::size_t start = 0;
+  while (true) {
+    const std::size_t slash = id.find('/', start);
+    const std::size_t len =
+        slash == std::string::npos ? std::string::npos : slash - start;
+    if (!IsStatusName(id.substr(start, len)) || ++levels > 8)
+      return false;
+    if (slash == std::string::npos)
+      return true;
+    start = slash + 1;
+  }
+}
+
+static bool IsStatusValueChar(char c) {
+  return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '.' ||
+         c == ',' || c == '+' || c == '/' || c == '=' || c == '-';
+}
+
+// Decode a base64 "title" or "msg" value (padding is optional). Fails for text
+// that is too long, is not base64 or UTF-8, or has control characters.
+static bool DecodeStatusText(std::string b64, std::size_t maxEncoded,
+                             std::size_t maxDecoded, wxString &out) {
+  if (b64.size() > maxEncoded)
+    return false;
+  while (b64.size() % 4 != 0)
+    b64 += '=';
+  const wxMemoryBuffer decoded = wxBase64Decode(b64.data(), b64.size());
+  if (decoded.GetDataLen() == 0 && !b64.empty())
+    return false;
+  if (decoded.GetDataLen() > maxDecoded)
+    return false;
+  const wxString text = wxString::FromUTF8(
+      static_cast<const char *>(decoded.GetData()), decoded.GetDataLen());
+  if (text.empty() && decoded.GetDataLen() != 0)
+    return false;
+  for (const wxUniChar ch : text) {
+    const auto v = static_cast<unsigned int>(ch.GetValue());
+    if (v < 0x20 || (v >= 0x7F && v <= 0x9F))
+      return false;
+  }
+  out = text;
+  return true;
+}
+
+// Parse the part of the sequence after "7501;". Returns false when the whole
+// report must be dropped.
+static bool ParseProgramStatus(const std::string &body,
+                               wxTerminalProgramStatus &out) {
+  std::map<std::string, std::string> pairs; // a repeated key: the last wins
+  std::size_t start = 0;
+  while (start <= body.size()) {
+    std::size_t colon = body.find(':', start);
+    if (colon == std::string::npos)
+      colon = body.size();
+    const std::string pair = body.substr(start, colon - start);
+    start = colon + 1;
+
+    const std::size_t eq = pair.find('=');
+    if (eq == std::string::npos || eq == 0 || eq == pair.size() - 1)
+      continue;
+    const std::string key = pair.substr(0, eq);
+    const std::string value = pair.substr(eq + 1);
+    const bool keyOk =
+        key.size() <= 16 && std::all_of(key.begin(), key.end(), [](char c) {
+          return c >= 'a' && c <= 'z';
+        });
+    if (keyOk && std::all_of(value.begin(), value.end(), IsStatusValueChar))
+      pairs[key] = value;
+  }
+
+  static const std::map<std::string, wxTerminalProgramState> kStates = {
+      {"idle", wxTerminalProgramState::Idle},
+      {"working", wxTerminalProgramState::Working},
+      {"done", wxTerminalProgramState::Done},
+      {"blocked", wxTerminalProgramState::Blocked},
+      {"error", wxTerminalProgramState::Error},
+      {"clear", wxTerminalProgramState::Clear},
+  };
+  const auto stateIt = pairs.find("state");
+  if (stateIt == pairs.end())
+    return false;
+  const auto known = kStates.find(stateIt->second);
+  if (known == kStates.end())
+    return false;
+
+  wxTerminalProgramStatus status;
+  status.state = known->second;
+
+  if (const auto it = pairs.find("id"); it != pairs.end()) {
+    if (!IsStatusRecordId(it->second))
+      return false;
+    status.id = wxString::FromUTF8(it->second);
+  }
+
+  if (status.state == wxTerminalProgramState::Blocked) {
+    if (const auto it = pairs.find("kind"); it != pairs.end()) {
+      if (it->second == "permission")
+        status.kind = wxTerminalBlockedKind::Permission;
+      else if (it->second == "question")
+        status.kind = wxTerminalBlockedKind::Question;
+      else if (it->second == "auth")
+        status.kind = wxTerminalBlockedKind::Auth;
+    }
+  }
+
+  if (status.state == wxTerminalProgramState::Working ||
+      status.state == wxTerminalProgramState::Blocked) {
+    if (const auto it = pairs.find("progress"); it != pairs.end()) {
+      const std::string &p = it->second;
+      if (p.size() <= 3 && std::all_of(p.begin(), p.end(), [](char c) {
+            return c >= '0' && c <= '9';
+          })) {
+        const int value = std::atoi(p.c_str());
+        if (value <= 100)
+          status.progress = value;
+      }
+    }
+  }
+
+  if (const auto it = pairs.find("app");
+      it != pairs.end() && IsStatusName(it->second))
+    status.app = wxString::FromUTF8(it->second);
+
+  if (const auto it = pairs.find("title"); it != pairs.end()) {
+    if (!DecodeStatusText(it->second, 256, 192, status.title))
+      return false;
+  }
+  if (const auto it = pairs.find("msg"); it != pairs.end()) {
+    if (!DecodeStatusText(it->second, 2732, 2048, status.message))
+      return false;
+  }
+
+  out = std::move(status);
+  return true;
+}
+
 void TerminalCore::TsmOscCb(struct tsm_vte * /*vte*/, const char *u8,
                             size_t len, void *data) {
   auto *self = static_cast<TerminalCore *>(data);
@@ -559,6 +715,23 @@ void TerminalCore::TsmOscCb(struct tsm_vte * /*vte*/, const char *u8,
     std::string path = DecodeOsc7Uri(osc.substr(2));
     if (!path.empty() && self->m_cwdCallback)
       self->m_cwdCallback(path);
+    return;
+  }
+
+  // OSC 7501;? — does the terminal support the Program Status Protocol?
+  if (osc == "7501;?" || osc.rfind("7501;?:", 0) == 0) {
+    if (self->m_responseCallback)
+      self->m_responseCallback("\x1b]7501;?:states=idle,working,done,blocked,"
+                               "error:kinds=permission,question,auth\x1b\\");
+    return;
+  }
+
+  // OSC 7501;state=...:progress=... — program status (Kiro CLI and others).
+  if (osc.rfind("7501;", 0) == 0) {
+    wxTerminalProgramStatus status;
+    if (self->m_programStatusCallback &&
+        ParseProgramStatus(osc.substr(5), status))
+      self->m_programStatusCallback(status);
     return;
   }
 

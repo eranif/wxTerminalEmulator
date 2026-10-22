@@ -192,6 +192,13 @@ public:
       std::function<void(wxTerminalProgressState, int)> callback) {
     m_progressCallback = callback;
   }
+  // Called for each valid OSC 7501 report (Program Status Protocol). The core
+  // keeps no records: it parses and checks the report, the caller decides what
+  // to do with it. The core also answers the support query "OSC 7501 ; ? ST".
+  void SetProgramStatusCallback(
+      std::function<void(const wxTerminalProgramStatus &)> callback) {
+    m_programStatusCallback = callback;
+  }
   void SetBellCallback(std::function<void()> callback) {
     m_bellCallback = callback;
   }
@@ -318,6 +325,7 @@ private:
   std::function<void(const std::string &)> m_titleCallback;
   std::function<void(const std::string &)> m_cwdCallback;
   std::function<void(wxTerminalProgressState, int)> m_progressCallback;
+  std::function<void(const wxTerminalProgramStatus &)> m_programStatusCallback;
   std::function<void(const std::string &)> m_clipboardCallback;
   std::function<void()> m_bellCallback;
   std::function<void(bool entered)> m_altScreenCallback;
