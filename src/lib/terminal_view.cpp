@@ -675,7 +675,8 @@ void wxTerminalViewCtrl::ShowProgressBar(bool show) {
     m_progress->SetMinSize(wxSize(-1, FromDIP(4)));
     m_progress->SetMaxSize(wxSize(-1, FromDIP(4)));
     m_progress->Hide();
-    sizer->Add(m_progress, wxSizerFlags(0).Expand());
+    // At the start of the sizer: above the view.
+    sizer->Insert(0, m_progress, wxSizerFlags(0).Expand());
     sizer->Layout();
   }
 
@@ -693,17 +694,28 @@ void wxTerminalViewCtrl::ApplyProgressBarColours() {
   if (!m_progress) {
     return;
   }
-  // The bar is the selection colour, which the theme makes visible on its
-  // background. The track is the background, a little towards the text colour:
-  // the same tint as the header and footer strips.
-  const auto &theme = m_core.GetTheme();
-  auto mix = [](int bg, int fg) { return bg + (fg - bg) * 12 / 100; };
-  m_progress->SetBackgroundColour(wxColour(
-      mix(theme.bg.Red(), theme.fg.Red()),
-      mix(theme.bg.Green(), theme.fg.Green()),
-      mix(theme.bg.Blue(), theme.fg.Blue())));
-  m_progress->SetForegroundColour(theme.selectionBg);
+  m_progress->SetBackgroundColour(GetProgressBackgroundColour());
+  m_progress->SetTrackColour(GetProgressColour());
 #endif
+}
+
+void wxTerminalViewCtrl::SetProgressColour(const wxColour &colour) {
+  m_progressColour = colour;
+  ApplyProgressBarColours();
+}
+
+wxColour wxTerminalViewCtrl::GetProgressColour() const {
+  return m_progressColour.IsOk() ? m_progressColour : *wxGREEN;
+}
+
+void wxTerminalViewCtrl::SetProgressBackgroundColour(const wxColour &colour) {
+  m_progressBgColour = colour;
+  ApplyProgressBarColours();
+}
+
+wxColour wxTerminalViewCtrl::GetProgressBackgroundColour() const {
+  // The background of the theme, so the gauge fits a light and a dark theme.
+  return m_progressBgColour.IsOk() ? m_progressBgColour : m_core.GetTheme().bg;
 }
 
 void wxTerminalViewCtrl::UpdateProgressBarVisibility(bool viewShown) {
@@ -719,6 +731,12 @@ void wxTerminalViewCtrl::UpdateProgressBarVisibility(bool viewShown) {
   }
   m_progress->Show(visible);
   GetParent()->SendSizeEvent();
+  if (visible) {
+    // Paint it now, with its new size. A gauge that was hidden has not been
+    // painted yet, and nothing else asks for it.
+    m_progress->Refresh(false);
+    m_progress->Update();
+  }
 }
 
 void wxTerminalViewCtrl::OnShow(wxShowEvent &event) {

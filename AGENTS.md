@@ -337,7 +337,8 @@ one for keyboard layout translation).
    `DrawStripGL()`, from `LayoutStrip()`.
 
    The progress bar of `ShowProgressBar()` is not a strip: it is a native
-   `wxGauge`, a child of the parent window, added to the sizer of the parent.
+   `wxGauge`, a child of the parent window, inserted at index 0 of the sizer of
+   the parent (above the view).
    It is created once and is shown only while there is progress; a hidden
    gauge takes no room. The sizer does the layout, so none of the code above
    knows it.

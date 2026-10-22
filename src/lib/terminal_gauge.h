@@ -4,7 +4,6 @@
 // wxGauge. With OpenGL (USE_OPENGL=1) it is a class with the same basic API
 // that draws itself with OpenGL, like the terminal does.
 #include "terminal_gl_renderer.h" // defines USE_OPENGL when it is not set
-
 #include <wx/gauge.h>
 
 #if USE_OPENGL
@@ -20,12 +19,16 @@
  * GetValue(), Pulse() and IsVertical(). Create it with the same arguments as a
  * wxGauge (the style is wxGA_HORIZONTAL or wxGA_VERTICAL).
  *
- * The bar is drawn with GetForegroundColour() on a track of
- * GetBackgroundColour(). Pulse() puts the gauge in indeterminate mode and moves
- * the moving bar, like wxGauge does on GTK and macOS: call it again and again
- * (for example from a wxTimer) to animate it. The bar moves by the time since
- * the last Pulse(): it needs 2 seconds from one end to the other, however often
- * Pulse() is called. SetValue() or SetRange() end the indeterminate mode.
+ * The gauge has two parts. The track is the part that fills (or moves): it is
+ * drawn with the colour of SetTrackColour(). The background is everything
+ * behind the track: it is drawn with GetBackgroundColour(), and the whole
+ * gauge is cleared with it before the track is drawn.
+ *
+ * Pulse() puts the gauge in indeterminate mode and moves the track, like
+ * wxGauge does on GTK and macOS: call it again and again (for example from a
+ * wxTimer) to animate it. The track moves by the time since the last Pulse():
+ * it needs 2 seconds from one end to the other, however often Pulse() is
+ * called. SetValue() or SetRange() end the indeterminate mode.
  */
 class Gauge : public wxGLCanvas {
 public:
@@ -47,11 +50,12 @@ public:
   void Pulse();
   bool IsVertical() const { return HasFlag(wxGA_VERTICAL); }
 
-  bool SetForegroundColour(const wxColour &colour) override;
-  bool SetBackgroundColour(const wxColour &colour) override;
-
   // A gauge never takes the keyboard focus from the terminal.
   bool AcceptsFocus() const override { return false; }
+
+  /// The colour of the track: the part that fills (or moves). The background
+  /// behind it is set with SetBackgroundColour().
+  void SetTrackColour(const wxColour &colour);
 
 protected:
   wxSize DoGetBestSize() const override;
@@ -66,12 +70,16 @@ private:
   double m_pulsePhase{0.0}; // 0..1, where the moving bar is
   std::chrono::steady_clock::time_point m_lastPulse;
   std::unique_ptr<wxGLContext> m_glContext;
+  wxColour m_trackColour;
   TerminalGLRenderer m_renderer;
   bool m_glInitialized{false};
 };
 
 #else
 
-using Gauge = wxGauge;
+class Gauge : public wxGauge {
+public:
+  void SetTrackColour(const wxColour &colour) { wxUnusedVar(colour); }
+};
 
 #endif // USE_OPENGL

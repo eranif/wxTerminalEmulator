@@ -24,13 +24,9 @@ Gauge::Gauge(wxWindow *parent, wxWindowID id, int range, const wxPoint &pos,
              const wxSize &size, long style, const wxString &name)
     : wxGLCanvas(parent, GaugeGLAttributes(), id, pos, size, style, name),
       m_range{std::max(range, 0)} {
-  // The same core profile context as the terminal.
-  wxGLContextAttrs ctxAttrs;
-  ctxAttrs.PlatformDefaults().CoreProfile().OGLVersion(3, 2).EndList();
-  m_glContext = std::make_unique<wxGLContext>(this, nullptr, &ctxAttrs);
-
-  // The canvas draws every pixel itself.
-  SetBackgroundStyle(wxBG_STYLE_PAINT);
+  // The GL canvas does its own buffer swap, like the terminal: it does not set
+  // wxBG_STYLE_PAINT. The context is made on the first paint, when the canvas
+  // is shown (the gauge is hidden until there is progress).
   Bind(wxEVT_PAINT, &Gauge::OnPaint, this);
   Bind(wxEVT_SIZE, &Gauge::OnSize, this);
   Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent &) {});
@@ -79,16 +75,9 @@ void Gauge::Pulse() {
   Refresh(false);
 }
 
-bool Gauge::SetForegroundColour(const wxColour &colour) {
-  const bool changed = wxGLCanvas::SetForegroundColour(colour);
+void Gauge::SetTrackColour(const wxColour &colour) {
+  m_trackColour = colour;
   Refresh(false);
-  return changed;
-}
-
-bool Gauge::SetBackgroundColour(const wxColour &colour) {
-  const bool changed = wxGLCanvas::SetBackgroundColour(colour);
-  Refresh(false);
-  return changed;
 }
 
 wxSize Gauge::DoGetBestSize() const {
@@ -106,10 +95,18 @@ void Gauge::OnPaint(wxPaintEvent &) {
   wxPaintDC paintDc{this};
 
   const wxSize size = GetClientSize();
-  if (!m_glContext || !IsShownOnScreen() || size.x <= 0 || size.y <= 0) {
+  if (!IsShownOnScreen() || size.x <= 0 || size.y <= 0) {
     return;
   }
-  m_glContext->SetCurrent(*this);
+  if (!m_glContext) {
+    // The same core profile context as the terminal.
+    wxGLContextAttrs ctxAttrs;
+    ctxAttrs.PlatformDefaults().CoreProfile().OGLVersion(3, 2).EndList();
+    m_glContext = std::make_unique<wxGLContext>(this, nullptr, &ctxAttrs);
+  }
+  if (!m_glContext->IsOK() || !m_glContext->SetCurrent(*this)) {
+    return;
+  }
   if (!m_glInitialized) {
     // The gauge draws only solid quads: no glyph atlas.
     m_glInitialized = m_renderer.Init(false);
@@ -118,14 +115,14 @@ void Gauge::OnPaint(wxPaintEvent &) {
     }
   }
 
-  // The bar runs along the main axis: from the left (horizontal) or from the
+  // The track runs along the main axis: from the left (horizontal) or from the
   // bottom (vertical).
   const bool vertical = IsVertical();
   const int length = vertical ? size.y : size.x;
   int from = 0;
   int to = 0;
   if (m_pulsing) {
-    // A bar that runs in from the start and out of the end, again and again.
+    // A track that runs in from the start and out of the end, again and again.
     const int segment = std::max(length / 4, FromDIP(24));
     from = static_cast<int>(m_pulsePhase * (length + segment)) - segment;
     to = from + segment;
@@ -140,15 +137,13 @@ void Gauge::OnPaint(wxPaintEvent &) {
 #else
   const double scale = GetDPIScaleFactor();
 #endif
-  // The track is the background of the frame.
+  // The background clears the whole frame; the track is drawn on top of it.
   m_renderer.BeginFrame(size.x, size.y, scale, GetBackgroundColour());
   if (to > from) {
     if (vertical) {
-      m_renderer.AddSolidRect(0, size.y - to, size.x, to - from,
-                              GetForegroundColour());
+      m_renderer.AddSolidRect(0, size.y - to, size.x, to - from, m_trackColour);
     } else {
-      m_renderer.AddSolidRect(from, 0, to - from, size.y,
-                              GetForegroundColour());
+      m_renderer.AddSolidRect(from, 0, to - from, size.y, m_trackColour);
     }
   }
   m_renderer.EndFrame();

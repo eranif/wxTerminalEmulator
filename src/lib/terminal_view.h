@@ -348,17 +348,18 @@ public:
   bool HasFooter() const { return m_footer.present; }
   const wxString &GetFooterText() const { return m_footer.text; }
 
-  /// Show a thin progress bar next to the view. It is a Gauge: the native
+  /// Show a thin progress bar above the view. It is a Gauge: the native
   /// wxGauge, or, when OpenGL is used (USE_OPENGL), a gauge drawn with OpenGL
   /// (see terminal_gauge.h). It shows the progress the program reports with
   /// OSC 9;4, or else with OSC 7501 (a working or blocked program): a bar with
   /// a percent, or a moving bar when there is no percent. The native gauge has
-  /// the colour of the system; the OpenGL gauge uses the colours of the theme.
-  /// An error or a warning does not change the colour.
+  /// the colour of the system; the OpenGL gauge is green (see
+  /// SetProgressColour() and SetProgressBackgroundColour()). An error or a
+  /// warning does not change the colour.
   ///
-  /// The gauge is a child of the parent window, added to the sizer of the
-  /// parent: call this after the parent has its sizer, which is normally
-  /// vertical. Nothing happens, and IsShowProgressBar() stays false, when the
+  /// The gauge is a child of the parent window, inserted at the start of the
+  /// sizer of the parent: call this after the parent has its sizer, which is
+  /// normally vertical. Nothing happens, and IsShowProgressBar() stays false, when the
   /// parent has no sizer, or when the parent is a wxBookCtrlBase (a notebook:
   /// its pages share the parent).
   ///
@@ -371,6 +372,25 @@ public:
   void ShowProgressBar(bool show);
   /// True if the progress bar was asked for and could be created.
   bool IsShowProgressBar() const { return m_showProgressBar; }
+
+  /// The colour of the progress bar. The default (also after passing
+  /// wxNullColour) is *wxGREEN. The progress bar does not use the colours of
+  /// the theme. Only the OpenGL gauge has colours of its own: the native
+  /// wxGauge keeps the colours of the system. They can be set before the bar is
+  /// shown.
+  void SetProgressColour(const wxColour &colour);
+  /// The colour the bar uses now: the one that was set, else *wxGREEN. It is
+  /// never invalid.
+  wxColour GetProgressColour() const;
+
+  /// The background of the progress bar, behind the bar. The default (also
+  /// after passing wxNullColour) is the background colour of the theme, and it
+  /// follows the theme. The colours are used as they are: nothing is adjusted
+  /// for contrast.
+  void SetProgressBackgroundColour(const wxColour &colour);
+  /// The colour the background uses now: the one that was set, else the
+  /// background colour of the theme. It is never invalid.
+  wxColour GetProgressBackgroundColour() const;
 
 private:
   /// The text of a header or footer laid out in pixels (the same layout for
@@ -873,6 +893,8 @@ private:
       m_progressTimer; // moves the gauge while the progress is indeterminate
   Gauge *m_progress{nullptr};
   bool m_showProgressBar{false};
+  wxColour m_progressColour;   // invalid: *wxGREEN
+  wxColour m_progressBgColour; // invalid: the background of the theme
   std::mutex m_feedMutex;
   std::string m_feedBuffer;
   std::atomic_bool m_feedShuttingDown{false};
