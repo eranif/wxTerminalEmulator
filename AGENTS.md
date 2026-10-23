@@ -244,7 +244,7 @@ must already be installed.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `BUILD_GLYPHT` | `ON` | Build the GlyphT demo application |
-| `USE_OPENGL` | `ON` on Windows and macOS, `OFF` on Linux | Use the OpenGL renderer. `ON` on Linux stops the configure step with an error. Can also be set with the `USE_OPENGL` environment variable. |
+| `USE_OPENGL` | `ON` on Windows and macOS, `OFF` on Linux | Use the OpenGL renderer. On Linux it needs GLEW and wxWidgets built with the `gl` component. On WSL use `GDK_BACKEND=x11 DISPLAY=:0` (WSLg Wayland EGL fails). Can also be set with the `USE_OPENGL` environment variable. |
 | `WXWIN` | (required on Windows) | wxWidgets install prefix |
 
 ### Windows (MinGW) Build

@@ -31,20 +31,12 @@ else()
   endif()
 endif()
 
-if(USE_OPENGL
-   AND UNIX
-   AND NOT APPLE)
-  message(FATAL_ERROR "OpenGL is not supported on Linux")
-endif()
-
 # find wxWidgets once
 if(MINGW)
   find_package(wxWidgets CONFIG REQUIRED)
 
 else()
-  if(USE_OPENGL
-     AND UNIX
-     AND NOT APPLE)
+  if(USE_OPENGL)
     set(WX_COMPONENTS base core net aui gl xrc)
   else()
     set(WX_COMPONENTS base core net aui xrc)
@@ -139,10 +131,8 @@ if(USE_OPENGL)
   else()
     find_package(OpenGL REQUIRED)
     target_link_libraries(wxterminal_lib PUBLIC OpenGL::GL)
-    if(WIN32)
-      find_package(GLEW REQUIRED)
-      target_link_libraries(wxterminal_lib PUBLIC GLEW::GLEW)
-    endif()
+    find_package(GLEW REQUIRED)
+    target_link_libraries(wxterminal_lib PUBLIC GLEW::GLEW)
   endif()
 else()
   target_compile_definitions(wxterminal_lib PUBLIC USE_OPENGL=0)

@@ -16,6 +16,7 @@
 #include <unordered_set>
 #include <utility>
 #include <wx/app.h>
+#include <wx/sysopt.h>
 #include <wx/bookctrl.h>
 #include <wx/clipbrd.h>
 #include <wx/dcbuffer.h>
@@ -265,11 +266,19 @@ static const std::unordered_map<int, int> shiftMap = {
     {'`', '~'}};
 
 #if USE_OPENGL
-auto kOpenGLAttributes = []() -> wxGLAttributes {
+auto kOpenGLAttributesFn = []() -> wxGLAttributes {
+#if defined(__WXGTK__)
+  // wxGTK picks EGL by default on X11, but EGL fails on some setups (WSLg has
+  // no DRI3) while GLX works. This must run before the first GL attribute use.
+  // The user can still choose with the environment variable wx_opengl_egl.
+  if (!wxSystemOptions::HasOption("opengl.egl")) {
+    wxSystemOptions::SetOption("opengl.egl", 0);
+  }
+#endif
   wxGLAttributes attr;
   attr.PlatformDefaults().RGBA().DoubleBuffer().EndList();
   return attr;
-}();
+};
 #endif
 
 wxTerminalViewCtrl::wxTerminalViewCtrl(
@@ -278,7 +287,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     std::optional<wxString> workingDirectory, bool showScrollBar,
     bool shellIntegration)
 #if USE_OPENGL
-    : wxGLCanvas(parent, kOpenGLAttributes, wxID_ANY, wxDefaultPosition,
+    : wxGLCanvas(parent, kOpenGLAttributesFn(), wxID_ANY, wxDefaultPosition,
                  wxDefaultSize,
                  wxTAB_TRAVERSAL | (showScrollBar ? wxVSCROLL : 0)),
       m_showScrollBar{showScrollBar}
@@ -296,6 +305,9 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   wxGLContextAttrs ctxAttrs;
   ctxAttrs.PlatformDefaults().CoreProfile().OGLVersion(3, 2).EndList();
   m_glContext = std::make_unique<wxGLContext>(this, nullptr, &ctxAttrs);
+  if (!m_glContext->IsOK()) {
+    TLOG_ERROR() << "GL context creation failed" << std::endl;
+  }
   // The GL canvas does its own buffer swap; no wxBG_STYLE_PAINT needed.
 #else
   wxPanel::Create(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, style);

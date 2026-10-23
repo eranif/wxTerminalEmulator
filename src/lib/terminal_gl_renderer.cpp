@@ -16,22 +16,14 @@
 // Platform GL headers.
 // • macOS  – OpenGL 3.2 core profile ships in the framework; no loader needed.
 // • Windows – opengl32.dll only exports OpenGL 1.1; GLEW loads the rest.
-// • Linux  – GL_GLEXT_PROTOTYPES lets the driver .so export symbols directly.
+// • Linux  – GLEW loads core profile functions.
 #ifdef __APPLE__
 #define GL_SILENCE_DEPRECATION 1
 #include <OpenGL/gl3.h>
-#elif defined(_WIN32)
-// GLEW must be included before any other GL header.
+#else
+// Windows and Linux: GLEW must be included before any other GL header.
 #include <GL/glew.h>
 #include <wx/glcanvas.h>
-#else
-// Linux
-#include <wx/glcanvas.h>
-#ifndef GL_GLEXT_PROTOTYPES
-#define GL_GLEXT_PROTOTYPES 1
-#endif
-#include <GL/gl.h>
-#include <GL/glext.h>
 #endif
 
 namespace {
@@ -126,8 +118,9 @@ bool TerminalGLRenderer::Init(bool withGlyphs) {
     return true;
   }
 
-#ifdef _WIN32
+#if !defined(__APPLE__)
   // glewInit() must be called once per GL context. Requires a current context.
+  // (macOS uses native OpenGL, not GLEW)
   static bool s_glewInitialized = false;
   if (!s_glewInitialized) {
     GLenum err = glewInit();
