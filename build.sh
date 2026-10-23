@@ -78,7 +78,8 @@ function build_wx_widgets_Linux() {
   fetch_wx_widgets
   INFO "Building wxWidgets"
   ../configure --disable-debug_flag --with-gtk=3 --enable-stl \
-    --prefix="${WX_INSTALL_DIR}" --disable-shared --enable-monolithic
+    --prefix="${WX_INSTALL_DIR}" --disable-shared --enable-monolithic \
+    --with-opengl
   make -j"$(jobs)" install
   cd "${ROOT_DIR}"
 }

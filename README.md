@@ -29,17 +29,17 @@ All you need is **wxWidgets** and **CMake** — no third-party libraries are req
 - Platform-specific requirements:
   - **Windows**: MinGW with Windows 10+ (for `ConPTY` support)
   - **macOS**: macOS 10.10+ with CoreText and OpenGL support
-  - **Linux**: libutil for PTY support (OpenGL disabled on Linux)
+  - **Linux**: libutil for PTY support and the GTK 3 and OpenGL development packages (`build.sh` builds wxWidgets with OpenGL). The OpenGL renderer is off by default; to turn it on (`USE_OPENGL=1`) you also need GLEW
 
 ### Rendering
 
-#### **🚀 OpenGL Acceleration (Windows & macOS)**
-- **High-performance GPU-accelerated rendering** using a glyph-atlas renderer on Windows and macOS
+#### **🚀 OpenGL Acceleration (all platforms)**
+- **High-performance GPU-accelerated rendering** using a glyph-atlas renderer on Windows, macOS and Linux (on by default on Windows and macOS, off by default on Linux)
 - **wxGLCanvas-based implementation** with batched draw calls
 - **Lazy glyph rasterization** with per-frame caching for optimal performance
 - **DPI-aware scaling** for crisp text on high-resolution displays
 - **Configurable rendering backend**: Enable/disable via `-DUSE_OPENGL=ON/OFF` at build time
-- **Legacy wxDC fallback** available for compatibility (default on Linux)
+- **Legacy wxDC fallback** available for compatibility (the default on Linux)
 
 #### **Display & Theming**
 - **Dark and light themes** via `terminal_theme.h`
@@ -63,7 +63,7 @@ All you need is **wxWidgets** and **CMake** — no third-party libraries are req
 ### Platform Support
 - **Windows**: ConPTY-based backend with OpenGL rendering support
 - **macOS**: PTY backend with OpenGL acceleration and native appearance integration
-- **Linux**: PTY backend with legacy wxDC rendering (OpenGL not supported)
+- **Linux**: PTY backend with legacy wxDC rendering by default; OpenGL rendering is supported and can be enabled with `-DUSE_OPENGL=ON`
 - The build automatically selects the appropriate PTY implementation and rendering backend
 
 ### Input Handling
@@ -147,14 +147,14 @@ Debugging and diagnostics support:
 - Counter tracking for performance analysis
 
 #### Terminal OpenGL Renderer (`terminal_gl_renderer.h/cpp`)
-GPU-accelerated rendering path (Windows & macOS only, enabled by default):
+GPU-accelerated rendering path (all platforms; enabled by default on Windows and macOS, disabled by default on Linux):
 - **Glyph atlas renderer** using a single-channel texture for efficient rasterization
 - **Batched draw calls** (solid quads + textured glyphs) for minimal GPU overhead
 - **Lazy glyph rasterization** on first sighting using wxWidgets font engine
 - **DPI-aware scaling** for crisp rendering on high-resolution displays
 - **Performance optimized** with efficient vertex buffer management
 - **Metrics alignment** with legacy wxDC path for consistent appearance
-- Compiles to no-op on Linux and when `USE_OPENGL=OFF`
+- Compiles to no-op when `USE_OPENGL=OFF`
 
 ## Building
 
@@ -165,8 +165,12 @@ GPU-accelerated rendering path (Windows & macOS only, enabled by default):
 ### Build Instructions
 
 #### Using `build.sh` (recommended)
-The script builds wxWidgets (v3.3.4 by default) and then builds `glypht`. It
-works on macOS, Linux and Windows (MSYS2). Everything goes into `.build-release/`.
+The script builds everything on all platforms (macOS, Linux and Windows with
+MSYS2): it first downloads and builds wxWidgets (v3.3.4 by default, with OpenGL
+support) and then builds `glypht`. Everything goes into `.build-release/`. On
+Linux, `configure` is run with `--with-opengl`, so the OpenGL development
+packages must be installed (for example `libgl-dev`); the build stops with an
+error if they are missing.
 ```bash
 ./build.sh              # build wxWidgets (first run only) and glypht
 ./build.sh --cmake      # force the CMake configure step
@@ -225,7 +229,7 @@ cmake --build .
 - `WXWIN`: Path to wxWidgets installation (required on Windows with MinGW)
 - `WXCFG`: wxWidgets configuration string (Windows MinGW only, default: `clang_x64_dll/mswu`)
 - `BUILD_GLYPHT`: Enable/disable the demo executable (default: ON)
-- `USE_OPENGL`: Enable OpenGL rendering on Windows/macOS (default: ON on Windows/macOS, OFF on Linux)
+- `USE_OPENGL`: Enable OpenGL rendering (default: ON on Windows/macOS, OFF on Linux). On Linux it needs GLEW and a wxWidgets built with OpenGL (the one `build.sh` builds)
   - Provide via environment variable: `USE_OPENGL=1 cmake ..`
   - Or CMake option: `cmake -DUSE_OPENGL=ON ..`
 
@@ -481,24 +485,24 @@ This is an open-source project. Contributions are welcome via pull requests.
 
 ### Linux
 - Requires `libutil` for PTY support
-- **OpenGL rendering disabled by default** (not supported)
+- **OpenGL rendering is disabled by default** (the build still uses wxDC). It is supported: enable it with `-DUSE_OPENGL=ON`
 - Uses legacy wxDC rendering path (buffered, still performant)
 - Link with `-lutil` flag
 - Default font: System teletype font
-- To enable OpenGL (not recommended): Use `-DUSE_OPENGL=ON` (will fail with fatal error)
+- To enable OpenGL: use `-DUSE_OPENGL=ON`. It needs GLEW and wxWidgets built with the `gl` component. On WSL use `GDK_BACKEND=x11 DISPLAY=:0`, because WSLg Wayland EGL fails
 
 ## Performance
 
 The library is optimized for high-performance terminal rendering:
 
-### OpenGL Path (Windows & macOS)
+### OpenGL Path (all platforms)
 - **GPU-accelerated rendering** with glyph atlas caching
 - **Minimal CPU overhead** via batched draw calls
 - **Low-latency updates** with efficient vertex buffer management
 - **Smooth 60 FPS rendering** even with large scrollback buffers
 - **High-throughput output** capable of keeping up with compilation logs and streaming data
 
-### Legacy wxDC Path (Linux & OpenGL disabled)
+### Legacy wxDC Path (default on Linux, and when OpenGL is disabled)
 - Batched text rendering reduces draw calls
 - Font caching minimizes object creation
 - Timer-based refresh prevents excessive redraws (only when needed)
