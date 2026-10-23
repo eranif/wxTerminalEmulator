@@ -2318,10 +2318,32 @@ void wxTerminalViewCtrl::PaintResizeOverlayGL() {
 
 #endif // USE_OPENGL
 
+// True when the top-level window has another size than the last time any view
+// in it asked. Clicking a tab label also sizes a view while the mouse button is
+// down, but it does not change the size of the top-level window, so it is not a
+// resize by the user. The size is remembered per top-level window and shared by
+// all its views, so a view that was hidden during a resize does not report it
+// again when it is shown.
+bool wxTerminalViewCtrl::TopLevelWindowResized() const {
+  static std::unordered_map<const wxWindow *, wxSize> lastSizes;
+  const wxWindow *top =
+      wxGetTopLevelParent(const_cast<wxTerminalViewCtrl *>(this));
+  if (top == nullptr) {
+    return true;
+  }
+  const wxSize size = top->GetSize();
+  auto [it, inserted] = lastSizes.try_emplace(top, size);
+  if (inserted || it->second == size) {
+    return false;
+  }
+  it->second = size;
+  return true;
+}
+
 void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
   SetTerminalSizeFromClient();
   UpdateScrollbar();
-  if (::wxGetMouseState().LeftIsDown()) {
+  if (::wxGetMouseState().LeftIsDown() && TopLevelWindowResized()) {
     if (m_resizeEndTimer.IsRunning())
       m_resizeEndTimer.Stop();
     m_resizeEndTimer.StartOnce(150);

@@ -564,6 +564,7 @@ private:
                              PaintCounters &counters);
 
   void OnSize(wxSizeEvent &evt);
+  bool TopLevelWindowResized() const;
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);
   /// Send characters that wxEVT_KEY_DOWN can not report, i.e. characters of a
