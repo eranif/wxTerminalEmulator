@@ -52,6 +52,11 @@ public:
   void Destroy();
   bool IsInitialized() const { return m_program != 0; }
 
+  /// Call after Destroy(), while the context is still current and before the
+  /// wxGLContext is freed: waits for the GPU to drain the queued work and, on
+  /// Windows, unbinds the context so the driver never deletes a current one.
+  static void ReleaseContext();
+
   /// Provide the four font variants used to rasterize glyphs. Does not clear
   /// already-cached glyphs; call ClearGlyphCache() after a real font change.
   void SetFonts(const wxFont &regular, const wxFont &bold,

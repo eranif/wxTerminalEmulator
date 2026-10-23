@@ -560,6 +560,7 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   if (m_glContext && m_glInitialized) {
     m_glContext->SetCurrent(*this);
     m_glRenderer.Destroy();
+    TerminalGLRenderer::ReleaseContext();
   }
 #endif
 }

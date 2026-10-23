@@ -37,6 +37,7 @@ Gauge::~Gauge() {
   if (m_glContext && m_glInitialized) {
     m_glContext->SetCurrent(*this);
     m_renderer.Destroy();
+    TerminalGLRenderer::ReleaseContext();
   }
 }
 

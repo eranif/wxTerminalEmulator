@@ -242,6 +242,13 @@ void TerminalGLRenderer::Destroy() {
   m_glyphs.clear();
 }
 
+void TerminalGLRenderer::ReleaseContext() {
+  glFinish();
+#ifdef _WIN32
+  wglMakeCurrent(nullptr, nullptr);
+#endif
+}
+
 void TerminalGLRenderer::SetFonts(const wxFont &regular, const wxFont &bold,
                                   const wxFont &underlined,
                                   const wxFont &boldUnderlined) {
