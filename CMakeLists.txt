@@ -36,7 +36,10 @@ if(MINGW)
   find_package(wxWidgets CONFIG REQUIRED)
 
 else()
-  if(USE_OPENGL)
+  # On macOS the OpenGL canvas is part of the core library of the wxWidgets
+  # that build.sh builds. Asking for "gl" there links a separate (and possibly
+  # system) libwx_*_gl, which does not match the core library.
+  if(USE_OPENGL AND NOT APPLE)
     set(WX_COMPONENTS base core net aui gl xrc)
   else()
     set(WX_COMPONENTS base core net aui xrc)
