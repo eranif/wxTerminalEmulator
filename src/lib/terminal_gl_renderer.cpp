@@ -124,7 +124,9 @@ bool TerminalGLRenderer::Init(bool withGlyphs) {
   static bool s_glewInitialized = false;
   if (!s_glewInitialized) {
     GLenum err = glewInit();
-    if (err != GLEW_OK) {
+    // A GLX-built GLEW returns GLEW_ERROR_NO_GLX_DISPLAY with an EGL context
+    // (wxGTK on Wayland). The core functions are already loaded, so this is ok.
+    if (err != GLEW_OK && err != GLEW_ERROR_NO_GLX_DISPLAY) {
       TLOG_ERROR() << "glewInit failed: " << glewGetErrorString(err)
                    << std::endl;
       return false;
