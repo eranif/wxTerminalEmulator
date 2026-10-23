@@ -404,33 +404,36 @@ if(BUILD_GLYPHT)
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht.svg"
             DESTINATION "share/icons/hicolor/scalable/apps")
 
-    # The DEB package needs dpkg-shlibdeps (package dpkg-dev), which exists on
-    # Debian based systems. Elsewhere there is no "package" target.
-    find_program(DPKG_SHLIBDEPS_EXECUTABLE dpkg-shlibdeps)
-    if(DPKG_SHLIBDEPS_EXECUTABLE)
-      set(CPACK_GENERATOR "DEB")
-      set(CPACK_PACKAGE_NAME "glypht")
-      set(CPACK_PACKAGE_VERSION "${GLYPHT_VERSION}")
-      set(CPACK_PACKAGE_CONTACT "Eran Ifrah <eran@codelite.org>")
-      set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
-          "GlyphT, a terminal emulator built with wxWidgets")
-      set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
-      set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
-      set(CPACK_STRIP_FILES ON)
-      # Without this the directories get the permissions of the umask (775).
-      set(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS
-          OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE
-          WORLD_READ WORLD_EXECUTE)
-      set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
-      set(CPACK_DEBIAN_PACKAGE_SECTION "x11")
-      set(CPACK_DEBIAN_PACKAGE_HOMEPAGE
-          "https://github.com/eranif/wxTerminalEmulator")
-      # The package dependencies (GTK 3, GLEW, ...) are found by dpkg-shlibdeps
-      # from the libraries the executable links. wxWidgets is linked statically.
-      set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-      include(CPack)
-    else()
-      message(STATUS "dpkg-shlibdeps not found: no DEB package target")
+    # Only package when GlyphT is the top-level project. As a subproject the parent project owns CPack.
+    if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+      # The DEB package needs dpkg-shlibdeps (package dpkg-dev), which exists on
+      # Debian based systems. Elsewhere there is no "package" target.
+      find_program(DPKG_SHLIBDEPS_EXECUTABLE dpkg-shlibdeps)
+      if(DPKG_SHLIBDEPS_EXECUTABLE)
+        set(CPACK_GENERATOR "DEB")
+        set(CPACK_PACKAGE_NAME "glypht")
+        set(CPACK_PACKAGE_VERSION "${GLYPHT_VERSION}")
+        set(CPACK_PACKAGE_CONTACT "Eran Ifrah <eran@codelite.org>")
+        set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+            "GlyphT, a terminal emulator built with wxWidgets")
+        set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+        set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+        set(CPACK_STRIP_FILES ON)
+        # Without this the directories get the permissions of the umask (775).
+        set(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS
+            OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE
+            WORLD_READ WORLD_EXECUTE)
+        set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+        set(CPACK_DEBIAN_PACKAGE_SECTION "x11")
+        set(CPACK_DEBIAN_PACKAGE_HOMEPAGE
+            "https://github.com/eranif/wxTerminalEmulator")
+        # The package dependencies (GTK 3, GLEW, ...) are found by dpkg-shlibdeps
+        # from the libraries the executable links. wxWidgets is linked statically.
+        set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+        include(CPack)
+      else()
+        message(STATUS "dpkg-shlibdeps not found: no DEB package target")
+      endif()
     endif()
   endif()
 endif()
