@@ -271,6 +271,9 @@ private:
   std::optional<std::vector<ShellOption>> m_shellOptions;
   // The shell from --shell. It wins over the shell of the settings.
   wxString m_cliShellCommand;
+  // --appearance=light|dark: true for dark. Empty for auto, then the app
+  // follows the background of the terminal theme.
+  std::optional<bool> m_cliForceDark;
   wxString m_defaultShellCommand;
   std::optional<EnvironmentList> m_defaultEnvironment;
   std::optional<wxString> m_defaultWorkingDirectory;

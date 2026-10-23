@@ -382,7 +382,7 @@ The included demo application (`main.cpp`) showcases the library features:
 **Log Levels**: `trace`, `debug`, `warn`, `error`
 
 **Command-Line Options**:
-- `--appearance=<mode>`: Control native app appearance: `light`, `dark`, or `auto` (platform-native)
+- `--appearance=<mode>`: Control the light or dark look of the app (menus, tabs, dialogs): `light` or `dark` force it. `auto` (the default) follows the background colour of the terminal theme, and changes when you change the theme in Settings
 - `--shell=<command>`: Launch a specific shell or command (default: the shell chosen in Settings, else the platform default shell). It wins over the Settings shell. The saved tabs are still restored, and they use this shell
 - `--working-directory=<path>`: Start the shell in a specific directory (starts one fresh tab; the saved tabs are not restored)
 - `--env=<list>`: Pass environment variables to the launched process

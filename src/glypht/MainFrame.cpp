@@ -99,6 +99,14 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   SetSize(width, height);
   CentreOnScreen();
 
+  wxString appearance;
+  if (parser.Found("appearance", &appearance)) {
+    appearance.MakeLower();
+    if (appearance == "dark" || appearance == "light") {
+      m_cliForceDark = appearance == "dark";
+    }
+  }
+
   AppPersistence::Load(m_config);
   ApplyNativeAppTheme();
 
@@ -598,6 +606,7 @@ void MyFrame::ApplySettings() {
     theme.font = m_config.GetFont();
   }
   ApplyThemeToAllTabs(theme);
+  ApplyNativeAppTheme();
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
     if (auto *view = TerminalOf(m_notebook->GetPage(i))) {
       view->EnableSafeDrawing(m_config.IsSafeDrawingEnabled());
@@ -1113,8 +1122,9 @@ void MyFrame::PersistSettings() {
 
 void MyFrame::ApplyNativeAppTheme() {
 #if wxCHECK_VERSION(3, 3, 0)
-  auto theme = m_config.GetActiveTheme();
-  bool enableDark = IsDark(theme.bg);
+  // --appearance=light|dark wins. Otherwise follow the active terminal theme.
+  const bool enableDark =
+      m_cliForceDark.value_or(IsDark(m_config.GetActiveTheme().bg));
   if (enableDark) {
     wxTheApp->SetAppearance(wxAppBase::Appearance::Dark);
   } else {
