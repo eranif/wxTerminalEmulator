@@ -268,8 +268,19 @@ if(BUILD_GLYPHT)
       VERBATIM)
   elseif(NOT WIN32)
     # Linux: set RPATH so the binary finds libs in ../lib relative to itself.
-    set_target_properties(glypht PROPERTIES INSTALL_RPATH "$ORIGIN/../lib"
-                                            BUILD_RPATH "$ORIGIN/../lib")
+    # As a subproject (e.g. CodeLite) this is needed only for the DEB package
+    # (MAKE_DEB is set by the parent), otherwise leave the RPATH to the parent.
+    if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR OR MAKE_DEB)
+      # Also search the install RPATH of the parent: that is where it installs
+      # the shared wx libs.
+      set(GLYPHT_INSTALL_RPATH "$ORIGIN/../lib")
+      if(CMAKE_INSTALL_RPATH)
+        list(APPEND GLYPHT_INSTALL_RPATH ${CMAKE_INSTALL_RPATH})
+      endif()
+      set_target_properties(
+        glypht PROPERTIES INSTALL_RPATH "${GLYPHT_INSTALL_RPATH}"
+                          BUILD_RPATH "$ORIGIN/../lib")
+    endif()
     set(BUNDLE_TARGET_OS "linux")
     wx_find_lib_dir(_WX_LIB_DIR)
     add_custom_command(
