@@ -23,28 +23,8 @@ jobs:
       fail-fast: false
       matrix:
         wx-version: ['v3.2.8.1']
-        options: ['', '-DBUILD_WXTERMINAL_DEMO=OFF']
 
     steps:
-
-    # WxWidgets
-    - name: Checkout
-      uses: actions/checkout@v6
-      with:
-          repository: wxWidgets/wxWidgets
-          ref: ${{ matrix.wx-version }}
-          submodules: recursive
-          path: wxWidgets
-
-    - name: Build and install wxWidgets
-      run: |
-        mkdir -p wxWidgets/build-release
-        cd wxWidgets/build-release
-        cmake .. -DCMAKE_BUILD_TYPE=Release -DwxBUILD_DEBUG_LEVEL=0  -DwxBUILD_MONOLITHIC=1 -DwxUSE_SYS_LIBS=OFF -DwxUSE_LUNASVG=OFF ${{ matrix.wx-options }}
-        make -j$(sysctl -n hw.physicalcpu)
-        sudo make install
-
-    # wxTerminalEmulator
     - name: Checkout wxTerminalEmulator
       uses: actions/checkout@v6
       with:
@@ -54,8 +34,6 @@ jobs:
       run: cmake --version
 
     - name: Build
-      run: |
-        mkdir build-release
-        cd build-release
-        cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON ${{ matrix.options }}
-        cmake --build . --config Release --parallel $(nproc)
+      env:
+        WX_VERSION: ${{ matrix.wx-version }}
+      run: ./build.sh
