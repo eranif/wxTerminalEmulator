@@ -1,0 +1,22 @@
+diff --git a/src/unix/glegl.cpp b/src/unix/glegl.cpp
+index c2fc06c..4d50e9a 100644
+--- a/src/unix/glegl.cpp
++++ b/src/unix/glegl.cpp
+@@ -475,8 +475,15 @@ void wxGLCanvasEGL::UpdateSubsurfacePosition()
+ void wxEGLUpdateGeometry(GtkWidget* widget, wxGLCanvasEGL* win)
+ {
+     int scale = gtk_widget_get_scale_factor(widget);
+-    wl_egl_window_resize(win->m_wlEGLWindow, win->m_canvas->m_width * scale,
+-                         win->m_canvas->m_height * scale, 0, 0);
++
++    // Use the size of the drawing window, as when the surface is created, and
++    // not the size of the canvas: the latter includes the scroll bars of a
++    // canvas created with wxHSCROLL or wxVSCROLL, which would then be covered
++    // by the subsurface.
++    GdkWindow* const window = win->m_canvas->GTKGetDrawingWindow();
++    wl_egl_window_resize(win->m_wlEGLWindow,
++                         gdk_window_get_width(window) * scale,
++                         gdk_window_get_height(window) * scale, 0, 0);
+ 
+     win->UpdateSubsurfacePosition();
+ 

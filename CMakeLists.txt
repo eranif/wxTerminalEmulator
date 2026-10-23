@@ -394,8 +394,8 @@ if(BUILD_GLYPHT)
   # ---------------------------------------------------------------------------
   # Linux: install rules and a DEB package. Build it with: cpack -G DEB
   # GlyphT reads glypht.svg and themes/ from the directory of the executable, so
-  # they are installed together into lib/glypht. bin/glypht is a symbolic link
-  # to that executable (wxStandardPaths resolves it through /proc/self/exe).
+  # they are installed together into lib/glypht. bin/glypht is a launcher script
+  # that runs that executable.
   # ---------------------------------------------------------------------------
   if(UNIX AND NOT APPLE)
     set(GLYPHT_INSTALL_DIR "lib/glypht")
@@ -404,12 +404,10 @@ if(BUILD_GLYPHT)
             DESTINATION "${GLYPHT_INSTALL_DIR}")
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/themes"
             DESTINATION "${GLYPHT_INSTALL_DIR}")
-    # install(FILES) copies a symbolic link as a link.
-    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/bin-link")
-    execute_process(
-      COMMAND ${CMAKE_COMMAND} -E create_symlink ../${GLYPHT_INSTALL_DIR}/glypht
-              "${CMAKE_BINARY_DIR}/bin-link/glypht")
-    install(FILES "${CMAKE_BINARY_DIR}/bin-link/glypht" DESTINATION "bin")
+    # bin/glypht is a launcher script that sets GTK_OVERLAY_SCROLLING=0 and runs
+    # the executable (see assets/glypht.sh).
+    install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht.sh"
+            DESTINATION "bin" RENAME glypht)
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht.desktop"
             DESTINATION "share/applications")
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht.svg"

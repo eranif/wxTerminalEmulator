@@ -64,6 +64,7 @@ wxTerminalEmulator/
 ├── src/glypht/                    # GlyphT demo application
 ├── libtsm/                        # Vendored libtsm (VT parser), own CMake target `tsm`
 ├── cmake/                         # CMake helpers, e.g. FindWxWidgetsMSYS.cmake
+├── patches/                       # Patches for wxWidgets, applied by build.sh on Linux
 ├── assets/                        # Icons and images
 ├── build.sh                       # Builds wxWidgets and GlyphT (see Build Configuration)
 ├── CMakeLists.txt                 # Build configuration
@@ -233,6 +234,12 @@ Notes:
     `/etc/os-release` is `debian`). There it needs `dpkg-dev`, or the step fails.
   - On macOS the package step is not tested yet. Set the version with
     `GLYPHT_VERSION=1.2.3 ./build.sh package`.
+- On Linux, `build.sh` applies `patches/wxwidgets-*.patch` to the wxWidgets
+  sources before it builds them (a patch that does not apply is skipped).
+  `wxwidgets-wayland-gl-scrollbar.patch` fixes the scroll bar of a
+  `wxGLCanvas` on Wayland: wxWidgets (v3.3.4) sized the GL subsurface with the
+  whole control, which covered the scroll bar. It does not reach builds that use
+  their own wxWidgets (`WX_CONFIG`, CI); the fix belongs upstream.
 - Build log lines look like `INFO ...` and `ERROR ...`. When a build fails, read
   the lines above the first `ERROR`.
 
@@ -271,7 +278,9 @@ The installer has no admin rights and installs per user.
 builds `glypht_<version>_<arch>.deb`
 (CPack rules at the end of `CMakeLists.txt`). It installs `glypht`,
 `glypht.svg` and `themes/` together into `/usr/lib/glypht` (GlyphT reads them
-from the directory of the executable), links `/usr/bin/glypht` to it, and adds
+from the directory of the executable), adds the launcher `/usr/bin/glypht`
+(`assets/glypht.sh`, which sets `GTK_OVERLAY_SCROLLING=0` so the scroll bar of
+the OpenGL view is visible; see the wxWidgets patch above), and adds
 `assets/glypht.desktop` and the icon under `/usr/share`. `dpkg-shlibdeps`
 (package `dpkg-dev`) finds the dependencies. wxWidgets must be linked
 statically, as `build.sh` does. The version comes from `GLYPHT_VERSION`.

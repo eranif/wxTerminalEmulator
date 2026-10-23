@@ -69,6 +69,22 @@ function fetch_wx_widgets() {
   cd .build-release
 }
 
+# Applies our patches to the wxWidgets sources (the current directory is
+# .build-release/wxWidgets/.build-release). A patch that does not apply, for
+# example because it is already in the wxWidgets version, is skipped.
+function apply_wx_patches_Linux() {
+  local patch
+  for patch in "${ROOT_DIR}"/patches/wxwidgets-*.patch; do
+    [ -f "${patch}" ] || continue
+    if git -C .. apply --check "${patch}" >/dev/null 2>&1; then
+      INFO "Applying $(basename "${patch}") to wxWidgets"
+      git -C .. apply "${patch}"
+    else
+      WARN "Skipping $(basename "${patch}"): it does not apply to wxWidgets ${WX_VERSION}"
+    fi
+  done
+}
+
 function build_wx_widgets_Linux() {
   if [ -x "${WX_INSTALL_DIR}/bin/wx-config" ]; then
     INFO "wxWidgets already built at ${WX_INSTALL_DIR}; skipping"
@@ -76,6 +92,7 @@ function build_wx_widgets_Linux() {
   fi
 
   fetch_wx_widgets
+  apply_wx_patches_Linux
   INFO "Building wxWidgets"
   ../configure --disable-debug_flag --with-gtk=3 --enable-stl \
     --prefix="${WX_INSTALL_DIR}" --disable-shared --enable-monolithic \
