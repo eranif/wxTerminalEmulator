@@ -164,13 +164,15 @@ GPU-accelerated rendering path (all platforms; enabled by default on Windows and
 
 ### Build Instructions
 
-#### Using `build.sh` (recommended)
+#### Using `build.sh`
+
 The script builds everything on all platforms (macOS, Linux and Windows with
 MSYS2): it first downloads and builds wxWidgets (v3.3.4 by default, with OpenGL
 support) and then builds `glypht`. Everything goes into `.build-release/`. On
 Linux, `configure` is run with `--with-opengl`, so the OpenGL development
 packages must be installed (for example `libgl-dev`); the build stops with an
 error if they are missing.
+
 ```bash
 ./build.sh              # build wxWidgets (first run only) and glypht
 ./build.sh --cmake      # force the CMake configure step
@@ -190,48 +192,6 @@ Environment variables:
 - `USE_OPENGL=0|1`: choose the renderer (default: ON on macOS and Windows, OFF on Linux)
 - `MACOS_DEPLOYMENT_TARGET`: macOS deployment target (default: `13.0`)
 - `GLYPHT_VERSION`: version used in the package name (default: `1.0.0`)
-
-On macOS the build copies the wxWidgets library into the app bundle.
-
-`./build.sh package` builds first, then creates one package in `.build-release/`:
-- Windows: `glypht-<version>-amd64-installer.exe` (needs [Inno Setup 6](https://jrsoftware.org/); see "Windows installer" below)
-- macOS: `glypht-<version>-macos-<arch>.zip` (the unsigned `glypht.app`)
-- Linux: `glypht-<version>-linux-<arch>.tar.gz` (`glypht`, `glypht.svg` and `themes/`)
-
-#### Windows (MinGW)
-```bash
-mkdir build && cd build
-cmake .. -DWXWIN=/path/to/wxWidgets -DWXCFG=clang_x64_dll/mswu
-cmake --build .
-```
-
-#### Windows installer
-The `setup` target builds an [Inno Setup](https://jrsoftware.org/) installer. It
-needs Inno Setup 6 (`ISCC.exe`); CMake looks for it in `Program Files`.
-```bash
-cd .build-release
-cmake --build . --target setup
-```
-The result is `.build-release/glypht-<version>-amd64-installer.exe`. The target
-copies `glypht.exe`, its DLLs and the themes to `.build-release/installer/` and
-compiles `installer.iss`, which CMake generates from `installer.iss.in`. The
-installer needs no administrator rights (it installs per user by default). Set
-the version with `-DGLYPHT_VERSION=x.y.z` (default: `1.0.0`).
-
-#### Linux/macOS
-```bash
-mkdir build && cd build
-cmake ..
-cmake --build .
-```
-
-### CMake Options
-- `WXWIN`: Path to wxWidgets installation (required on Windows with MinGW)
-- `WXCFG`: wxWidgets configuration string (Windows MinGW only, default: `clang_x64_dll/mswu`)
-- `BUILD_GLYPHT`: Enable/disable the demo executable (default: ON)
-- `USE_OPENGL`: Enable OpenGL rendering (default: ON on Windows/macOS, OFF on Linux). On Linux it needs GLEW and a wxWidgets built with OpenGL (the one `build.sh` builds)
-  - Provide via environment variable: `USE_OPENGL=1 cmake ..`
-  - Or CMake option: `cmake -DUSE_OPENGL=ON ..`
 
 ## Usage
 
