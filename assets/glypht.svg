@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!--
-  GlyphT application icon. It matches icon.icns (macOS): a dark rounded square
-  with a terminal window, in the Catppuccin Mocha colours. The background is
-  transparent outside of the rounded square.
-
-  This is the only SVG of the icon, for all platforms.
-  icon.icns is made from this file by make_icns.sh, glypht.ico by make_ico.ps1.
--->
 <svg
    xmlns="http://www.w3.org/2000/svg"
    version="1.1"
    width="1024"
    height="1024"
    viewBox="0 0 1024 1024">
+  <!--
+    GlyphT application icon. It matches icon.icns (macOS): a dark rounded square
+    with a terminal window, in the Catppuccin Mocha colours. The background is
+    transparent outside of the rounded square.
+
+    This is the only SVG of the icon, for all platforms.
+    icon.icns is made from this file by make_icns.sh, glypht.ico by make_ico.ps1.
+  -->
   <!-- icon base -->
   <rect x="0" y="0" width="1024" height="1024" rx="200" ry="200" fill="#1e1e2e" />
 

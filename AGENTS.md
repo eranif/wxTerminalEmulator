@@ -228,8 +228,10 @@ Notes:
     stops with an error; install it and run `./build.sh --cmake package`.
   - macOS: `glypht-<version>-macos-<arch>.zip` with `glypht.app` (not signed).
   - Linux: `glypht-<version>-linux-<arch>.tar.gz` with `glypht`, `glypht.svg`
-    and `themes/`.
-  - On macOS and Linux the package step is not tested yet. Set the version with
+    and `themes/`, and `glypht_<version>_<arch>.deb` (see Linux DEB Package).
+    The `.deb` is made only on Debian based systems (`ID` or `ID_LIKE` in
+    `/etc/os-release` is `debian`). There it needs `dpkg-dev`, or the step fails.
+  - On macOS the package step is not tested yet. Set the version with
     `GLYPHT_VERSION=1.2.3 ./build.sh package`.
 - Build log lines look like `INFO ...` and `ERROR ...`. When a build fails, read
   the lines above the first `ERROR`.
@@ -262,6 +264,17 @@ make -j32
 into `<build>/installer/` and skips old `wxmsw*.dll` files. `installer.iss`
 is generated from `installer.iss.in`. The version comes from `GLYPHT_VERSION`.
 The installer has no admin rights and installs per user.
+
+### Linux DEB Package
+
+`./build.sh package`, or `make package` / `cpack -G DEB` in a Linux build tree,
+builds `glypht_<version>_<arch>.deb`
+(CPack rules at the end of `CMakeLists.txt`). It installs `glypht`,
+`glypht.svg` and `themes/` together into `/usr/lib/glypht` (GlyphT reads them
+from the directory of the executable), links `/usr/bin/glypht` to it, and adds
+`assets/glypht.desktop` and the icon under `/usr/share`. `dpkg-shlibdeps`
+(package `dpkg-dev`) finds the dependencies. wxWidgets must be linked
+statically, as `build.sh` does. The version comes from `GLYPHT_VERSION`.
 
 ### Linux/macOS Build
 

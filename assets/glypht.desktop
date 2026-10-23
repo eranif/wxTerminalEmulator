@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=GlyphT
+GenericName=Terminal
+Comment=A terminal emulator built with wxWidgets
+Exec=glypht
+Icon=glypht
+Terminal=false
+Categories=System;TerminalEmulator;
+Keywords=shell;prompt;command;commandline;terminal;
+StartupWMClass=glypht

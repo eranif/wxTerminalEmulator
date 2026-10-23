@@ -237,6 +237,15 @@ function package_macOS() {
   INFO "Package: ${zip}"
 }
 
+# Returns 0 when /etc/os-release names Debian as the system or its base.
+function is_debian_like() {
+  [ -r /etc/os-release ] || return 1
+  local id id_like
+  id=$(. /etc/os-release && echo "${ID:-}")
+  id_like=$(. /etc/os-release && echo "${ID_LIKE:-}")
+  [[ " ${id} ${id_like} " == *" debian "* ]]
+}
+
 function package_Linux() {
   local version=${GLYPHT_VERSION:-1.0.0}
   local tarball="${BUILD_DIR}/glypht-${version}-linux-$(uname -m).tar.gz"
@@ -244,6 +253,22 @@ function package_Linux() {
   rm -f "${tarball}"
   tar -czf "${tarball}" -C "${BUILD_DIR}" glypht glypht.svg themes
   INFO "Package: ${tarball}"
+
+  # The DEB package is made only on Debian based systems (Debian, Ubuntu,
+  # Mint, ...). It needs dpkg-shlibdeps (package dpkg-dev) for its dependency
+  # list.
+  if ! is_debian_like; then
+    INFO "Not a Debian based system; skipping the DEB package"
+    return 0
+  fi
+  if ! command -v dpkg-shlibdeps >/dev/null 2>&1; then
+    ERROR "dpkg-shlibdeps not found; install it with: sudo apt install dpkg-dev"
+    exit 1
+  fi
+  cmake "${BUILD_DIR}" -DGLYPHT_VERSION="${version}" >/dev/null
+  INFO "Creating the DEB package"
+  cmake --build "${BUILD_DIR}" --target package
+  INFO "Package: $(ls -t "${BUILD_DIR}"/glypht_*.deb | head -n 1)"
 }
 
 function package() {
@@ -284,6 +309,7 @@ function usage() {
   echo "                Windows: Inno Setup installer (needs Inno Setup 6)"
   echo "                macOS:   glypht-<version>-macos-<arch>.zip"
   echo "                Linux:   glypht-<version>-linux-<arch>.tar.gz"
+  echo "                         and glypht_<version>_<arch>.deb (needs dpkg-dev)"
   echo "  clean       Remove build artifacts (make clean)"
   echo "  distclean   Remove the entire build directory, including wxWidgets"
   echo "  -h, --help  Show this help message"

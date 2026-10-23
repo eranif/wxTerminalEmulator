@@ -29,7 +29,7 @@ All you need is **wxWidgets** and **CMake** — no third-party libraries are req
 - Platform-specific requirements:
   - **Windows**: MinGW with Windows 10+ (for `ConPTY` support)
   - **macOS**: macOS 10.10+ with CoreText and OpenGL support
-  - **Linux**: libutil for PTY support and the GTK 3 and OpenGL development packages (`build.sh` builds wxWidgets with OpenGL). The OpenGL renderer is off by default; to turn it on (`USE_OPENGL=1`) you also need GLEW
+  - **Linux**: libutil for PTY support and the GTK 3 and OpenGL development packages (`build.sh` builds wxWidgets with OpenGL). The OpenGL renderer is off by default; to turn it on (`USE_OPENGL=1`) you also need GLEW (see [OpenGL on Linux](#opengl-on-linux))
 
 ### Rendering
 
@@ -181,6 +181,29 @@ error if they are missing.
 ./build.sh distclean    # remove .build-release, including wxWidgets
 ```
 
+#### OpenGL on Linux
+
+To build with `USE_OPENGL=1` on Linux you need GLEW in addition to the GTK 3
+development packages:
+
+```bash
+# Debian/Ubuntu
+sudo apt install libgtk-3-dev libglew-dev
+USE_OPENGL=1 ./build.sh
+
+# Fedora
+sudo dnf install gtk3-devel glew-devel
+USE_OPENGL=1 ./build.sh
+```
+
+wxWidgets also needs the GL, EGL and wayland-egl development files (on
+Debian/Ubuntu `libgl-dev`, `libegl-dev` and `libwayland-dev`). The GTK 3
+development package already installs them. wxWidgets checks for EGL and
+wayland-egl only when it is configured: without them it is built without EGL,
+and the OpenGL view does not work in a Wayland session. If that happened,
+install the missing packages and run `./build.sh distclean` before you build
+again.
+
 Result:
 - macOS: `.build-release/glypht.app`
 - Linux: `.build-release/glypht`
@@ -192,6 +215,22 @@ Environment variables:
 - `USE_OPENGL=0|1`: choose the renderer (default: ON on macOS and Windows, OFF on Linux)
 - `MACOS_DEPLOYMENT_TARGET`: macOS deployment target (default: `13.0`)
 - `GLYPHT_VERSION`: version used in the package name (default: `1.0.0`)
+
+#### DEB package (Debian/Ubuntu)
+
+On Debian based systems (Debian, Ubuntu, Mint, ...), `./build.sh package`
+creates a `.deb` package next to the `.tar.gz`. It needs `dpkg-dev` (for
+`dpkg-shlibdeps`, which finds the package dependencies). On other Linux
+systems the `.deb` is skipped:
+
+```bash
+GLYPHT_VERSION=1.2.3 ./build.sh package   # .build-release/glypht_1.2.3_amd64.deb
+sudo apt install ./.build-release/glypht_1.2.3_amd64.deb
+```
+
+In your own build tree, `make package` (or `cpack -G DEB`) does the same. The
+package installs GlyphT into `/usr/lib/glypht`, the command `/usr/bin/glypht`,
+a desktop entry and an icon.
 
 ## Usage
 

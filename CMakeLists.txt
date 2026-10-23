@@ -8,6 +8,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/FindWxWidgetsMSYS.cmake)
 
 option(BUILD_GLYPHT "Build the GlyphT Terminal Application" ON)
+if (UNIX AND NOT APPLE)
+  set(OpenGL_GL_PREFERENCE "GLVND")
+endif ()
 
 # Find OpenGL (required by wxWidgets)
 if(WIN32)
@@ -330,10 +333,11 @@ if(BUILD_GLYPHT)
   # The target stages the bundled application (see cmake/StageInstaller.cmake)
   # and compiles installer.iss, generated from installer.iss.in, with ISCC.
   # ---------------------------------------------------------------------------
+  set(GLYPHT_VERSION
+      "1.0.0"
+      CACHE STRING "Version of the GlyphT packages (installer, DEB)")
+
   if(WIN32 AND MINGW)
-    set(GLYPHT_VERSION
-        "1.0.0"
-        CACHE STRING "Version shown by the Windows installer")
     set(INSTALLER_SOURCE_DIR "${CMAKE_BINARY_DIR}/installer")
 
     # Architecture, used in the installer file name
@@ -373,6 +377,60 @@ if(BUILD_GLYPHT)
         COMMENT "Building the Windows installer"
         VERBATIM)
       add_dependencies(glypht_setup glypht)
+    endif()
+  endif()
+
+  # ---------------------------------------------------------------------------
+  # Linux: install rules and a DEB package. Build it with: cpack -G DEB
+  # GlyphT reads glypht.svg and themes/ from the directory of the executable, so
+  # they are installed together into lib/glypht. bin/glypht is a symbolic link
+  # to that executable (wxStandardPaths resolves it through /proc/self/exe).
+  # ---------------------------------------------------------------------------
+  if(UNIX AND NOT APPLE)
+    set(GLYPHT_INSTALL_DIR "lib/glypht")
+    install(TARGETS glypht RUNTIME DESTINATION "${GLYPHT_INSTALL_DIR}")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht.svg"
+            DESTINATION "${GLYPHT_INSTALL_DIR}")
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/themes"
+            DESTINATION "${GLYPHT_INSTALL_DIR}")
+    # install(FILES) copies a symbolic link as a link.
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/bin-link")
+    execute_process(
+      COMMAND ${CMAKE_COMMAND} -E create_symlink ../${GLYPHT_INSTALL_DIR}/glypht
+              "${CMAKE_BINARY_DIR}/bin-link/glypht")
+    install(FILES "${CMAKE_BINARY_DIR}/bin-link/glypht" DESTINATION "bin")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht.desktop"
+            DESTINATION "share/applications")
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht.svg"
+            DESTINATION "share/icons/hicolor/scalable/apps")
+
+    # The DEB package needs dpkg-shlibdeps (package dpkg-dev), which exists on
+    # Debian based systems. Elsewhere there is no "package" target.
+    find_program(DPKG_SHLIBDEPS_EXECUTABLE dpkg-shlibdeps)
+    if(DPKG_SHLIBDEPS_EXECUTABLE)
+      set(CPACK_GENERATOR "DEB")
+      set(CPACK_PACKAGE_NAME "glypht")
+      set(CPACK_PACKAGE_VERSION "${GLYPHT_VERSION}")
+      set(CPACK_PACKAGE_CONTACT "Eran Ifrah <eran@codelite.org>")
+      set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+          "GlyphT, a terminal emulator built with wxWidgets")
+      set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+      set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+      set(CPACK_STRIP_FILES ON)
+      # Without this the directories get the permissions of the umask (775).
+      set(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS
+          OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE
+          WORLD_READ WORLD_EXECUTE)
+      set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+      set(CPACK_DEBIAN_PACKAGE_SECTION "x11")
+      set(CPACK_DEBIAN_PACKAGE_HOMEPAGE
+          "https://github.com/eranif/wxTerminalEmulator")
+      # The package dependencies (GTK 3, GLEW, ...) are found by dpkg-shlibdeps
+      # from the libraries the executable links. wxWidgets is linked statically.
+      set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+      include(CPack)
+    else()
+      message(STATUS "dpkg-shlibdeps not found: no DEB package target")
     endif()
   endif()
 endif()
