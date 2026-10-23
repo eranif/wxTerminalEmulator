@@ -187,6 +187,10 @@ function build_macOS() {
   INFO "=============="
   INFO "open ${BUILD_DIR}/glypht.app"
   INFO ""
+  INFO "To copy it to the Desktop (close GlyphT first):"
+  INFO "=============================================="
+  INFO "${ROOT_DIR}/scripts/macos-update-glypht.sh"
+  INFO ""
 }
 
 function build_MSW() {
