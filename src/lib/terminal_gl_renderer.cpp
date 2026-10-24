@@ -6,6 +6,7 @@
 
 #include "terminal_colour_glyph.h"
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <functional>
 #include <string>
@@ -31,6 +32,8 @@ namespace {
 constexpr int kAtlasSize = 1024;
 // The atlas doubles up to this size when it is full (64 MB of RGBA).
 constexpr int kAtlasMaxSize = 4096;
+// At its largest size, the atlas is cleared at most this often.
+constexpr std::chrono::seconds kAtlasClearInterval{1};
 
 const char *kVertexShaderSrc = R"(#version 150
 in vec2 a_pos;
@@ -291,8 +294,6 @@ void TerminalGLRenderer::AllocateAtlas(int size) {
 }
 
 bool TerminalGLRenderer::RecoverFullAtlas() {
-  const bool resetLastFrame = m_atlasResetLastFrame;
-  m_atlasResetLastFrame = false;
   if (!m_atlasFull) {
     return false;
   }
@@ -300,35 +301,45 @@ bool TerminalGLRenderer::RecoverFullAtlas() {
     AllocateAtlas(m_atlasW * 2);
     TLOG_DEBUG() << "GL glyph atlas full; grown to " << m_atlasW << "x"
                  << m_atlasH << std::endl;
-  } else if (resetLastFrame) {
-    // The frame drawn on an empty atlas filled it again: one frame needs more
-    // glyphs than the atlas holds. Do not clear it again on this frame, or
-    // every paint would ask for another one. The glyphs that did not fit stay
-    // blank for now.
-    TLOG_DEBUG() << "GL glyph atlas too small for one frame" << std::endl;
-    m_atlasFull = false;
-    return false;
-  } else {
-    // Drop the old tiles (glyphs no longer on the screen, old strip fonts).
-    ClearGlyphCache();
-    TLOG_DEBUG() << "GL glyph atlas full; cleared" << std::endl;
+    return true;
   }
-  m_atlasResetLastFrame = true;
+  // When one frame needs more glyphs than the largest atlas holds, the frame
+  // drawn on a cleared atlas fills it again. Clearing it on every paint would
+  // rebuild the whole atlas each time, so clear it at most once a second. Until
+  // then the atlas stays full: GetGlyph() does not try new glyphs, and they
+  // stay blank.
+  const auto now = std::chrono::steady_clock::now();
+  if (now - m_atlasLastClear < kAtlasClearInterval) {
+    return false;
+  }
+  // Drop the old tiles (glyphs no longer on the screen, old strip fonts).
+  AllocateAtlas(m_atlasW);
+  m_atlasLastClear = now;
+  TLOG_DEBUG() << "GL glyph atlas full; cleared" << std::endl;
   return true;
 }
 
+std::chrono::milliseconds TerminalGLRenderer::AtlasRetryDelay() const {
+  if (!m_atlasFull || m_atlasW < m_atlasMaxSize) {
+    return std::chrono::milliseconds{0};
+  }
+  const auto left = m_atlasLastClear + kAtlasClearInterval -
+                    std::chrono::steady_clock::now();
+  // At least 1 ms: the second may have ended since RecoverFullAtlas() looked.
+  return std::max(std::chrono::ceil<std::chrono::milliseconds>(left),
+                  std::chrono::milliseconds{1});
+}
+
 void TerminalGLRenderer::ClearGlyphCache() {
-  m_glyphs.clear();
-  m_penX = m_penY = m_shelfH = 0;
-  m_atlasFull = false;
+  m_atlasLastClear = {};
   if (m_atlasTex) {
-    glBindTexture(GL_TEXTURE_2D, m_atlasTex);
-    std::vector<unsigned char> zero(
-        static_cast<size_t>(m_atlasW) * m_atlasH * 4, 0);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_atlasW, m_atlasH, GL_RGBA,
-                    GL_UNSIGNED_BYTE, zero.data());
-    glBindTexture(GL_TEXTURE_2D, 0);
+    // Back to the first size: the atlas may have grown for a font that needed
+    // more room than the new one.
+    AllocateAtlas(kAtlasSize);
+  } else {
+    m_glyphs.clear();
+    m_penX = m_penY = m_shelfH = 0;
+    m_atlasFull = false;
   }
 }
 
@@ -477,7 +488,8 @@ TerminalGLRenderer::GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,
   if (it != m_glyphs.end()) {
     return it->second;
   }
-  // No room for new tiles until RecoverFullAtlas() runs after this frame.
+  // No room for new tiles until RecoverFullAtlas() grows or clears the atlas
+  // (at the largest size, at most once a second).
   if (m_atlasFull) {
     return kBlank;
   }

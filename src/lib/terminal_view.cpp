@@ -384,6 +384,11 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   m_progressTimer.SetOwner(this);
   Bind(wxEVT_TIMER, &wxTerminalViewCtrl::OnProgressTimer, this,
        m_progressTimer.GetId());
+#if USE_OPENGL
+  m_glAtlasRetryTimer.SetOwner(this);
+  Bind(wxEVT_TIMER, &wxTerminalViewCtrl::OnGLAtlasRetryTimer, this,
+       m_glAtlasRetryTimer.GetId());
+#endif
 
   m_shell_command = shellCommand;
   m_environment = std::move(environment);
@@ -550,6 +555,11 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   Unbind(wxEVT_SHOW, &wxTerminalViewCtrl::OnShow, this);
   Unbind(wxEVT_TIMER, &wxTerminalViewCtrl::OnProgressTimer, this,
          m_progressTimer.GetId());
+#if USE_OPENGL
+  m_glAtlasRetryTimer.Stop();
+  Unbind(wxEVT_TIMER, &wxTerminalViewCtrl::OnGLAtlasRetryTimer, this,
+         m_glAtlasRetryTimer.GetId());
+#endif
   {
     std::unique_lock lk{m_feedMutex};
     m_feedBuffer.clear();
@@ -2310,11 +2320,25 @@ void wxTerminalViewCtrl::OnPaintGL() {
   m_glRenderer.EndFrame();
   SwapBuffers();
   m_lastCursorScreenRow = cursorScreenRow;
+  RecoverGLAtlas();
+}
+
+void wxTerminalViewCtrl::RecoverGLAtlas() {
   if (m_glRenderer.RecoverFullAtlas()) {
     // Some glyphs did not fit in the atlas; paint them now that it has room.
     CallAfter(&wxTerminalViewCtrl::Refresh, true, nullptr);
+    return;
+  }
+  // The clear was held back: paint once more when it is allowed, or the
+  // missing glyphs stay blank on a still screen. A running timer is not
+  // started again.
+  const auto delay = m_glRenderer.AtlasRetryDelay();
+  if (delay.count() > 0 && !m_glAtlasRetryTimer.IsRunning()) {
+    m_glAtlasRetryTimer.StartOnce(static_cast<int>(delay.count()));
   }
 }
+
+void wxTerminalViewCtrl::OnGLAtlasRetryTimer(wxTimerEvent &) { Refresh(); }
 
 void wxTerminalViewCtrl::DrawStripGL(const Strip &strip, bool footer) {
   if (StripHeight(strip) == 0) {
@@ -2370,9 +2394,7 @@ void wxTerminalViewCtrl::PaintResizeOverlayGL() {
   }
   m_glRenderer.EndFrame();
   SwapBuffers();
-  if (m_glRenderer.RecoverFullAtlas()) {
-    CallAfter(&wxTerminalViewCtrl::Refresh, true, nullptr);
-  }
+  RecoverGLAtlas();
 }
 
 #endif // USE_OPENGL

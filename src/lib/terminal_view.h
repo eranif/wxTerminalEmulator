@@ -549,6 +549,10 @@ private:
   void RenderRowGL(int y, int rowIdx, const std::vector<terminal::Cell> &row,
                    const wxColour &clearBg);
   void PaintResizeOverlayGL();
+  // Call after a GL frame: when the glyph atlas was full, paint again once it
+  // has room.
+  void RecoverGLAtlas();
+  void OnGLAtlasRetryTimer(wxTimerEvent &event);
 #endif
   // Legacy wxDC paint path (backing-store incremental renderer).
   void OnPaintDC();
@@ -897,6 +901,8 @@ private:
   int m_glAtlasCharW{0};
   int m_glAtlasCharH{0};
   wxSize m_glLastClientSize{0, 0};
+  // Paints again when a clear of the full glyph atlas was held back.
+  wxTimer m_glAtlasRetryTimer;
 #endif
   wxTimer m_resizeEndTimer;
   wxTimer m_feedTimer;

@@ -9,6 +9,7 @@
 
 #if USE_OPENGL
 
+#include <chrono>
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
@@ -62,8 +63,9 @@ public:
   void SetFonts(const wxFont &regular, const wxFont &bold,
                 const wxFont &underlined, const wxFont &boldUnderlined);
 
-  /// Drop every cached glyph and reset the atlas (e.g. after a font/theme
-  /// change or a cell-size change). Requires a current GL context.
+  /// Drop every cached glyph and reset the atlas to its first size (e.g.
+  /// after a font/theme change or a cell-size change). Requires a current GL
+  /// context.
   void ClearGlyphCache();
 
   /// Start a new frame: set the viewport + orthographic projection for a
@@ -86,11 +88,16 @@ public:
   /// Upload the queued geometry and issue the batched draw calls.
   void EndFrame();
 
-  /// Call after EndFrame(). When the atlas was full in this frame (some
-  /// glyphs were not drawn), grow it, or clear it once it has its largest
-  /// size, and return true: the caller must then paint again. Requires a
+  /// Call after EndFrame(). When the atlas is full (some glyphs were not
+  /// drawn), grow it, or clear it once it has its largest size (at most once
+  /// a second), and return true: the caller must then paint again. Requires a
   /// current GL context.
   bool RecoverFullAtlas();
+
+  /// When RecoverFullAtlas() held back a clear of the full atlas, the time
+  /// until a clear is allowed: the caller should paint again then. Zero when
+  /// no clear is waiting.
+  std::chrono::milliseconds AtlasRetryDelay() const;
 
 private:
   struct Vertex {
@@ -142,8 +149,8 @@ private:
   int m_penY{0};
   int m_shelfH{0};
   int m_atlasMaxSize{0};
-  bool m_atlasFull{false};           // a glyph did not fit in this frame
-  bool m_atlasResetLastFrame{false}; // the last frame began on a reset atlas
+  bool m_atlasFull{false}; // a glyph did not fit since the last reset
+  std::chrono::steady_clock::time_point m_atlasLastClear{}; // full-size clear
 
   // Per-frame state.
   double m_scale{1.0};
