@@ -181,6 +181,7 @@ repository root:
 ```bash
 ./build.sh              # build wxWidgets (first run only), then glypht
 ./build.sh --cmake      # same, but force the CMake configure step
+./build.sh --opengl     # Linux only: use the OpenGL renderer (same as USE_OPENGL=1)
 ./build.sh clean        # make clean
 ./build.sh package      # build, then create the package for this OS
 ./build.sh distclean    # delete .build-release, including wxWidgets
@@ -213,7 +214,7 @@ Environment variables:
 |----------|---------|---------|
 | `WX_VERSION` | `v3.3.4` | wxWidgets tag to build |
 | `WX_CONFIG` | (none) | Use this `wx-config` and skip the wxWidgets build (macOS, Linux) |
-| `USE_OPENGL` | `1` on Windows and macOS, `0` on Linux | `0` or `1`, picks the renderer |
+| `USE_OPENGL` | `1` on Windows and macOS, `0` on Linux | `0` or `1`, picks the renderer. On Linux `--opengl` is the same as `USE_OPENGL=1`. When the build tree uses the other renderer, CMake configures again |
 | `MACOS_DEPLOYMENT_TARGET` | `13.0` | macOS deployment target |
 | `GLYPHT_VERSION` | `1.0.0` | Version in the package name (`package` target) |
 

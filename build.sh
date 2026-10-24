@@ -145,13 +145,22 @@ function build_glypht() {
   cd "${BUILD_DIR}"
 
   local cmake_args=(-DCMAKE_BUILD_TYPE=Release "$@")
+  local renderer_changed=0
   if [ -n "${USE_OPENGL}" ]; then
-    cmake_args+=(-DUSE_OPENGL="$([ "${USE_OPENGL}" = "1" ] && echo ON || echo OFF)")
+    local opengl
+    opengl="$([ "${USE_OPENGL}" = "1" ] && echo ON || echo OFF)"
+    cmake_args+=(-DUSE_OPENGL="${opengl}")
+    # The renderer is chosen when CMake configures, so configure again when an
+    # existing build tree uses the other one.
+    if [ -f "${BUILD_DIR}/CMakeCache.txt" ] &&
+      ! grep -q "^USE_OPENGL:BOOL=${opengl}\$" "${BUILD_DIR}/CMakeCache.txt"; then
+      renderer_changed=1
+    fi
   fi
 
-  # Configure if the build tree has not been generated yet, or if
-  # CMakeLists.txt is newer than the generated Makefile.
-  if [ "${FORCE_CMAKE}" = "1" ] ||
+  # Configure if the build tree has not been generated yet, if the renderer
+  # changed, or if CMakeLists.txt is newer than the generated Makefile.
+  if [ "${FORCE_CMAKE}" = "1" ] || [ "${renderer_changed}" = "1" ] ||
     [ ! -f "${BUILD_DIR}/CMakeCache.txt" ] ||
     [ "${ROOT_DIR}/CMakeLists.txt" -nt "${BUILD_DIR}/Makefile" ]; then
     INFO "Configuring wxTerminalEmulator"
@@ -315,10 +324,11 @@ function distclean() {
 }
 
 function usage() {
-  echo "Usage: $(basename "$0") [--cmake] [target]"
+  echo "Usage: $(basename "$0") [--cmake] [--opengl] [target]"
   echo ""
   echo "Options:"
   echo "  --cmake     Force the cmake configure stage"
+  echo "  --opengl    Use the OpenGL renderer (Linux only; the same as USE_OPENGL=1)"
   echo ""
   echo "Targets:"
   echo "  (none)      Build GlyphT (default)"
@@ -355,10 +365,26 @@ function build() {
   fi
 }
 
-if [ "${1}" = "--cmake" ]; then
-  FORCE_CMAKE=1
-  shift
-fi
+# The options come before the target, in any order.
+while [ $# -gt 0 ]; do
+  case "${1}" in
+  --cmake)
+    FORCE_CMAKE=1
+    shift
+    ;;
+  --opengl)
+    if [[ "${OS_NAME}" != "Linux" ]]; then
+      ERROR "--opengl is only for Linux: OpenGL is the default on macOS and Windows"
+      exit 1
+    fi
+    USE_OPENGL=1
+    shift
+    ;;
+  *)
+    break
+    ;;
+  esac
+done
 
 case "${1}" in
 clean)

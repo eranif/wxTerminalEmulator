@@ -177,6 +177,7 @@ error if they are missing.
 ```bash
 ./build.sh              # build wxWidgets (first run only) and glypht
 ./build.sh --cmake      # force the CMake configure step
+./build.sh --opengl     # Linux only: use the OpenGL renderer (the same as USE_OPENGL=1)
 ./build.sh clean        # make clean
 ./build.sh package      # build, then create the package for this OS
 ./build.sh distclean    # remove .build-release, including wxWidgets
@@ -213,7 +214,7 @@ Result:
 Environment variables:
 - `WX_VERSION`: wxWidgets tag to build (default: `v3.3.4`)
 - `WX_CONFIG`: path to an existing `wx-config`; skips the wxWidgets build (macOS, Linux)
-- `USE_OPENGL=0|1`: choose the renderer (default: ON on macOS and Windows, OFF on Linux)
+- `USE_OPENGL=0|1`: choose the renderer (default: ON on macOS and Windows, OFF on Linux). On Linux the option `--opengl` is the same as `USE_OPENGL=1`
 - `MACOS_DEPLOYMENT_TARGET`: macOS deployment target (default: `13.0`)
 - `GLYPHT_VERSION`: version used in the package name (default: `1.0.0`)
 
