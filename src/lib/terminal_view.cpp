@@ -568,11 +568,22 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   }
 
 #if USE_OPENGL
-  // Release GL resources while the context is current.
+  // Release GL resources while the context is current. SetCurrent() fails when
+  // the canvas is hidden (for example, the parent called Hide() before
+  // Destroy()). Then another control's context is still current, and the GL
+  // names (they are small numbers, the same in every context) would delete
+  // the objects of that control. Skip it: the driver frees our objects with
+  // the context.
   if (m_glContext && m_glInitialized) {
-    m_glContext->SetCurrent(*this);
-    m_glRenderer.Destroy();
-    TerminalGLRenderer::ReleaseContext();
+    if (m_glContext->SetCurrent(*this)) {
+      m_glRenderer.Destroy();
+      TerminalGLRenderer::ReleaseContext();
+    } else {
+      TLOG_DEBUG() << "The canvas is hidden, the GL context cannot be made "
+                      "current: skip releasing the GL resources (the driver "
+                      "frees them with the context)"
+                   << std::endl;
+    }
   }
 #endif
 }

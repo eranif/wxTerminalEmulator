@@ -76,11 +76,15 @@ Gauge::Gauge(wxWindow *parent, wxWindowID id, int range, const wxPoint &pos,
 
 Gauge::~Gauge() {
   m_animTimer.Stop();
-  // Release the GL resources while the context is current.
+  // Release the GL resources while the context is current. If it cannot be made
+  // current (the canvas is hidden), the context of another control is current:
+  // do not delete anything there. The driver frees our objects with the
+  // context.
   if (m_glContext && m_glInitialized) {
-    m_glContext->SetCurrent(*this);
-    m_renderer.Destroy();
-    TerminalGLRenderer::ReleaseContext();
+    if (m_glContext->SetCurrent(*this)) {
+      m_renderer.Destroy();
+      TerminalGLRenderer::ReleaseContext();
+    }
   }
 }
 

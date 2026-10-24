@@ -4,6 +4,7 @@
 
 #include "terminal_logger.h"
 
+#include "terminal_colour_glyph.h"
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -11,7 +12,6 @@
 #include <wx/bitmap.h>
 #include <wx/dcmemory.h>
 #include <wx/image.h>
-#include "terminal_colour_glyph.h"
 
 // Platform GL headers.
 // • macOS  – OpenGL 3.2 core profile ships in the framework; no loader needed.
@@ -108,9 +108,16 @@ bool HasColourPixels(const unsigned char *rgb, size_t pixelCount) {
 } // namespace
 
 TerminalGLRenderer::~TerminalGLRenderer() {
-  // Destroy() must be called with a current context; if it was not we still
-  // null out the handles so we don't try to use stale ones.
-  Destroy();
+  // No GL calls here. Destroy() must be called by the owner while its context
+  // is current. If it was not (the canvas was hidden), the context that is
+  // current now belongs to another control: the GL names are small numbers,
+  // the same in every context, so deleting them here would delete the objects
+  // of that control. The driver frees ours with the context.
+  m_vbo = 0;
+  m_vao = 0;
+  m_atlasTex = 0;
+  m_program = 0;
+  m_glyphs.clear();
 }
 
 bool TerminalGLRenderer::Init(bool withGlyphs) {
