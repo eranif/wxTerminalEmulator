@@ -68,7 +68,8 @@ set(LIB_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_view.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_event.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_gl_renderer.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_gauge.cpp)
+    ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_gauge.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/lib/GlyphTabArt.cpp)
 
 if(APPLE)
   list(APPEND LIB_SOURCES
@@ -84,7 +85,6 @@ set(GLYPHT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/bundled_fonts.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/layout_persistence.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/MainFrame.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/GlyphTabArt.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/wxTerminalUI.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/SettingsDlg.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/TabSwitcherDlg.cpp

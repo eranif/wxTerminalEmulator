@@ -79,6 +79,7 @@ wxTerminalEmulator/
 | **wxTerminalViewCtrl** | `src/lib/terminal_view.h` | Embeddable terminal control |
 | **PtyBackend** | `src/lib/pty_backend.h` | Interface for platform PTY implementations |
 | **TerminalGLRenderer** | `src/lib/terminal_gl_renderer.h` | OpenGL renderer, only when `USE_OPENGL=1` |
+| **GlyphTabArt** | `src/lib/GlyphTabArt.h` | Pill or browser style tabs for a `wxAuiNotebook`, painted with a `wxTerminalTheme` (wxWidgets 3.3+ only) |
 | **Demo app** | `src/glypht/main.cpp` | Example usage with tabs, themes, menus |
 
 ## Repo-Specific Patterns

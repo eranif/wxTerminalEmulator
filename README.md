@@ -139,6 +139,14 @@ Color scheme management:
 - Link/clicked text color for visual feedback
 - Pre-defined dark and light themes
 
+#### Tab Art (`GlyphTabArt.h`)
+Tabs for a `wxAuiNotebook` (wxWidgets 3.3 or newer), painted with the colours of a `wxTerminalTheme`:
+- `GlyphTabArt::Style::Pills` (the default): the tab bar has the colour of the terminal, each tab is a small pill, and the current pill is filled
+- `GlyphTabArt::Style::Browser`: a darker bar, and a current tab with rounded top corners that looks joined with the terminal
+- Use it with `notebook->SetArtProvider(new GlyphTabArt(theme))`. After a theme change, give the notebook a new art
+- The close button is shown on the current tab and on the tab under the mouse
+- The class is empty with an older wxWidgets, so check `wxCHECK_VERSION(3, 3, 0)` before you use it
+
 #### Terminal Logger (`terminal_logger.h/cpp`)
 Debugging and diagnostics support:
 - Configurable log levels (Trace, Debug, Warn, Error)
