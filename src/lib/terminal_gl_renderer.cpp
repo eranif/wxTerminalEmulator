@@ -179,6 +179,11 @@ bool TerminalGLRenderer::Init(bool withGlyphs) {
   m_locUseTexture = glGetUniformLocation(m_program, "u_useTexture");
   m_locSampler = glGetUniformLocation(m_program, "u_atlas");
 
+  // The sampler always reads texture unit 0; the value stays in the program.
+  glUseProgram(m_program);
+  glUniform1i(m_locSampler, 0);
+  glUseProgram(0);
+
   // Vertex array + dynamic vertex buffer.
   glGenVertexArrays(1, &m_vao);
   glGenBuffers(1, &m_vbo);
@@ -412,10 +417,20 @@ TerminalGLRenderer::GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,
   std::uint64_t key = MakeKey(ch, bold, underlined, cellW);
   if (customFont) {
     // The tile also depends on the font and on the tile height (a custom font
-    // has its own line height), so mix both into the key.
-    const std::string desc = customFont->GetNativeFontInfoDesc().ToStdString() +
-                             "@" + std::to_string(cellH);
-    key ^= std::hash<std::string>{}(desc) * 0x9E3779B97F4A7C15ull;
+    // has its own line height), so mix both into the key. Building the font
+    // description is slow, so keep the hash of the last font used: a strip
+    // draws all its glyphs with one font. IsSameAs() compares the shared font
+    // data, and the copy we hold makes a later change to the font get new data.
+    if (!m_customFontKey.font.IsSameAs(*customFont) ||
+        m_customFontKey.cellH != cellH) {
+      const std::string desc =
+          customFont->GetNativeFontInfoDesc().ToStdString() + "@" +
+          std::to_string(cellH);
+      m_customFontKey.font = *customFont;
+      m_customFontKey.cellH = cellH;
+      m_customFontKey.hash = std::hash<std::string>{}(desc);
+    }
+    key ^= m_customFontKey.hash * 0x9E3779B97F4A7C15ull;
   }
   auto it = m_glyphs.find(key);
   if (it != m_glyphs.end()) {
@@ -682,7 +697,6 @@ void TerminalGLRenderer::EndFrame() {
   if (!m_glyphVerts.empty()) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_atlasTex);
-    glUniform1i(m_locSampler, 0);
     glUniform1i(m_locUseTexture, 1);
     glBufferData(GL_ARRAY_BUFFER,
                  static_cast<GLsizeiptr>(m_glyphVerts.size() * sizeof(Vertex)),

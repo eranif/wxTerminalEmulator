@@ -2158,7 +2158,11 @@ void wxTerminalViewCtrl::OnPaintGL() {
   if (!m_glContext || !IsShownOnScreen()) {
     return;
   }
-  m_glContext->SetCurrent(*this);
+  // Without our context current, the GL calls below would go to whatever
+  // context is current (another control's), and leak or corrupt its objects.
+  if (!m_glContext->IsOK() || !m_glContext->SetCurrent(*this)) {
+    return;
+  }
 
   // Lazily initialize the renderer once a context is current.
   if (!m_glInitialized) {
@@ -2310,7 +2314,8 @@ void wxTerminalViewCtrl::PaintResizeOverlayGL() {
   wxPaintDC paintDc{this};
   if (!m_glContext || !IsShownOnScreen())
     return;
-  m_glContext->SetCurrent(*this);
+  if (!m_glContext->IsOK() || !m_glContext->SetCurrent(*this))
+    return;
   if (!m_glInitialized || m_charW == 0 || m_charH == 0)
     return;
 

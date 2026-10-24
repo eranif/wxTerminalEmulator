@@ -149,6 +149,14 @@ private:
   wxFont m_fontBoldUnderlined;
   wxFont m_fontFallback;
   std::unordered_map<std::uint64_t, GlyphInfo> m_glyphs;
+
+  // Hash of the last custom (strip) font and tile height seen by GetGlyph.
+  struct CustomFontKey {
+    wxFont font;
+    int cellH{0};
+    std::size_t hash{0};
+  };
+  CustomFontKey m_customFontKey;
 };
 
 #endif // USE_OPENGL
