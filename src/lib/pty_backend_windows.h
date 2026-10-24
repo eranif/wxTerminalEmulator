@@ -45,6 +45,11 @@ public:
 
 private:
   void ReaderThread();
+  // Result of ReadAvailable().
+  enum class ReadResult { kData, kEmpty, kBroken };
+  // Read once from the output pipe what it holds (at most buf.size() bytes)
+  // and pass it to m_onOutput. Does not wait for data.
+  ReadResult ReadAvailable(std::vector<char> &buf);
   void WriterThread();
   void InterruptIo();
   bool CreateConPty(const std::string &command,

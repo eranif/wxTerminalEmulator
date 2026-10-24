@@ -6,6 +6,7 @@
 #include "terminal_event.h"
 #include "terminal_logger.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cwchar>
@@ -27,6 +28,12 @@ namespace terminal {
 #endif
 
 namespace {
+
+// Size of the ConPTY output pipe and of each read from it.
+constexpr std::size_t kOutputBufferSize = 64 * 1024;
+// Reads in a row before the reader checks again if the process exited; also
+// the limit of the reads after the exit (64 x 64 KB = 4 MB).
+constexpr int kMaxReadsInARow = 64;
 
 using CreatePseudoConsoleFn = HRESULT(WINAPI *)(COORD, HANDLE, HANDLE, DWORD,
                                                 HPCON *);
@@ -531,7 +538,10 @@ bool WindowsPtyBackend::CreateConPty(
     return false;
   }
 
-  if (!CreatePipe(&outRead, &outWrite, &sa, 0)) {
+  // A large pipe lets ConPTY write a flood of output without waiting for each
+  // read (the default size is a few KB).
+  if (!CreatePipe(&outRead, &outWrite, &sa,
+                  static_cast<DWORD>(kOutputBufferSize))) {
     DWORD err = GetLastError();
     TLOG_ERROR() << "[CreatePipe (output) failed: " << err << "]" << std::endl;
     if (m_onOutput) {
@@ -825,61 +835,106 @@ void WindowsPtyBackend::WriterThread() {
   TLOG_DEBUG() << "WriterThread is going down" << std::endl;
 }
 
-void WindowsPtyBackend::ReaderThread() {
-  char buf[4096];
+WindowsPtyBackend::ReadResult
+WindowsPtyBackend::ReadAvailable(std::vector<char> &buf) {
+  if (!m_hOutputRead) {
+    return ReadResult::kEmpty;
+  }
+  DWORD avail = 0;
+  // Check if there's data available before attempting to read
+  if (!PeekNamedPipe(m_hOutputRead, nullptr, 0, nullptr, &avail, nullptr)) {
+    DWORD err = GetLastError();
+    if (err == ERROR_BROKEN_PIPE || err == ERROR_INVALID_HANDLE) {
+      TLOG_WARN() << "Pipe broken!" << std::endl;
+      return ReadResult::kBroken;
+    }
+    return ReadResult::kEmpty;
+  }
+  if (avail == 0) {
+    return ReadResult::kEmpty;
+  }
 
-  while (m_running) {
-    // Check if process is still alive
-    if (m_hProcess) {
-      DWORD exitCode = 0;
-      if (GetExitCodeProcess(m_hProcess, &exitCode) &&
-          exitCode != STILL_ACTIVE) {
-        TLOG_WARN() << "Process has exited with code: " << exitCode << ". "
-                    << std::hex << exitCode << std::endl;
-        m_running = false;
-        wxTerminalEvent terminate_event{wxEVT_TERMINAL_TERMINATED};
-        terminate_event.SetEventObject(m_eventHandler);
-        m_eventHandler->AddPendingEvent(terminate_event);
+  // Limit read to buffer size
+  DWORD toRead = std::min<DWORD>(avail, static_cast<DWORD>(buf.size()));
+  DWORD read = 0;
+  BOOL ok = ReadFile(m_hOutputRead, buf.data(), toRead, &read, nullptr);
+  if (ok && read > 0) {
+    if (m_onOutput) {
+      m_onOutput(std::string(buf.data(), read));
+    }
+    return ReadResult::kData;
+  }
+  DWORD err = GetLastError();
+  if (err == ERROR_BROKEN_PIPE || err == ERROR_INVALID_HANDLE) {
+    return ReadResult::kBroken;
+  }
+  return ReadResult::kEmpty;
+}
+
+void WindowsPtyBackend::ReaderThread() {
+  std::vector<char> buf(kOutputBufferSize);
+
+  // Read the last output after the process exited. Bounded, and it stops
+  // with Stop(): other processes attached to the console can keep writing
+  // after the shell exits, and the pipe breaks only when the pseudo console
+  // is closed, after this thread ends.
+  auto drain = [this, &buf]() {
+    for (int i = 0; i < kMaxReadsInARow && m_running; ++i) {
+      if (ReadAvailable(buf) != ReadResult::kData) {
         break;
       }
     }
+  };
 
-    if (m_hOutputRead) {
-      DWORD read = 0;
-      DWORD avail = 0;
-
-      // Check if there's data available before attempting to read
-      if (PeekNamedPipe(m_hOutputRead, nullptr, 0, nullptr, &avail, nullptr)) {
-        if (avail > 0) {
-          // Limit read to buffer size
-          DWORD toRead = (avail < sizeof(buf)) ? avail : sizeof(buf);
-          BOOL ok = ReadFile(m_hOutputRead, buf, toRead, &read, nullptr);
-          if (ok && read > 0) {
-            if (m_onOutput) {
-              m_onOutput(std::string(buf, buf + read));
-            }
-          } else {
-            DWORD err = GetLastError();
-            if (err == ERROR_BROKEN_PIPE || err == ERROR_INVALID_HANDLE) {
-              m_running = false;
-              break;
-            }
-          }
-        }
-      } else {
-        DWORD err = GetLastError();
-        if (err == ERROR_BROKEN_PIPE || err == ERROR_INVALID_HANDLE) {
-          m_running = false;
-          TLOG_WARN() << "Pipe broken!" << std::endl;
-          break;
-        }
-      }
+  int readsInARow = 0;
+  while (m_running) {
+    const ReadResult result = ReadAvailable(buf);
+    if (result == ReadResult::kBroken) {
+      m_running = false;
+      break;
     }
-
-    // Small sleep to avoid tight loop when no data is available
     if (!m_running) {
       break;
     }
+    // After a read, read again at once: sleeping there capped the output at
+    // one buffer per sleep (about 15 ms on Windows), and made the shell wait
+    // on a full pipe. Still check for an exit now and then, in case another
+    // console process keeps the pipe full after the shell exits.
+    if (result == ReadResult::kData && ++readsInARow < kMaxReadsInARow) {
+      continue;
+    }
+    readsInARow = 0;
+
+    // Check if process is still alive only when the pipe is empty (or after
+    // many reads), so the output it wrote before it exited is read first.
+    // (WaitForSingleObject, not GetExitCodeProcess: a process can exit with
+    // code 259, STILL_ACTIVE.)
+    if (m_hProcess && WaitForSingleObject(m_hProcess, 0) == WAIT_OBJECT_0) {
+      // The last output can reach the pipe after the check above, and
+      // conhost often writes its last frame a little after the process
+      // exits: read the pipe again, then once more after a short wait.
+      drain();
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      drain();
+      if (!m_running) {
+        break; // Stop() was called while draining
+      }
+
+      DWORD exitCode = 0;
+      GetExitCodeProcess(m_hProcess, &exitCode);
+      TLOG_WARN() << "Process has exited with code: " << exitCode << ". "
+                  << std::hex << exitCode << std::endl;
+      m_running = false;
+      wxTerminalEvent terminate_event{wxEVT_TERMINAL_TERMINATED};
+      terminate_event.SetEventObject(m_eventHandler);
+      m_eventHandler->AddPendingEvent(terminate_event);
+      break;
+    }
+    if (result == ReadResult::kData) {
+      continue;
+    }
+
+    // Small sleep to avoid tight loop when no data is available.
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
   TLOG_DEBUG() << "ReaderThread is going down" << std::endl;
