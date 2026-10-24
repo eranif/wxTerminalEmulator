@@ -83,6 +83,7 @@ set(GLYPHT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/app_persistence.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/layout_persistence.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/MainFrame.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/GlyphTabArt.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/wxTerminalUI.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/SettingsDlg.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/TabSwitcherDlg.cpp

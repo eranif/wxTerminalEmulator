@@ -1,4 +1,5 @@
 #include "MainFrame.h"
+#include "GlyphTabArt.h"
 #include "SettingsDlg.hpp"
 #include <algorithm>
 #include <random>
@@ -122,6 +123,9 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
 
   m_notebook = new wxAuiNotebook(this, wxID_ANY, wxDefaultPosition,
                                  wxDefaultSize, nbStyle);
+#if wxCHECK_VERSION(3, 3, 0)
+  m_notebook->SetArtProvider(new GlyphTabArt(m_config.GetActiveTheme()));
+#endif
   m_cliShellCommand = shellCommand;
   m_defaultShellCommand = ResolveDefaultShell();
   m_defaultEnvironment = environment;
@@ -635,6 +639,11 @@ void MyFrame::ApplyThemeToAllTabs(const wxTerminalTheme &theme) {
       view->Refresh();
     }
   }
+#if wxCHECK_VERSION(3, 3, 0)
+  // The tabs use the colours of the theme.
+  m_notebook->SetArtProvider(new GlyphTabArt(theme));
+  m_notebook->Refresh();
+#endif
 }
 
 wxTerminalViewCtrl *MyFrame::GetActiveTerminalView() const {
