@@ -360,6 +360,18 @@ void TerminalGLRenderer::AddSolidRect(int x, int y, int w, int h,
            1.0f);
 }
 
+void TerminalGLRenderer::AddSolidRect(int x, int y, int w, int h,
+                                      const wxColour &color, float alpha) {
+  alpha = std::clamp(alpha, 0.0f, 1.0f);
+  if (w <= 0 || h <= 0 || alpha <= 0.0f)
+    return;
+  // The shader premultiplies the colour with the alpha.
+  PushQuad(m_solidVerts, static_cast<float>(x), static_cast<float>(y),
+           static_cast<float>(w), static_cast<float>(h), 0, 0, 0, 0,
+           color.Red() / 255.0f, color.Green() / 255.0f, color.Blue() / 255.0f,
+           alpha);
+}
+
 void TerminalGLRenderer::AddGlyph(char32_t ch, bool bold, bool underlined,
                                   int x, int y, int cellW, int cellH,
                                   const wxColour &fg, const wxFont *font) {

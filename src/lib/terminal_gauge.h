@@ -11,6 +11,7 @@
 #include <chrono>
 #include <memory>
 #include <wx/glcanvas.h>
+#include <wx/timer.h>
 
 /**
  * @brief A thin progress bar drawn with OpenGL.
@@ -27,8 +28,17 @@
  * Pulse() puts the gauge in indeterminate mode and moves the track, like
  * wxGauge does on GTK and macOS: call it again and again (for example from a
  * wxTimer) to animate it. The track moves by the time since the last Pulse():
- * it needs 2 seconds from one end to the other, however often Pulse() is
+ * it needs 1.4 seconds from one end to the other, however often Pulse() is
  * called. SetValue() or SetRange() end the indeterminate mode.
+ *
+ * The indeterminate track is one comet with soft edges that runs from one end
+ * to the other and back (ping-pong). It moves slowly near the ends and fast in
+ * the middle, and its head is the side it moves to.
+ *
+ * In the normal mode the bar moves smoothly to a new value that is higher than
+ * the shown one (the gauge has its own timer for it). A lower value is shown at
+ * once. When the value reaches the range, the bar stays for a moment and then
+ * fades out; SetValue() with another value or Pulse() shows it again.
  */
 class Gauge : public wxGLCanvas {
 public:
@@ -56,6 +66,11 @@ public:
   /// The colour of the track: the part that fills (or moves). The background
   /// behind it is set with SetBackgroundColour().
   void SetTrackColour(const wxColour &colour);
+  /// The colour of the edges of the track: the tail and the head of the moving
+  /// bar, and the leading end of the filled bar. It blends into the track
+  /// colour towards the middle. Not set (or the same as the track colour): the
+  /// track has one colour.
+  void SetEdgeColour(const wxColour &colour);
 
 protected:
   wxSize DoGetBestSize() const override;
@@ -63,14 +78,26 @@ protected:
 private:
   void OnPaint(wxPaintEvent &event);
   void OnSize(wxSizeEvent &event);
+  void OnAnimTimer(wxTimerEvent &event);
+  void StartAnimation();
+  /// Show the bar at once at the value, without any animation.
+  void ShowValueNow();
 
   int m_range{100};
   int m_value{0};
   bool m_pulsing{false};
-  double m_pulsePhase{0.0}; // 0..1, where the moving bar is
+  double m_pulsePhase{0.0}; // 0..1, one round trip of the comet
   std::chrono::steady_clock::time_point m_lastPulse;
+
+  // The animation of the normal mode: the shown value follows m_value.
+  double m_shownValue{0.0};
+  double m_completeMs{0.0}; // how long the bar has been full
+  double m_fade{1.0};       // 1: visible, 0: faded out
+  wxTimer m_animTimer;
+  std::chrono::steady_clock::time_point m_lastAnim;
   std::unique_ptr<wxGLContext> m_glContext;
   wxColour m_trackColour;
+  wxColour m_edgeColour;
   TerminalGLRenderer m_renderer;
   bool m_glInitialized{false};
 };
@@ -81,6 +108,7 @@ class Gauge : public wxGauge {
 public:
   using wxGauge::wxGauge;
   void SetTrackColour(const wxColour &colour) { wxUnusedVar(colour); }
+  void SetEdgeColour(const wxColour &colour) { wxUnusedVar(colour); }
 };
 
 #endif // USE_OPENGL

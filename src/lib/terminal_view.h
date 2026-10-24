@@ -382,6 +382,17 @@ public:
   /// theme. It is never invalid.
   wxColour GetProgressColour() const;
 
+  /// The colour of the edges of the progress bar: the tail and the head of the
+  /// moving bar, and the leading end of the filled bar. It blends into the
+  /// colour of SetProgressColour() towards the middle. The default (also after
+  /// passing wxNullColour) is the yellow of the theme, and it follows the
+  /// theme. Pass the same colour as SetProgressColour() for a bar with one
+  /// colour.
+  void SetProgressEdgeColour(const wxColour &colour);
+  /// The colour the edges use now: the one that was set, else the yellow of the
+  /// theme. It is never invalid.
+  wxColour GetProgressEdgeColour() const;
+
   /// The background of the progress bar, behind the bar. The default (also
   /// after passing wxNullColour) is the background colour of the theme, and it
   /// follows the theme. The colours are used as they are: nothing is adjusted
@@ -894,6 +905,7 @@ private:
   Gauge *m_progress{nullptr};
   bool m_showProgressBar{false};
   wxColour m_progressColour;   // invalid: the green of the theme
+  wxColour m_progressEdgeColour; // invalid: the yellow of the theme
   wxColour m_progressBgColour; // invalid: the background of the theme
   std::mutex m_feedMutex;
   std::string m_feedBuffer;

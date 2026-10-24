@@ -709,6 +709,7 @@ void wxTerminalViewCtrl::ApplyProgressBarColours() {
   }
   m_progress->SetBackgroundColour(GetProgressBackgroundColour());
   m_progress->SetTrackColour(GetProgressColour());
+  m_progress->SetEdgeColour(GetProgressEdgeColour());
 #endif
 }
 
@@ -719,6 +720,16 @@ void wxTerminalViewCtrl::SetProgressColour(const wxColour &colour) {
 
 wxColour wxTerminalViewCtrl::GetProgressColour() const {
   return m_progressColour.IsOk() ? m_progressColour : m_core.GetTheme().green;
+}
+
+void wxTerminalViewCtrl::SetProgressEdgeColour(const wxColour &colour) {
+  m_progressEdgeColour = colour;
+  ApplyProgressBarColours();
+}
+
+wxColour wxTerminalViewCtrl::GetProgressEdgeColour() const {
+  return m_progressEdgeColour.IsOk() ? m_progressEdgeColour
+                                     : m_core.GetTheme().yellow;
 }
 
 void wxTerminalViewCtrl::SetProgressBackgroundColour(const wxColour &colour) {

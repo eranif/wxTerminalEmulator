@@ -72,6 +72,9 @@ public:
 
   /// Queue a solid colored rectangle (logical pixel coordinates).
   void AddSolidRect(int x, int y, int w, int h, const wxColour &color);
+  /// The same, blended over what is behind it with @p alpha (0 to 1).
+  void AddSolidRect(int x, int y, int w, int h, const wxColour &color,
+                    float alpha);
 
   /// Queue a glyph drawn at the top-left of a logical cell rectangle. With
   /// @p font the glyph is drawn with that font instead of the terminal fonts
