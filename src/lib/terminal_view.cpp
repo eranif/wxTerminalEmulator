@@ -2285,6 +2285,10 @@ void wxTerminalViewCtrl::OnPaintGL() {
   m_glRenderer.EndFrame();
   SwapBuffers();
   m_lastCursorScreenRow = cursorScreenRow;
+  if (m_glRenderer.RecoverFullAtlas()) {
+    // Some glyphs did not fit in the atlas; paint them now that it has room.
+    CallAfter(&wxTerminalViewCtrl::Refresh, true, nullptr);
+  }
 }
 
 void wxTerminalViewCtrl::DrawStripGL(const Strip &strip, bool footer) {
@@ -2341,6 +2345,9 @@ void wxTerminalViewCtrl::PaintResizeOverlayGL() {
   }
   m_glRenderer.EndFrame();
   SwapBuffers();
+  if (m_glRenderer.RecoverFullAtlas()) {
+    CallAfter(&wxTerminalViewCtrl::Refresh, true, nullptr);
+  }
 }
 
 #endif // USE_OPENGL

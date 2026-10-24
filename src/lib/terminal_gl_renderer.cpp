@@ -29,6 +29,8 @@
 namespace {
 
 constexpr int kAtlasSize = 1024;
+// The atlas doubles up to this size when it is full (64 MB of RGBA).
+constexpr int kAtlasMaxSize = 4096;
 
 const char *kVertexShaderSrc = R"(#version 150
 in vec2 a_pos;
@@ -207,22 +209,18 @@ bool TerminalGLRenderer::Init(bool withGlyphs) {
   }
 
   // Premultiplied RGBA atlas (see the fragment shader).
-  m_atlasW = kAtlasSize;
-  m_atlasH = kAtlasSize;
+  GLint maxTextureSize = 0;
+  glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+  m_atlasMaxSize = std::clamp(static_cast<int>(maxTextureSize), kAtlasSize,
+                              kAtlasMaxSize);
   glGenTextures(1, &m_atlasTex);
   glBindTexture(GL_TEXTURE_2D, m_atlasTex);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  std::vector<unsigned char> zero(static_cast<size_t>(m_atlasW) * m_atlasH * 4,
-                                  0);
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_atlasW, m_atlasH, 0, GL_RGBA,
-               GL_UNSIGNED_BYTE, zero.data());
   glBindTexture(GL_TEXTURE_2D, 0);
-
-  m_penX = m_penY = m_shelfH = 0;
+  AllocateAtlas(kAtlasSize);
 
   TLOG_DEBUG() << "TerminalGLRenderer initialized (atlas " << m_atlasW << "x"
                << m_atlasH << ")" << std::endl;
@@ -277,9 +275,52 @@ void TerminalGLRenderer::SetFonts(const wxFont &regular, const wxFont &bold,
 #endif
 }
 
+void TerminalGLRenderer::AllocateAtlas(int size) {
+  m_atlasW = size;
+  m_atlasH = size;
+  m_glyphs.clear();
+  m_penX = m_penY = m_shelfH = 0;
+  m_atlasFull = false;
+  glBindTexture(GL_TEXTURE_2D, m_atlasTex);
+  std::vector<unsigned char> zero(static_cast<size_t>(m_atlasW) * m_atlasH * 4,
+                                  0);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_atlasW, m_atlasH, 0, GL_RGBA,
+               GL_UNSIGNED_BYTE, zero.data());
+  glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+bool TerminalGLRenderer::RecoverFullAtlas() {
+  const bool resetLastFrame = m_atlasResetLastFrame;
+  m_atlasResetLastFrame = false;
+  if (!m_atlasFull) {
+    return false;
+  }
+  if (m_atlasW < m_atlasMaxSize) {
+    AllocateAtlas(m_atlasW * 2);
+    TLOG_DEBUG() << "GL glyph atlas full; grown to " << m_atlasW << "x"
+                 << m_atlasH << std::endl;
+  } else if (resetLastFrame) {
+    // The frame drawn on an empty atlas filled it again: one frame needs more
+    // glyphs than the atlas holds. Do not clear it again on this frame, or
+    // every paint would ask for another one. The glyphs that did not fit stay
+    // blank for now.
+    TLOG_DEBUG() << "GL glyph atlas too small for one frame" << std::endl;
+    m_atlasFull = false;
+    return false;
+  } else {
+    // Drop the old tiles (glyphs no longer on the screen, old strip fonts).
+    ClearGlyphCache();
+    TLOG_DEBUG() << "GL glyph atlas full; cleared" << std::endl;
+  }
+  m_atlasResetLastFrame = true;
+  return true;
+}
+
 void TerminalGLRenderer::ClearGlyphCache() {
   m_glyphs.clear();
   m_penX = m_penY = m_shelfH = 0;
+  m_atlasFull = false;
   if (m_atlasTex) {
     glBindTexture(GL_TEXTURE_2D, m_atlasTex);
     std::vector<unsigned char> zero(
@@ -436,6 +477,10 @@ TerminalGLRenderer::GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,
   if (it != m_glyphs.end()) {
     return it->second;
   }
+  // No room for new tiles until RecoverFullAtlas() runs after this frame.
+  if (m_atlasFull) {
+    return kBlank;
+  }
 
 #if 0
   bool preferFallback = m_fontFallback.IsOk() &&
@@ -459,6 +504,10 @@ TerminalGLRenderer::GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,
       std::max(1, static_cast<int>(std::ceil(cellH * m_scale)));
 
   GlyphInfo info = RasterizeAndPack(ch, font, cellWPhys, cellHPhys, m_scale);
+  if (m_atlasFull) {
+    // Not cached, so the glyph is tried again once the atlas has room.
+    return kBlank;
+  }
   auto res = m_glyphs.emplace(key, info);
   return res.first->second;
 }
@@ -645,10 +694,9 @@ TerminalGLRenderer::RasterizeAndPack(char32_t ch, const wxFont &font,
     m_shelfH = 0;
   }
   if (m_penY + h > m_atlasH) {
-    // Atlas exhausted. For a terminal's bounded glyph set this is very rare;
-    // log once and skip rather than evicting.
-    TLOG_DEBUG() << "GL glyph atlas full; skipping glyph U+" << std::hex
-                 << static_cast<uint32_t>(ch) << std::dec << std::endl;
+    // Atlas exhausted. The owner grows or clears it after the frame, with
+    // RecoverFullAtlas().
+    m_atlasFull = true;
     return info;
   }
 

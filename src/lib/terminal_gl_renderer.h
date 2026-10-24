@@ -86,6 +86,12 @@ public:
   /// Upload the queued geometry and issue the batched draw calls.
   void EndFrame();
 
+  /// Call after EndFrame(). When the atlas was full in this frame (some
+  /// glyphs were not drawn), grow it, or clear it once it has its largest
+  /// size, and return true: the caller must then paint again. Requires a
+  /// current GL context.
+  bool RecoverFullAtlas();
+
 private:
   struct Vertex {
     float x, y; // position (physical pixels)
@@ -113,6 +119,9 @@ private:
   GlyphInfo RasterizeAndPack(char32_t ch, const wxFont &font, int cellWPhys,
                              int cellHPhys, double scale);
 
+  // Give the atlas texture an empty size x size image and drop every glyph.
+  void AllocateAtlas(int size);
+
   void PushQuad(std::vector<Vertex> &out, float x, float y, float w, float h,
                 float u0, float v0, float u1, float v1, float r, float g,
                 float b, float a);
@@ -132,6 +141,9 @@ private:
   int m_penX{0};
   int m_penY{0};
   int m_shelfH{0};
+  int m_atlasMaxSize{0};
+  bool m_atlasFull{false};           // a glyph did not fit in this frame
+  bool m_atlasResetLastFrame{false}; // the last frame began on a reset atlas
 
   // Per-frame state.
   double m_scale{1.0};
