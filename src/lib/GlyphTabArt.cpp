@@ -178,8 +178,15 @@ int GlyphTabArt::DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
   // bold, and the bold measuring font would make every tab wider.
   dc.SetFont(m_normalFont);
   dc.SetTextForeground(page.active || page.hover ? m_fgActive : m_fgNormal);
-  const wxString text = wxControl::Ellipsize(page.caption, dc, wxELLIPSIZE_END,
-                                             std::max(xEnd - xStart, 0));
+  // The width of the tab comes from GetTextExtent(). Ellipsize() adds up the
+  // width of each character, which on Windows is a few pixels more, so it would
+  // cut a label that has all the room it measured. Use it only when the label
+  // really does not fit.
+  const int textRoom = std::max(xEnd - xStart, 0);
+  wxString text = page.caption;
+  if (dc.GetTextExtent(text).x > textRoom) {
+    text = wxControl::Ellipsize(text, dc, wxELLIPSIZE_END, textRoom);
+  }
   const int textHeight = dc.GetTextExtent(text).y;
   dc.DrawText(text, xStart, shape.y + (shape.height - textHeight) / 2);
 
@@ -211,9 +218,14 @@ wxSize GlyphTabArt::GetPageTabSize(wxReadOnlyDC &dc, wxWindow *wnd,
     size.IncTo(bitmapSize);
   }
 
-  size += wnd->FromDIP(2 * wxSize(kPaddingX, kPaddingY));
+  // Twice the converted value, not the conversion of twice the value: the
+  // drawing uses each padding once per side, and the two can differ by a pixel
+  // with a scale like 105% or 150%.
+  size.x += 2 * wnd->FromDIP(kPaddingX);
+  size.y += 2 * wnd->FromDIP(kPaddingY);
   if (m_style == Style::Pills) {
-    size += wnd->FromDIP(2 * wxSize(kPillGapX, kPillGapY));
+    size.x += 2 * wnd->FromDIP(kPillGapX);
+    size.y += 2 * wnd->FromDIP(kPillGapY);
   } else {
     size.y += wnd->FromDIP(kTopGap);
   }
