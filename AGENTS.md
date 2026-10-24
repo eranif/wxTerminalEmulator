@@ -105,10 +105,10 @@ Two independent choices:
    - `USE_OPENGL=0`: the control is a `wxPanel` and draws with wxDC.
 2. **Row drawing inside the wxDC path**, chosen at runtime in `RenderRow()`:
    - `RenderRowWithGrouping()` — groups neighbor cells with equal attributes
-     (faster, the default)
-   - `RenderRowNoGrouping()` — cell by cell, used when
-     `EnableSafeDrawing(true)` is set (slower, more accurate for wide or
-     unusual glyphs)
+     (faster, used when `EnableSafeDrawing(false)` is set)
+   - `RenderRowNoGrouping()` — cell by cell, used when safe drawing is on
+     (slower, more accurate for wide or unusual glyphs). This is the default:
+     safe drawing is on for new views and in the GlyphT settings
 
 ### Platform Backend Selection
 

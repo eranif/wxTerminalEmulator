@@ -841,7 +841,7 @@ private:
   wxTerminalProgressState m_progressState{wxTerminalProgressState::Hidden};
   int m_progressValue{0};
   wxTerminalProgramStatus m_programStatus;
-  bool m_safeDrawing{false};
+  bool m_safeDrawing{true};
 #if USE_TIMER_REFRESH
   std::atomic_bool m_needsRepaint{true};
   std::unique_ptr<std::thread> m_drawingTimerThread{nullptr};

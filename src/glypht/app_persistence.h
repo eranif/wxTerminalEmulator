@@ -89,7 +89,7 @@ private:
   std::map<wxString, wxTerminalTheme> shippedThemes;
   wxFont font;
   wxString newTabTitle{"Terminal"};
-  bool safeDrawingEnabled{false};
+  bool safeDrawingEnabled{true};
   bool showCloseButton{true};
   bool blockCursor{true};
   wxString shellExecutable;
