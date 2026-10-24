@@ -2129,10 +2129,34 @@ void wxTerminalViewCtrl::RenderRowGL(int y, int rowIdx,
                                      const std::vector<terminal::Cell> &row,
                                      const wxColour &clearBg) {
   auto result = PrepareRowForDrawing(row, rowIdx);
+
+  // Neighbouring cells with the same background are drawn as one rectangle
+  // (a status bar or a selection is then one quad, not one per cell). A run
+  // ends at a new colour, at the clear colour, or at a skipped cell, which
+  // has the clear colour too.
+  int runStart = -1; // first column of the current run, -1 when none
+  int runEnd = 0;    // one past its last column
+  wxColour runBg;
+  auto flushRun = [&]() {
+    if (runStart >= 0) {
+      m_glRenderer.AddSolidRect(runStart * m_charW, y,
+                                (runEnd - runStart) * m_charW, m_charH, runBg);
+      runStart = -1;
+    }
+  };
+
   for (const auto &cell : result.cells) {
     const int x = cell.colIdx * m_charW;
-    if (cell.attrs.bgColor != clearBg) {
-      m_glRenderer.AddSolidRect(x, y, m_charW, m_charH, cell.attrs.bgColor);
+    if (cell.attrs.bgColor == clearBg) {
+      flushRun();
+    } else if (runStart >= 0 && cell.colIdx == runEnd &&
+               cell.attrs.bgColor == runBg) {
+      runEnd = cell.colIdx + 1;
+    } else {
+      flushRun();
+      runStart = cell.colIdx;
+      runEnd = cell.colIdx + 1;
+      runBg = cell.attrs.bgColor;
     }
     // Filler cells (width==0) for the trailing half of a wide char have no
     // glyph — the preceding wide cell's glyph already covers this space.
@@ -2145,6 +2169,7 @@ void wxTerminalViewCtrl::RenderRowGL(int y, int rowIdx,
                           cell.attrs.underline || cell.attrs.isClicked, x, y,
                           glyphW, m_charH, cell.attrs.fgColor);
   }
+  flushRun();
 }
 
 void wxTerminalViewCtrl::OnPaintGL() {
