@@ -287,6 +287,24 @@ the OpenGL view is visible; see the wxWidgets patch above), and adds
 (package `dpkg-dev`) finds the dependencies. wxWidgets must be linked
 statically, as `build.sh` does. The version comes from `GLYPHT_VERSION`.
 
+### X11 With OpenGL On Linux
+
+With `USE_OPENGL=1` on Linux, `MyApp::Initialize()` in `src/glypht/main.cpp`
+calls `gdk_set_allowed_backends("x11,wayland")` before GTK starts, so GlyphT
+runs on X11 (XWayland on a Wayland desktop) and uses Wayland only when there is
+no X server. A `GDK_BACKEND` set by the user wins. Reason: wxWidgets draws a
+`wxGLCanvas` on Wayland in its own subsurface. It is destroyed and made again
+each time the canvas is hidden and shown, which flickers when the tab changes,
+the subsurface follows a window resize late, and (with wxWidgets 3.3.4 without
+`patches/wxwidgets-wayland-gl-scrollbar.patch`) it covers the scroll bar. X11
+has none of these. The function is declared by hand with `extern "C"` because
+the GTK headers are not on the include path of the build. On X11 the window
+manager would draw the title bar, and mutter makes it light or dark from the
+system `color-scheme`, not from the application (a dark GlyphT on a desktop
+with `color-scheme` `default` got a light title bar). So `Initialize()` also sets
+`GTK_CSD=1` (unless the user set it): GTK draws the title bar, as on Wayland,
+from the GTK theme and the appearance of the application.
+
 ### Bundled Font
 
 GlyphT ships the font Iosevka (SIL OFL, `assets/fonts/`) and loads it at
