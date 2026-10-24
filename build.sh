@@ -277,7 +277,7 @@ function package_Linux() {
   local tarball="${BUILD_DIR}/glypht-${version}-linux-$(uname -m).tar.gz"
   INFO "Creating ${tarball}"
   rm -f "${tarball}"
-  tar -czf "${tarball}" -C "${BUILD_DIR}" glypht glypht.svg themes
+  tar -czf "${tarball}" -C "${BUILD_DIR}" glypht glypht.svg themes fonts
   INFO "Package: ${tarball}"
 
   # The DEB package is made only on Debian based systems (Debian, Ubuntu,

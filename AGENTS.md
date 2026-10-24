@@ -65,7 +65,7 @@ wxTerminalEmulator/
 ├── libtsm/                        # Vendored libtsm (VT parser), own CMake target `tsm`
 ├── cmake/                         # CMake helpers, e.g. FindWxWidgetsMSYS.cmake
 ├── patches/                       # Patches for wxWidgets, applied by build.sh on Linux
-├── assets/                        # Icons and images
+├── assets/                        # Icons, images and the bundled font (assets/fonts)
 ├── build.sh                       # Builds wxWidgets and GlyphT (see Build Configuration)
 ├── CMakeLists.txt                 # Build configuration
 └── .github/workflows/             # CI: macos.yml, msys2.yml, ubuntu.yml
@@ -229,8 +229,8 @@ Notes:
     It needs Inno Setup 6 (`ISCC.exe`). If CMake did not find it, the script
     stops with an error; install it and run `./build.sh --cmake package`.
   - macOS: `glypht-<version>-macos-<arch>.zip` with `glypht.app` (not signed).
-  - Linux: `glypht-<version>-linux-<arch>.tar.gz` with `glypht`, `glypht.svg`
-    and `themes/`, and `glypht_<version>_<arch>.deb` (see Linux DEB Package).
+  - Linux: `glypht-<version>-linux-<arch>.tar.gz` with `glypht`, `glypht.svg`,
+    `themes/` and `fonts/`, and `glypht_<version>_<arch>.deb` (see Linux DEB Package).
     The `.deb` is made only on Debian based systems (`ID` or `ID_LIKE` in
     `/etc/os-release` is `debian`). There it needs `dpkg-dev`, or the step fails.
   - On macOS the package step is not tested yet. Set the version with
@@ -285,6 +285,23 @@ the OpenGL view is visible; see the wxWidgets patch above), and adds
 `assets/glypht.desktop` and the icon under `/usr/share`. `dpkg-shlibdeps`
 (package `dpkg-dev`) finds the dependencies. wxWidgets must be linked
 statically, as `build.sh` does. The version comes from `GLYPHT_VERSION`.
+
+### Bundled Font
+
+GlyphT ships the font Iosevka (SIL OFL, `assets/fonts/`) and loads it at
+startup with `wxFont::AddPrivateFont()` (`src/glypht/bundled_fonts.cpp`, called
+first in `MyApp::OnInit()`). It then calls `wxTerminalTheme::SetBundledFontFace()`
+so the default font of all themes is Iosevka. A font saved in `config.ini`
+still wins. The font is read from `fonts/` next to the executable on Windows
+and Linux, and from `Contents/Resources/Fonts` on macOS (the Info.plist is made
+from `cmake/MacOSXBundleInfo.plist.in`, which adds `ATSApplicationFontsPath`).
+Linux uses `Iosevka-Regular.ttf` (face "Iosevka"); Pango does not know "Iosevka
+Term" after `AddPrivateFont()`. Windows and macOS use `IosevkaTerm-Regular.ttf`
+(face "Iosevka Term"). Only the regular style is shipped: bold and italic are
+made by the system. CMake copies the font next to the executable after the
+build, the DEB installs it into `/usr/lib/glypht/fonts`, and the Windows
+installer takes the whole `bin` directory. If the font cannot be loaded, the
+font of the platform is used. The macOS and Windows parts are not tested yet.
 
 ### Linux/macOS Build
 

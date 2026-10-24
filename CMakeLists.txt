@@ -81,6 +81,7 @@ endif()
 set(GLYPHT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/main.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/app_persistence.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/bundled_fonts.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/layout_persistence.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/MainFrame.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/GlyphTabArt.cpp
@@ -179,8 +180,11 @@ if(BUILD_GLYPHT)
     set_source_files_properties(${APP_ICON} PROPERTIES MACOSX_PACKAGE_LOCATION
                                                        Resources)
     add_executable(glypht MACOSX_BUNDLE ${GLYPHT_SOURCES} ${APP_ICON})
-    set_target_properties(glypht PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns
-                                            MACOSX_BUNDLE_BUNDLE_NAME "GlyphT")
+    set_target_properties(
+      glypht
+      PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns MACOSX_BUNDLE_BUNDLE_NAME
+                 "GlyphT" MACOSX_BUNDLE_INFO_PLIST
+                 "${CMAKE_CURRENT_LIST_DIR}/cmake/MacOSXBundleInfo.plist.in")
   else()
     add_executable(glypht ${GLYPHT_SOURCES})
   endif()
@@ -245,6 +249,32 @@ if(BUILD_GLYPHT)
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_CURRENT_SOURCE_DIR}/assets/themes" "${GLYPHT_THEMES_DIR}"
     COMMENT "Copying colour themes"
+    VERBATIM)
+
+  # The bundled font (Iosevka), loaded at startup with wxFont::AddPrivateFont(),
+  # see bundled_fonts.cpp. It is read from a "fonts" directory next to the
+  # executable on Windows and Linux, and from Contents/Resources/Fonts on macOS
+  # (the Info.plist has ATSApplicationFontsPath for it). Linux uses the regular
+  # Iosevka: Pango does not know "Iosevka Term" after AddPrivateFont().
+  if(UNIX AND NOT APPLE)
+    set(GLYPHT_FONT_FILE "Iosevka-Regular.ttf")
+  else()
+    set(GLYPHT_FONT_FILE "IosevkaTerm-Regular.ttf")
+  endif()
+  set(GLYPHT_FONTS_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts")
+  if(APPLE)
+    set(GLYPHT_FONTS_DIR "$<TARGET_BUNDLE_CONTENT_DIR:glypht>/Resources/Fonts")
+  else()
+    set(GLYPHT_FONTS_DIR "$<TARGET_FILE_DIR:glypht>/fonts")
+  endif()
+  add_custom_command(
+    TARGET glypht
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${GLYPHT_FONTS_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${GLYPHT_FONTS_SRC_DIR}/${GLYPHT_FONT_FILE}"
+            "${GLYPHT_FONTS_SRC_DIR}/LICENSE.md" "${GLYPHT_FONTS_DIR}/"
+    COMMENT "Copying the bundled font"
     VERBATIM)
 
   # ---------------------------------------------------------------------------
@@ -394,8 +424,8 @@ if(BUILD_GLYPHT)
 
   # ---------------------------------------------------------------------------
   # Linux: install rules and a DEB package. Build it with: cpack -G DEB
-  # GlyphT reads glypht.svg and themes/ from the directory of the executable, so
-  # they are installed together into lib/glypht. bin/glypht is a launcher script
+  # GlyphT reads glypht.svg, themes/ and fonts/ from the directory of the
+  # executable, so they are installed together into lib/glypht. bin/glypht is a launcher script
   # that runs that executable.
   # ---------------------------------------------------------------------------
   if(UNIX AND NOT APPLE)
@@ -405,6 +435,9 @@ if(BUILD_GLYPHT)
             DESTINATION "${GLYPHT_INSTALL_DIR}")
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/themes"
             DESTINATION "${GLYPHT_INSTALL_DIR}")
+    install(FILES "${GLYPHT_FONTS_SRC_DIR}/${GLYPHT_FONT_FILE}"
+                  "${GLYPHT_FONTS_SRC_DIR}/LICENSE.md"
+            DESTINATION "${GLYPHT_INSTALL_DIR}/fonts")
     # bin/glypht is a launcher script that sets GTK_OVERLAY_SCROLLING=0 and runs
     # the executable (see assets/glypht.sh).
     install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/assets/glypht.sh"

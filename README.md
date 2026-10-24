@@ -356,6 +356,7 @@ The included demo application (`main.cpp`) showcases the library features:
 
 ### Features
 - Dark/Light theme switching
+- The font [Iosevka](https://typeof.net/Iosevka/) (SIL Open Font License, see `assets/fonts/LICENSE.md`) is shipped with the app on all platforms and is the default font. It is loaded for GlyphT only and is not installed on the system
 - Window sized to about half of the available screen area
 - Menu options for:
   - New terminal tab

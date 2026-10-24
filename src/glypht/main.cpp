@@ -1,4 +1,5 @@
 #include "MainFrame.h"
+#include "bundled_fonts.h"
 #include "terminal_logger.h"
 
 #include <optional>
@@ -114,6 +115,10 @@ public:
     } else {
       TerminalLogger::Get().SetLevel(TerminalLogLevel::kError);
     }
+
+    // Before any theme or window is made: the themes use the bundled font. The
+    // log level is set, so the result is logged.
+    LoadBundledFonts();
 
     wxString envStr;
     std::optional<EnvironmentList> environment{std::nullopt};

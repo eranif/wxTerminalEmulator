@@ -56,7 +56,24 @@ struct wxTerminalTheme {
     return (c.Red() << 16) | (c.Green() << 8) | c.Blue();
   }
 
+  /// The face of a font that the application has loaded (for example with
+  /// wxFont::AddPrivateFont()). When it is set, MakeDefaultFont() returns this
+  /// font. Call it before the themes are made, and only after the font was
+  /// loaded. An empty face goes back to the font of the platform.
+  static void SetBundledFontFace(const wxString &face) {
+    BundledFontFace() = face;
+  }
+  static wxString &BundledFontFace() {
+    static wxString face;
+    return face;
+  }
+
   static inline wxFont MakeDefaultFont() {
+    if (!BundledFontFace().empty()) {
+      return wxFont(wxFontInfo(kDefaultFontSize)
+                        .Family(wxFONTFAMILY_TELETYPE)
+                        .FaceName(BundledFontFace()));
+    }
 #ifdef __WXMAC__
     return wxFont(kDefaultFontSize, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
                   wxFONTWEIGHT_NORMAL, false, "Menlo");
