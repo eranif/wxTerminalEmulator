@@ -45,11 +45,14 @@ public:
 
 private:
   void ReaderThread();
-  // Result of ReadAvailable().
-  enum class ReadResult { kData, kEmpty, kBroken };
-  // Read once from the output pipe what it holds (at most buf.size() bytes)
-  // and pass it to m_onOutput. Does not wait for data.
-  ReadResult ReadAvailable(std::vector<char> &buf);
+  // Result of ReadOutput().
+  enum class ReadResult { kData, kTimeout, kProcessExited, kStopped, kBroken };
+  // Read once from the output pipe (at most buf.size() bytes) and pass the
+  // data to m_onOutput. Waits up to timeoutMs for data, and returns earlier
+  // when Stop() is called or, with watchProcess, when the process exits.
+  // ov is the reader's OVERLAPPED; no read is pending when this returns.
+  ReadResult ReadOutput(std::vector<char> &buf, OVERLAPPED &ov, DWORD timeoutMs,
+                        bool watchProcess);
   void WriterThread();
   void InterruptIo();
   bool CreateConPty(const std::string &command,
@@ -66,7 +69,8 @@ private:
   OutputCallback m_onOutput;
 
   HANDLE m_hInputWrite{nullptr};
-  HANDLE m_hOutputRead{nullptr};
+  HANDLE m_hOutputRead{nullptr}; // overlapped: the reader waits on it
+  HANDLE m_hStopEvent{nullptr};  // set by Stop() to wake the reader
   HANDLE m_hProcess{nullptr};
   long m_processPid{-1};
   HANDLE m_hThread{nullptr};

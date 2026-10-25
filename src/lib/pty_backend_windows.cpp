@@ -31,9 +31,47 @@ namespace {
 
 // Size of the ConPTY output pipe and of each read from it.
 constexpr std::size_t kOutputBufferSize = 64 * 1024;
-// Reads in a row before the reader checks again if the process exited; also
-// the limit of the reads after the exit (64 x 64 KB = 4 MB).
-constexpr int kMaxReadsInARow = 64;
+// The most reads after the process exited (64 x 64 KB = 4 MB): other console
+// processes can keep writing after the shell exits.
+constexpr int kMaxReadsAfterExit = 64;
+// After the process exited, the reader stops when no output came for this
+// long (conhost often writes its last frame a little after the exit).
+constexpr DWORD kDrainTimeoutMs = 10;
+
+// Make a pipe whose read end is overlapped, so the reader can wait for data,
+// for the process and for Stop() at once, with no polling. CreatePipe() cannot
+// make an overlapped pipe, so this is a named pipe with a unique name and one
+// instance. The write end, for conhost, is a normal blocking handle, made with
+// writeSa (inheritable); the read end, ours, is never inheritable.
+bool CreateOverlappedPipe(HANDLE *readEnd, HANDLE *writeEnd,
+                          SECURITY_ATTRIBUTES *writeSa, DWORD size) {
+  static std::atomic<unsigned> s_counter{0};
+  wchar_t name[96];
+  swprintf(name, sizeof(name) / sizeof(name[0]), L"\\\\.\\pipe\\wxterm-%lu-%u",
+           GetCurrentProcessId(), ++s_counter);
+
+  HANDLE read = CreateNamedPipeW(
+      name, PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED |
+                FILE_FLAG_FIRST_PIPE_INSTANCE,
+      PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT |
+          PIPE_REJECT_REMOTE_CLIENTS,
+      1, size, size, 0, nullptr);
+  if (read == INVALID_HANDLE_VALUE) {
+    return false;
+  }
+  HANDLE write =
+      CreateFileW(name, GENERIC_WRITE | FILE_READ_ATTRIBUTES, 0, writeSa,
+                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (write == INVALID_HANDLE_VALUE) {
+    const DWORD err = GetLastError();
+    CloseHandle(read);
+    SetLastError(err);
+    return false;
+  }
+  *readEnd = read;
+  *writeEnd = write;
+  return true;
+}
 
 using CreatePseudoConsoleFn = HRESULT(WINAPI *)(COORD, HANDLE, HANDLE, DWORD,
                                                 HPCON *);
@@ -410,7 +448,22 @@ bool WindowsPtyBackend::Start(
   const std::string shellCommand =
       command.empty() ? GetDefaultShell() : command;
 
+  // Before CreateConPty(), so a failure here does not leave a shell running.
+  m_hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  if (!m_hStopEvent) {
+    const DWORD err = GetLastError();
+    TLOG_ERROR() << "[CreateEvent (stop) failed: " << err << "]" << std::endl;
+    if (m_onOutput) {
+      char buf[128];
+      snprintf(buf, sizeof(buf), "[CreateEvent (stop) failed: %lu]\r\n", err);
+      m_onOutput(buf);
+    }
+    return false;
+  }
+
   if (!CreateConPty(shellCommand, environment, workingDirectory)) {
+    CloseHandle(m_hStopEvent);
+    m_hStopEvent = nullptr;
     if (m_onOutput) {
       TLOG_WARN() << "[Failed to create ConPTY backend]" << std::endl;
       m_onOutput("[Failed to create ConPTY backend]\r\n");
@@ -453,6 +506,9 @@ void WindowsPtyBackend::SendBreak() { Write("\x03"); }
 void WindowsPtyBackend::Stop() {
   m_running = false;
   m_cv.notify_all();
+  if (m_hStopEvent) {
+    SetEvent(m_hStopEvent);
+  }
 
   InterruptIo();
 
@@ -462,6 +518,11 @@ void WindowsPtyBackend::Stop() {
     m_writerThread.join();
 
   DestroyConPty();
+
+  if (m_hStopEvent) {
+    CloseHandle(m_hStopEvent);
+    m_hStopEvent = nullptr;
+  }
 }
 
 bool WindowsPtyBackend::CreateConPty(
@@ -540,13 +601,15 @@ bool WindowsPtyBackend::CreateConPty(
 
   // A large pipe lets ConPTY write a flood of output without waiting for each
   // read (the default size is a few KB).
-  if (!CreatePipe(&outRead, &outWrite, &sa,
-                  static_cast<DWORD>(kOutputBufferSize))) {
+  if (!CreateOverlappedPipe(&outRead, &outWrite, &sa,
+                            static_cast<DWORD>(kOutputBufferSize))) {
     DWORD err = GetLastError();
-    TLOG_ERROR() << "[CreatePipe (output) failed: " << err << "]" << std::endl;
+    TLOG_ERROR() << "[CreateOverlappedPipe (output) failed: " << err << "]"
+                 << std::endl;
     if (m_onOutput) {
       char buf[128];
-      snprintf(buf, sizeof(buf), "[CreatePipe (output) failed: %lu]\r\n", err);
+      snprintf(buf, sizeof(buf),
+               "[CreateOverlappedPipe (output) failed: %lu]\r\n", err);
       m_onOutput(buf);
     }
     cleanup();
@@ -564,8 +627,8 @@ bool WindowsPtyBackend::CreateConPty(
 
   // Prevent handle inheritance for parent-side handles
   // Only child-side handles (inRead, outWrite) should be inherited
+  // (outRead is made non-inheritable by CreateOverlappedPipe)
   SetHandleInformation(inWrite, HANDLE_FLAG_INHERIT, 0);
-  SetHandleInformation(outRead, HANDLE_FLAG_INHERIT, 0);
 
   COORD size{};
   size.X = 120;
@@ -836,107 +899,153 @@ void WindowsPtyBackend::WriterThread() {
 }
 
 WindowsPtyBackend::ReadResult
-WindowsPtyBackend::ReadAvailable(std::vector<char> &buf) {
+WindowsPtyBackend::ReadOutput(std::vector<char> &buf, OVERLAPPED &ov,
+                              DWORD timeoutMs, bool watchProcess) {
   if (!m_hOutputRead) {
-    return ReadResult::kEmpty;
+    return ReadResult::kBroken;
   }
-  DWORD avail = 0;
-  // Check if there's data available before attempting to read
-  if (!PeekNamedPipe(m_hOutputRead, nullptr, 0, nullptr, &avail, nullptr)) {
-    DWORD err = GetLastError();
-    if (err == ERROR_BROKEN_PIPE || err == ERROR_INVALID_HANDLE) {
-      TLOG_WARN() << "Pipe broken!" << std::endl;
+  auto isBroken = [](DWORD err) {
+    return err == ERROR_BROKEN_PIPE || err == ERROR_INVALID_HANDLE;
+  };
+
+  ReadResult wakeReason = ReadResult::kData;
+  if (!ReadFile(m_hOutputRead, buf.data(), static_cast<DWORD>(buf.size()),
+                nullptr, &ov)) {
+    const DWORD err = GetLastError();
+    if (err != ERROR_IO_PENDING) {
+      // Any other error ends the reader: retrying it would spin, since the
+      // main loop does not wait between reads.
+      if (isBroken(err)) {
+        TLOG_WARN() << "Pipe broken!" << std::endl;
+      } else {
+        TLOG_WARN() << "ReadFile failed: " << err << std::endl;
+      }
+      return m_running ? ReadResult::kBroken : ReadResult::kStopped;
+    }
+
+    // The read is pending: wait for it, for Stop() and for the process. Stop
+    // comes first, then the process, so a flood of output cannot hide them.
+    HANDLE handles[3];
+    DWORD count = 0;
+    handles[count++] = m_hStopEvent;
+    const bool hasProcess = watchProcess && m_hProcess;
+    if (hasProcess) {
+      handles[count++] = m_hProcess;
+    }
+    handles[count++] = ov.hEvent;
+    const DWORD wait = WaitForMultipleObjects(count, handles, FALSE, timeoutMs);
+    if (wait == WAIT_FAILED) {
+      // Should not happen; stop instead of spinning on a failed wait.
+      TLOG_ERROR() << "WaitForMultipleObjects failed: " << GetLastError()
+                   << std::endl;
+      CancelIoEx(m_hOutputRead, &ov);
+      DWORD ignored = 0;
+      GetOverlappedResult(m_hOutputRead, &ov, &ignored, TRUE);
       return ReadResult::kBroken;
     }
-    return ReadResult::kEmpty;
-  }
-  if (avail == 0) {
-    return ReadResult::kEmpty;
+    if (wait == WAIT_OBJECT_0) {
+      wakeReason = ReadResult::kStopped;
+    } else if (hasProcess && wait == WAIT_OBJECT_0 + 1) {
+      wakeReason = ReadResult::kProcessExited;
+    } else if (wait != WAIT_OBJECT_0 + count - 1) {
+      wakeReason = ReadResult::kTimeout;
+    }
+    if (wakeReason != ReadResult::kData) {
+      // Cancel the read; buf and ov are used again by the next read. It may
+      // have completed meanwhile, then its data is passed on below.
+      CancelIoEx(m_hOutputRead, &ov);
+    }
   }
 
-  // Limit read to buffer size
-  DWORD toRead = std::min<DWORD>(avail, static_cast<DWORD>(buf.size()));
+  // Wait until the read is done (at once, unless it was just cancelled).
   DWORD read = 0;
-  BOOL ok = ReadFile(m_hOutputRead, buf.data(), toRead, &read, nullptr);
-  if (ok && read > 0) {
+  if (!GetOverlappedResult(m_hOutputRead, &ov, &read, TRUE)) {
+    const DWORD err = GetLastError();
+    if (err != ERROR_OPERATION_ABORTED) {
+      // As above: only a cancelled read is retried.
+      if (isBroken(err)) {
+        TLOG_WARN() << "Pipe broken!" << std::endl;
+      } else {
+        TLOG_WARN() << "Read failed: " << err << std::endl;
+      }
+      return m_running ? ReadResult::kBroken : ReadResult::kStopped;
+    }
+    read = 0; // cancelled above or by InterruptIo()
+  }
+  if (read > 0) {
     if (m_onOutput) {
       m_onOutput(std::string(buf.data(), read));
     }
     return ReadResult::kData;
   }
-  DWORD err = GetLastError();
-  if (err == ERROR_BROKEN_PIPE || err == ERROR_INVALID_HANDLE) {
-    return ReadResult::kBroken;
+  if (!m_running) {
+    return ReadResult::kStopped;
   }
-  return ReadResult::kEmpty;
+  return wakeReason == ReadResult::kData ? ReadResult::kTimeout : wakeReason;
 }
 
 void WindowsPtyBackend::ReaderThread() {
   std::vector<char> buf(kOutputBufferSize);
+  OVERLAPPED ov{};
+  ov.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  if (!ov.hEvent) {
+    TLOG_ERROR() << "[CreateEvent (read) failed: " << GetLastError() << "]"
+                 << std::endl;
+    m_running = false;
+    return;
+  }
 
-  // Read the last output after the process exited. Bounded, and it stops
-  // with Stop(): other processes attached to the console can keep writing
-  // after the shell exits, and the pipe breaks only when the pseudo console
-  // is closed, after this thread ends.
-  auto drain = [this, &buf]() {
-    for (int i = 0; i < kMaxReadsInARow && m_running; ++i) {
-      if (ReadAvailable(buf) != ReadResult::kData) {
-        break;
-      }
-    }
+  // (WaitForSingleObject, not GetExitCodeProcess: a process can exit with
+  // code 259, STILL_ACTIVE.)
+  auto processExited = [this]() {
+    return m_hProcess && WaitForSingleObject(m_hProcess, 0) == WAIT_OBJECT_0;
   };
 
-  int readsInARow = 0;
   while (m_running) {
-    const ReadResult result = ReadAvailable(buf);
+    // Wait for output with no timeout: the read wakes the thread as soon as
+    // conhost writes, the process handle when the shell exits, and the stop
+    // event when Stop() is called. Nothing polls.
+    const ReadResult result = ReadOutput(buf, ov, INFINITE, true);
     if (result == ReadResult::kBroken) {
       m_running = false;
       break;
     }
-    if (!m_running) {
+    if (result == ReadResult::kStopped || !m_running) {
       break;
     }
-    // After a read, read again at once: sleeping there capped the output at
-    // one buffer per sleep (about 15 ms on Windows), and made the shell wait
-    // on a full pipe. Still check for an exit now and then, in case another
-    // console process keeps the pipe full after the shell exits.
-    if (result == ReadResult::kData && ++readsInARow < kMaxReadsInARow) {
+    // A read that completes at once does not wait on the process handle, so
+    // check it after each read too: another console process can keep the
+    // pipe full after the shell exits.
+    if (result == ReadResult::kTimeout ||
+        (result == ReadResult::kData && !processExited())) {
       continue;
     }
-    readsInARow = 0;
 
-    // Check if process is still alive only when the pipe is empty (or after
-    // many reads), so the output it wrote before it exited is read first.
-    // (WaitForSingleObject, not GetExitCodeProcess: a process can exit with
-    // code 259, STILL_ACTIVE.)
-    if (m_hProcess && WaitForSingleObject(m_hProcess, 0) == WAIT_OBJECT_0) {
-      // The last output can reach the pipe after the check above, and
-      // conhost often writes its last frame a little after the process
-      // exits: read the pipe again, then once more after a short wait.
-      drain();
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-      drain();
-      if (!m_running) {
-        break; // Stop() was called while draining
+    // The process exited. Its last output can still be in the pipe, and
+    // conhost often writes its last frame a little after the exit: read
+    // until no output came for kDrainTimeoutMs. Bounded, and it stops with
+    // Stop(): the pipe breaks only when the pseudo console is closed, after
+    // this thread ends.
+    for (int i = 0; i < kMaxReadsAfterExit && m_running; ++i) {
+      if (ReadOutput(buf, ov, kDrainTimeoutMs, false) != ReadResult::kData) {
+        break;
       }
-
-      DWORD exitCode = 0;
-      GetExitCodeProcess(m_hProcess, &exitCode);
-      TLOG_WARN() << "Process has exited with code: " << exitCode << ". "
-                  << std::hex << exitCode << std::endl;
-      m_running = false;
-      wxTerminalEvent terminate_event{wxEVT_TERMINAL_TERMINATED};
-      terminate_event.SetEventObject(m_eventHandler);
-      m_eventHandler->AddPendingEvent(terminate_event);
-      break;
     }
-    if (result == ReadResult::kData) {
-      continue;
+    if (!m_running) {
+      break; // Stop() was called while draining
     }
 
-    // Small sleep to avoid tight loop when no data is available.
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    DWORD exitCode = 0;
+    GetExitCodeProcess(m_hProcess, &exitCode);
+    TLOG_WARN() << "Process has exited with code: " << exitCode << ". "
+                << std::hex << exitCode << std::endl;
+    m_running = false;
+    wxTerminalEvent terminate_event{wxEVT_TERMINAL_TERMINATED};
+    terminate_event.SetEventObject(m_eventHandler);
+    m_eventHandler->AddPendingEvent(terminate_event);
+    break;
   }
+  CloseHandle(ov.hEvent);
   TLOG_DEBUG() << "ReaderThread is going down" << std::endl;
 }
 
