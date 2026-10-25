@@ -19,6 +19,8 @@ constexpr int kPaddingX = 12;
 // end. A pill's round end has a radius of half its height, and the circle of
 // the button still fits inside it.
 constexpr int kButtonPaddingX = 6;
+// The circle around the close button is this much wider than the button.
+constexpr int kCloseCircleGrow = 4;
 constexpr int kPaddingY = 6;
 // The space between the edge of the bar and the tab.
 constexpr int kTopGap = 4;
@@ -42,15 +44,17 @@ wxColour Mix(const wxColour &a, const wxColour &b, double t) {
 // filled circle around it. The X is drawn, not taken from the bitmap, so it is
 // in the centre of the circle. Both are anti-aliased (a small wxDC circle is
 // jagged on Windows); without a graphics context, @p fallback is drawn.
+// The circle is @p circleGrow pixels wider than @p rect; the X keeps its size.
 void DrawCloseButton(wxDC &dc, const wxRect &rect, const wxColour &circle,
-                     const wxColour &cross, const wxBitmap &fallback) {
+                     int circleGrow, const wxColour &cross,
+                     const wxBitmap &fallback) {
   std::unique_ptr<wxGraphicsContext> gc{
       wxGraphicsContext::CreateFromUnknownDC(dc)};
   if (!gc) {
     if (circle.IsOk()) {
       dc.SetBrush(circle);
       dc.SetPen(*wxTRANSPARENT_PEN);
-      dc.DrawEllipse(rect);
+      dc.DrawEllipse(rect.Inflate(circleGrow / 2, circleGrow / 2));
     }
     dc.DrawBitmap(fallback, rect.GetPosition(), true);
     return;
@@ -60,11 +64,13 @@ void DrawCloseButton(wxDC &dc, const wxRect &rect, const wxColour &circle,
   const double cx = rect.x + rect.width / 2.0;
   const double cy = rect.y + rect.height / 2.0;
   if (circle.IsOk()) {
+    const double circleDiameter = diameter + circleGrow;
     gc->SetBrush(wxBrush(circle));
     gc->SetPen(*wxTRANSPARENT_PEN);
-    gc->DrawEllipse(cx - diameter / 2, cy - diameter / 2, diameter, diameter);
+    gc->DrawEllipse(cx - circleDiameter / 2, cy - circleDiameter / 2,
+                    circleDiameter, circleDiameter);
   }
-  // The X takes a little less than half of the circle.
+  // The X takes a little less than half of the button.
   const double half = diameter * 0.2;
   gc->SetPen(gc->CreatePen(wxGraphicsPenInfo(cross)
                                .Width(std::max(1.0, diameter / 10))
@@ -210,13 +216,15 @@ int GlyphTabArt::DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
         button.rect.Offset(1, 1);
       }
       if (button.id == wxAUI_BUTTON_CLOSE) {
-        // A circle around the X only while the mouse is over it.
+        // The X is dimmed; while the mouse is over it, it is in the text
+        // colour, inside a circle.
         const bool hot = button.curState == wxAUI_BUTTON_STATE_HOVER ||
                          button.curState == wxAUI_BUTTON_STATE_PRESSED;
         const wxColour &tabBg = page.active ? m_bgActive : m_bgHover;
         DrawCloseButton(dc, button.rect,
                         hot ? Mix(tabBg, m_fgActive, 0.25) : wxNullColour,
-                        m_fgActive, bmp);
+                        wnd->FromDIP(kCloseCircleGrow),
+                        hot ? m_fgActive : m_fgDimmed, bmp);
       } else {
         dc.DrawBitmap(bmp, button.rect.GetPosition(), true);
       }
