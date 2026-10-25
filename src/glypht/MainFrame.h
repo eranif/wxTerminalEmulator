@@ -219,8 +219,10 @@ public:
                                  bool selectIt);
   void UpdateSafeDrawingMenuCheck();
   void ApplyThemeToTab(wxTerminalViewCtrl *view);
-  // Set the theme of every terminal tab.
-  void ApplyThemeToAllTabs(const wxTerminalTheme &theme);
+  // Set the theme of every terminal tab, and of the tabs themselves with the
+  // tab outline colour @p outlineColour (a key of AppConfig).
+  void ApplyThemeToAllTabs(const wxTerminalTheme &theme,
+                           const wxString &outlineColour);
   void OnNewTerminal(wxCommandEvent &event);
   // Ask which shell to start for a new tab (Windows only; elsewhere the default
   // shell is used). Returns nullopt if the user cancelled.

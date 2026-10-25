@@ -47,109 +47,109 @@
 
 // clang-format on
 
-class SettingsBaseDlg : public wxDialog {
+class SettingsBaseDlg : public wxDialog
+{
 protected:
-  wxPanel *m_panel127;
-  wxNotebook *m_notebook132;
-  wxPanel *m_panel171;
-  wxStaticText *m_staticText182;
-  wxFilePickerCtrl *m_filePickerShellExe;
-  wxStaticText *m_staticText184;
-  wxTextCtrl *m_textCtrlShellArgs;
-  wxStaticText *m_staticText173;
-  wxTextCtrl *m_textCtrlTitle;
-  wxStaticText *m_staticText180;
-  wxFontPickerCtrl *m_fontPickerFont;
-  wxCheckBox *m_checkBoxCloseButton;
-  wxCheckBox *m_checkBoxBlockCursor;
-  wxPanel *m_panel133;
-  wxStaticText *m_staticText146;
-  wxChoice *m_choiceNames;
-  wxStaticText *m_staticText135;
-  wxColourPickerCtrl *m_colourPickerBg;
-  wxStaticText *m_staticText137;
-  wxColourPickerCtrl *m_colourPickerFg;
-  wxStaticText *m_staticText151;
-  wxColourPickerCtrl *m_colourPickerBlack;
-  wxStaticText *m_staticText153;
-  wxColourPickerCtrl *m_colourPickerRed;
-  wxStaticText *m_staticText155;
-  wxColourPickerCtrl *m_colourPickerGreen;
-  wxStaticText *m_staticText157;
-  wxColourPickerCtrl *m_colourPickerYellow;
-  wxStaticText *m_staticText161;
-  wxColourPickerCtrl *m_colourPickerBlue;
-  wxStaticText *m_staticText163;
-  wxColourPickerCtrl *m_colourPickerMagent;
-  wxStaticText *m_staticText165;
-  wxColourPickerCtrl *m_colourPickerCyan;
-  wxStaticText *m_staticText167;
-  wxColourPickerCtrl *m_colourPickerWhite;
-  wxStaticLine *m_staticLine170;
-  wxCheckBox *m_checkBoxBrightColours;
-  wxStdDialogButtonSizer *m_stdBtnSizer129;
-  wxButton *m_button130;
-  wxButton *m_button131;
+    wxPanel* m_panel127;
+    wxNotebook* m_notebook132;
+    wxPanel* m_panel171;
+    wxStaticText* m_staticText182;
+    wxFilePickerCtrl* m_filePickerShellExe;
+    wxStaticText* m_staticText184;
+    wxTextCtrl* m_textCtrlShellArgs;
+    wxStaticText* m_staticText173;
+    wxTextCtrl* m_textCtrlTitle;
+    wxStaticText* m_staticText180;
+    wxFontPickerCtrl* m_fontPickerFont;
+    wxCheckBox* m_checkBoxCloseButton;
+    wxCheckBox* m_checkBoxBlockCursor;
+    wxPanel* m_panel133;
+    wxStaticText* m_staticText146;
+    wxChoice* m_choiceNames;
+    wxStaticText* m_staticText135;
+    wxColourPickerCtrl* m_colourPickerBg;
+    wxStaticText* m_staticText137;
+    wxColourPickerCtrl* m_colourPickerFg;
+    wxStaticText* m_staticText151;
+    wxColourPickerCtrl* m_colourPickerBlack;
+    wxStaticText* m_staticText153;
+    wxColourPickerCtrl* m_colourPickerRed;
+    wxStaticText* m_staticText155;
+    wxColourPickerCtrl* m_colourPickerGreen;
+    wxStaticText* m_staticText157;
+    wxColourPickerCtrl* m_colourPickerYellow;
+    wxStaticText* m_staticText161;
+    wxColourPickerCtrl* m_colourPickerBlue;
+    wxStaticText* m_staticText163;
+    wxColourPickerCtrl* m_colourPickerMagent;
+    wxStaticText* m_staticText165;
+    wxColourPickerCtrl* m_colourPickerCyan;
+    wxStaticText* m_staticText167;
+    wxColourPickerCtrl* m_colourPickerWhite;
+    wxStaticLine* m_staticLine170;
+    wxCheckBox* m_checkBoxBrightColours;
+    wxChoice* m_choiceOutlineColour;
+    wxStdDialogButtonSizer* m_stdBtnSizer129;
+    wxButton* m_button130;
+    wxButton* m_button131;
 
 protected:
-  virtual void OnThemeChanged(wxCommandEvent &event) { event.Skip(); }
-  virtual void OnBackgroundColour(wxColourPickerEvent &event) { event.Skip(); }
-  virtual void OnTextColour(wxColourPickerEvent &event) { event.Skip(); }
-  virtual void OnBlack(wxColourPickerEvent &event) { event.Skip(); }
-  virtual void OnRed(wxColourPickerEvent &event) { event.Skip(); }
-  virtual void OnGreen(wxColourPickerEvent &event) { event.Skip(); }
-  virtual void OnYellow(wxColourPickerEvent &event) { event.Skip(); }
-  virtual void OnBlue(wxColourPickerEvent &event) { event.Skip(); }
-  virtual void OnMagenta(wxColourPickerEvent &event) { event.Skip(); }
-  virtual void OnCyan(wxColourPickerEvent &event) { event.Skip(); }
-  virtual void OnWhite(wxColourPickerEvent &event) { event.Skip(); }
-  virtual void OnShowBrightColours(wxCommandEvent &event) { event.Skip(); }
+    virtual void OnThemeChanged(wxCommandEvent& event) { event.Skip(); }
+    virtual void OnBackgroundColour(wxColourPickerEvent& event) { event.Skip(); }
+    virtual void OnTextColour(wxColourPickerEvent& event) { event.Skip(); }
+    virtual void OnBlack(wxColourPickerEvent& event) { event.Skip(); }
+    virtual void OnRed(wxColourPickerEvent& event) { event.Skip(); }
+    virtual void OnGreen(wxColourPickerEvent& event) { event.Skip(); }
+    virtual void OnYellow(wxColourPickerEvent& event) { event.Skip(); }
+    virtual void OnBlue(wxColourPickerEvent& event) { event.Skip(); }
+    virtual void OnMagenta(wxColourPickerEvent& event) { event.Skip(); }
+    virtual void OnCyan(wxColourPickerEvent& event) { event.Skip(); }
+    virtual void OnWhite(wxColourPickerEvent& event) { event.Skip(); }
+    virtual void OnShowBrightColours(wxCommandEvent& event) { event.Skip(); }
+    virtual void OnOutlineColourChanged(wxCommandEvent& event) { event.Skip(); }
 
 public:
-  wxStaticText *GetStaticText182() { return m_staticText182; }
-  wxFilePickerCtrl *GetFilePickerShellExe() { return m_filePickerShellExe; }
-  wxStaticText *GetStaticText184() { return m_staticText184; }
-  wxTextCtrl *GetTextCtrlShellArgs() { return m_textCtrlShellArgs; }
-  wxStaticText *GetStaticText173() { return m_staticText173; }
-  wxTextCtrl *GetTextCtrlTitle() { return m_textCtrlTitle; }
-  wxStaticText *GetStaticText180() { return m_staticText180; }
-  wxFontPickerCtrl *GetFontPickerFont() { return m_fontPickerFont; }
-  wxCheckBox *GetCheckBoxCloseButton() { return m_checkBoxCloseButton; }
-  wxCheckBox *GetCheckBoxBlockCursor() { return m_checkBoxBlockCursor; }
-  wxPanel *GetPanel171() { return m_panel171; }
-  wxStaticText *GetStaticText146() { return m_staticText146; }
-  wxChoice *GetChoiceNames() { return m_choiceNames; }
-  wxStaticText *GetStaticText135() { return m_staticText135; }
-  wxColourPickerCtrl *GetColourPickerBg() { return m_colourPickerBg; }
-  wxStaticText *GetStaticText137() { return m_staticText137; }
-  wxColourPickerCtrl *GetColourPickerFg() { return m_colourPickerFg; }
-  wxStaticText *GetStaticText151() { return m_staticText151; }
-  wxColourPickerCtrl *GetColourPickerBlack() { return m_colourPickerBlack; }
-  wxStaticText *GetStaticText153() { return m_staticText153; }
-  wxColourPickerCtrl *GetColourPickerRed() { return m_colourPickerRed; }
-  wxStaticText *GetStaticText155() { return m_staticText155; }
-  wxColourPickerCtrl *GetColourPickerGreen() { return m_colourPickerGreen; }
-  wxStaticText *GetStaticText157() { return m_staticText157; }
-  wxColourPickerCtrl *GetColourPickerYellow() { return m_colourPickerYellow; }
-  wxStaticText *GetStaticText161() { return m_staticText161; }
-  wxColourPickerCtrl *GetColourPickerBlue() { return m_colourPickerBlue; }
-  wxStaticText *GetStaticText163() { return m_staticText163; }
-  wxColourPickerCtrl *GetColourPickerMagent() { return m_colourPickerMagent; }
-  wxStaticText *GetStaticText165() { return m_staticText165; }
-  wxColourPickerCtrl *GetColourPickerCyan() { return m_colourPickerCyan; }
-  wxStaticText *GetStaticText167() { return m_staticText167; }
-  wxColourPickerCtrl *GetColourPickerWhite() { return m_colourPickerWhite; }
-  wxStaticLine *GetStaticLine170() { return m_staticLine170; }
-  wxCheckBox *GetCheckBoxBrightColours() { return m_checkBoxBrightColours; }
-  wxPanel *GetPanel133() { return m_panel133; }
-  wxNotebook *GetNotebook132() { return m_notebook132; }
-  wxPanel *GetPanel127() { return m_panel127; }
-  SettingsBaseDlg(wxWindow *parent, wxWindowID id = wxID_ANY,
-                  const wxString &title = _("Settings"),
-                  const wxPoint &pos = wxDefaultPosition,
-                  const wxSize &size = wxSize(-1, -1),
-                  long style = wxDEFAULT_DIALOG_STYLE);
-  virtual ~SettingsBaseDlg();
+    wxStaticText* GetStaticText182() { return m_staticText182; }
+    wxFilePickerCtrl* GetFilePickerShellExe() { return m_filePickerShellExe; }
+    wxStaticText* GetStaticText184() { return m_staticText184; }
+    wxTextCtrl* GetTextCtrlShellArgs() { return m_textCtrlShellArgs; }
+    wxStaticText* GetStaticText173() { return m_staticText173; }
+    wxTextCtrl* GetTextCtrlTitle() { return m_textCtrlTitle; }
+    wxStaticText* GetStaticText180() { return m_staticText180; }
+    wxFontPickerCtrl* GetFontPickerFont() { return m_fontPickerFont; }
+    wxCheckBox* GetCheckBoxCloseButton() { return m_checkBoxCloseButton; }
+    wxCheckBox* GetCheckBoxBlockCursor() { return m_checkBoxBlockCursor; }
+    wxPanel* GetPanel171() { return m_panel171; }
+    wxStaticText* GetStaticText146() { return m_staticText146; }
+    wxChoice* GetChoiceNames() { return m_choiceNames; }
+    wxStaticText* GetStaticText135() { return m_staticText135; }
+    wxColourPickerCtrl* GetColourPickerBg() { return m_colourPickerBg; }
+    wxStaticText* GetStaticText137() { return m_staticText137; }
+    wxColourPickerCtrl* GetColourPickerFg() { return m_colourPickerFg; }
+    wxStaticText* GetStaticText151() { return m_staticText151; }
+    wxColourPickerCtrl* GetColourPickerBlack() { return m_colourPickerBlack; }
+    wxStaticText* GetStaticText153() { return m_staticText153; }
+    wxColourPickerCtrl* GetColourPickerRed() { return m_colourPickerRed; }
+    wxStaticText* GetStaticText155() { return m_staticText155; }
+    wxColourPickerCtrl* GetColourPickerGreen() { return m_colourPickerGreen; }
+    wxStaticText* GetStaticText157() { return m_staticText157; }
+    wxColourPickerCtrl* GetColourPickerYellow() { return m_colourPickerYellow; }
+    wxStaticText* GetStaticText161() { return m_staticText161; }
+    wxColourPickerCtrl* GetColourPickerBlue() { return m_colourPickerBlue; }
+    wxStaticText* GetStaticText163() { return m_staticText163; }
+    wxColourPickerCtrl* GetColourPickerMagent() { return m_colourPickerMagent; }
+    wxStaticText* GetStaticText165() { return m_staticText165; }
+    wxColourPickerCtrl* GetColourPickerCyan() { return m_colourPickerCyan; }
+    wxStaticText* GetStaticText167() { return m_staticText167; }
+    wxColourPickerCtrl* GetColourPickerWhite() { return m_colourPickerWhite; }
+    wxStaticLine* GetStaticLine170() { return m_staticLine170; }
+    wxCheckBox* GetCheckBoxBrightColours() { return m_checkBoxBrightColours; }
+    wxChoice* GetChoiceOutlineColour() { return m_choiceOutlineColour; }
+    wxPanel* GetPanel133() { return m_panel133; }
+    wxNotebook* GetNotebook132() { return m_notebook132; }
+    wxPanel* GetPanel127() { return m_panel127; }
+    SettingsBaseDlg(wxWindow* parent, wxWindowID id = wxID_ANY, const wxString& title = _("Settings"), const wxPoint& pos = wxDefaultPosition, const wxSize& size = wxSize(-1,-1), long style = wxDEFAULT_DIALOG_STYLE);
+    virtual ~SettingsBaseDlg();
 };
 
 #endif

@@ -124,7 +124,12 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   m_notebook = new wxAuiNotebook(this, wxID_ANY, wxDefaultPosition,
                                  wxDefaultSize, nbStyle);
 #if wxCHECK_VERSION(3, 3, 0)
-  m_notebook->SetArtProvider(new GlyphTabArt(m_config.GetActiveTheme()));
+  {
+    auto *art = new GlyphTabArt(m_config.GetActiveTheme());
+    art->SetOutlineColour(AppConfig::GetTabOutlineColourOf(
+        m_config.GetActiveTheme(), m_config.GetTabOutlineColour()));
+    m_notebook->SetArtProvider(art);
+  }
 #endif
   m_cliShellCommand = shellCommand;
   m_defaultShellCommand = ResolveDefaultShell();
@@ -609,7 +614,7 @@ void MyFrame::ApplySettings() {
   if (m_config.GetFont().IsOk()) {
     theme.font = m_config.GetFont();
   }
-  ApplyThemeToAllTabs(theme);
+  ApplyThemeToAllTabs(theme, m_config.GetTabOutlineColour());
   ApplyNativeAppTheme();
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
     if (auto *view = TerminalOf(m_notebook->GetPage(i))) {
@@ -629,7 +634,8 @@ void MyFrame::ApplySettings() {
   UpdateSafeDrawingMenuCheck();
 }
 
-void MyFrame::ApplyThemeToAllTabs(const wxTerminalTheme &theme) {
+void MyFrame::ApplyThemeToAllTabs(const wxTerminalTheme &theme,
+                                  const wxString &outlineColour) {
   if (!m_notebook) {
     return;
   }
@@ -641,8 +647,12 @@ void MyFrame::ApplyThemeToAllTabs(const wxTerminalTheme &theme) {
   }
 #if wxCHECK_VERSION(3, 3, 0)
   // The tabs use the colours of the theme.
-  m_notebook->SetArtProvider(new GlyphTabArt(theme));
+  auto *art = new GlyphTabArt(theme);
+  art->SetOutlineColour(AppConfig::GetTabOutlineColourOf(theme, outlineColour));
+  m_notebook->SetArtProvider(art);
   m_notebook->Refresh();
+#else
+  wxUnusedVar(outlineColour);
 #endif
 }
 
@@ -1145,8 +1155,10 @@ void MyFrame::ApplyNativeAppTheme() {
 void MyFrame::OnSettings(wxCommandEvent &event) {
   wxUnusedVar(event);
   // Preview the theme in all tabs while the dialog is open.
-  SettingsDlg dlg{this, m_config, [this](const wxTerminalTheme &theme) {
-                    ApplyThemeToAllTabs(theme);
+  SettingsDlg dlg{this, m_config,
+                  [this](const wxTerminalTheme &theme,
+                         const wxString &outlineColour) {
+                    ApplyThemeToAllTabs(theme, outlineColour);
                   }};
   const bool accepted = dlg.ShowModal() == wxID_OK;
 
@@ -1158,6 +1170,7 @@ void MyFrame::OnSettings(wxCommandEvent &event) {
     m_config.SetNewTabTitle(dlg.GetNewTabTitle());
     m_config.SetShowCloseButton(dlg.GetShowCloseButton());
     m_config.SetBlockCursor(dlg.GetBlockCursor());
+    m_config.SetTabOutlineColour(dlg.GetTabOutlineColour());
     m_config.SetFont(dlg.GetFont());
     m_config.SetShellExecutable(dlg.GetShellExecutable());
     m_config.SetShellArgs(dlg.GetShellArgs());

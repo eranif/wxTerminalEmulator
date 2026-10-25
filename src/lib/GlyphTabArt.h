@@ -21,7 +21,8 @@
  *   terminal background and rounded top corners, so it looks like a part of the
  *   terminal below it.
  * - Pills: the tab bar has the colour of the terminal. Each tab is a small
- *   pill with a gap between the pills, and the current pill is filled.
+ *   rounded rectangle with a gap between them, and the current one is filled
+ *   and outlined (see SetOutlineColour()).
  *
  * The art does not follow the system colours. To change the colours, for
  * example after a theme change, give the notebook a new art with
@@ -40,6 +41,8 @@ public:
   // The colours come from the theme: these only change the text colours.
   void SetColour(const wxColour &colour) override;
   void SetActiveColour(const wxColour &colour) override;
+  // The outline of the current pill. The default is the magenta of the theme.
+  void SetOutlineColour(const wxColour &colour) { m_outline = colour; }
 
   void DrawBackground(wxDC &dc, wxWindow *wnd, const wxRect &rect) override;
   int DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
@@ -65,6 +68,7 @@ private:
   wxColour m_bgBar;    // Behind the tabs.
   wxColour m_bgActive; // The current tab.
   wxColour m_bgHover;  // A tab under the mouse.
+  wxColour m_outline;  // Around the current pill.
   wxColour m_fgActive; // Text of the current tab.
   wxColour m_fgNormal; // Text of the other tabs.
   wxColour m_fgDimmed; // Buttons of the other tabs.

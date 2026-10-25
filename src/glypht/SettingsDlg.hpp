@@ -8,10 +8,11 @@
 
 class SettingsDlg : public SettingsBaseDlg {
 public:
-  /// Called with the theme the dialog shows, each time the user picks another
-  /// theme or changes a colour. Used to preview the theme while the dialog is
-  /// open.
-  using PreviewCallback = std::function<void(const wxTerminalTheme &)>;
+  /// Called with the theme the dialog shows and the key of the tab outline
+  /// colour, each time the user picks another theme, changes a colour or picks
+  /// another outline colour. Used to preview them while the dialog is open.
+  using PreviewCallback =
+      std::function<void(const wxTerminalTheme &, const wxString &)>;
 
   SettingsDlg(wxWindow *parent, const AppConfig &config,
               PreviewCallback onPreview = {});
@@ -22,6 +23,8 @@ public:
   wxString GetNewTabTitle() const { return m_textCtrlTitle->GetValue(); }
   bool GetShowCloseButton() const { return m_checkBoxCloseButton->GetValue(); }
   bool GetBlockCursor() const { return m_checkBoxBlockCursor->GetValue(); }
+  /// The key of the tab outline colour (see AppConfig::GetTabOutlineColours()).
+  wxString GetTabOutlineColour() const;
   wxFont GetFont() const { return m_fontPickerFont->GetSelectedFont(); }
   /// The shell executable chosen in the dialog, or empty for the default shell.
   wxString GetShellExecutable() const {
@@ -40,6 +43,7 @@ protected:
   void OnCyan(wxColourPickerEvent &event) override;
   void OnGreen(wxColourPickerEvent &event) override;
   void OnMagenta(wxColourPickerEvent &event) override;
+  void OnOutlineColourChanged(wxCommandEvent &event) override;
   void OnThemeChanged(wxCommandEvent &event) override;
   void OnRed(wxColourPickerEvent &event) override;
   void OnShowBrightColours(wxCommandEvent &event) override;

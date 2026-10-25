@@ -19,6 +19,21 @@ SettingsDlg::SettingsDlg(wxWindow *parent, const AppConfig &config,
     m_fontPickerFont->SetSelectedFont(m_config.GetFont());
   }
 
+  // An unknown key in config.ini shows the default, magenta.
+  int outline = wxNOT_FOUND;
+  int magenta = wxNOT_FOUND;
+  for (const auto &entry : AppConfig::GetTabOutlineColours()) {
+    const int index = m_choiceOutlineColour->Append(entry.label);
+    if (m_config.GetTabOutlineColour() == entry.key) {
+      outline = index;
+    }
+    if (wxString(entry.key) == "magenta") {
+      magenta = index;
+    }
+  }
+  m_choiceOutlineColour->SetSelection(outline != wxNOT_FOUND ? outline
+                                                             : magenta);
+
   m_colourPickerBg->SetColour(m_theme.bg);
   m_colourPickerFg->SetColour(m_theme.fg);
   m_colourPickerBlack->SetColour(m_theme.black);
@@ -32,6 +47,15 @@ SettingsDlg::SettingsDlg(wxWindow *parent, const AppConfig &config,
 }
 
 SettingsDlg::~SettingsDlg() {}
+
+wxString SettingsDlg::GetTabOutlineColour() const {
+  const auto &colours = AppConfig::GetTabOutlineColours();
+  const int index = m_choiceOutlineColour->GetSelection();
+  if (index < 0 || static_cast<size_t>(index) >= colours.size()) {
+    return m_config.GetTabOutlineColour();
+  }
+  return colours[index].key;
+}
 
 void SettingsDlg::OnBackgroundColour(wxColourPickerEvent &event) {
   m_theme.bg = event.GetColour();
@@ -124,7 +148,7 @@ void SettingsDlg::Preview() {
   if (font.IsOk()) {
     theme.font = font;
   }
-  m_onPreview(theme);
+  m_onPreview(theme, GetTabOutlineColour());
 }
 
 void SettingsDlg::OnRed(wxColourPickerEvent &event) {
@@ -156,4 +180,8 @@ void SettingsDlg::OnYellow(wxColourPickerEvent &event) {
 void SettingsDlg::OnShowBrightColours(wxCommandEvent &event) {
   m_normalColours = !event.IsChecked();
   UpdateColours();
+}
+void SettingsDlg::OnOutlineColourChanged(wxCommandEvent &event) {
+  wxUnusedVar(event);
+  Preview();
 }

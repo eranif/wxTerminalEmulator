@@ -6,6 +6,13 @@
 #include <wx/font.h>
 #include <wx/string.h>
 
+/// A theme colour that the outline of the current tab can have.
+struct TabOutlineColour {
+  const char *key;   ///< The value in config.ini.
+  const char *label; ///< The name in the settings dialog.
+  wxColour wxTerminalTheme::*member;
+};
+
 struct AppConfig {
   AppConfig();
 
@@ -59,6 +66,16 @@ struct AppConfig {
   void SetBlockCursor(bool block) { blockCursor = block; }
   bool GetBlockCursor() const { return blockCursor; }
 
+  /// The colours the outline of the current tab can have.
+  static const std::vector<TabOutlineColour> &GetTabOutlineColours();
+  /// The key of the outline colour of the current tab (see TabOutlineColour).
+  /// An unknown key is kept, and means the default, magenta.
+  void SetTabOutlineColour(const wxString &key) { tabOutlineColour = key; }
+  const wxString &GetTabOutlineColour() const { return tabOutlineColour; }
+  /// The colour of @p key in @p theme.
+  static wxColour GetTabOutlineColourOf(const wxTerminalTheme &theme,
+                                        const wxString &key);
+
   /// Optional shell to start in new tabs, instead of the default shell of the
   /// platform. Empty means: use the default shell.
   void SetShellExecutable(const wxString &path) { shellExecutable = path; }
@@ -92,6 +109,7 @@ private:
   bool safeDrawingEnabled{true};
   bool showCloseButton{true};
   bool blockCursor{true};
+  wxString tabOutlineColour{"magenta"};
   wxString shellExecutable;
   wxString shellArgs;
   wxString lastShell;

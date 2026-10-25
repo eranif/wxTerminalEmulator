@@ -65,6 +65,46 @@ bool SameColours(const wxTerminalTheme &a, const wxTerminalTheme &b) {
 
 } // namespace
 
+const std::vector<TabOutlineColour> &AppConfig::GetTabOutlineColours() {
+  // clang-format off
+  static const std::vector<TabOutlineColour> colours = {
+      {"fg",            "Text",           &wxTerminalTheme::fg},
+      {"red",           "Red",            &wxTerminalTheme::red},
+      {"green",         "Green",          &wxTerminalTheme::green},
+      {"yellow",        "Yellow",         &wxTerminalTheme::yellow},
+      {"blue",          "Blue",           &wxTerminalTheme::blue},
+      {"magenta",       "Magenta",        &wxTerminalTheme::magenta},
+      {"cyan",          "Cyan",           &wxTerminalTheme::cyan},
+      {"white",         "White",          &wxTerminalTheme::white},
+      {"brightred",     "Bright Red",     &wxTerminalTheme::brightRed},
+      {"brightgreen",   "Bright Green",   &wxTerminalTheme::brightGreen},
+      {"brightyellow",  "Bright Yellow",  &wxTerminalTheme::brightYellow},
+      {"brightblue",    "Bright Blue",    &wxTerminalTheme::brightBlue},
+      {"brightmagenta", "Bright Magenta", &wxTerminalTheme::brightMagenta},
+      {"brightcyan",    "Bright Cyan",    &wxTerminalTheme::brightCyan},
+      {"brightwhite",   "Bright White",   &wxTerminalTheme::brightWhite},
+      {"selection",     "Selection",      &wxTerminalTheme::selectionBg},
+      {"highlight",     "Search Match",   &wxTerminalTheme::highlightBg},
+      {"cursor",        "Cursor",         &wxTerminalTheme::cursorColour},
+      {"link",          "Link",           &wxTerminalTheme::linkColour},
+  };
+  // clang-format on
+  return colours;
+}
+
+wxColour AppConfig::GetTabOutlineColourOf(const wxTerminalTheme &theme,
+                                          const wxString &key) {
+  wxColour colour = theme.magenta;
+  for (const auto &entry : GetTabOutlineColours()) {
+    if (key == entry.key) {
+      colour = theme.*(entry.member);
+      break;
+    }
+  }
+  // Some theme colours have alpha; the outline is solid.
+  return wxColour(colour.Red(), colour.Green(), colour.Blue());
+}
+
 AppConfig::AppConfig() {
   themes["dark"] = wxTerminalTheme::MakeDarkTheme();
   themes["light"] = wxTerminalTheme::MakeLightTheme();
@@ -252,6 +292,8 @@ bool AppPersistence::Load(AppConfig &config) {
       } else if (key == "blockcursor") {
         config.SetBlockCursor(value == "1" || value == "true" ||
                               value == "yes" || value == "on");
+      } else if (key == "taboutline") {
+        config.SetTabOutlineColour(value);
       } else if (key == "shell") {
         config.SetShellExecutable(value);
       } else if (key == "lastshell") {
@@ -310,6 +352,7 @@ bool AppPersistence::Save(const AppConfig &config) {
       "showclosebutton=%s", config.GetShowCloseButton() ? "true" : "false"));
   file.AddLine(wxString::Format("blockcursor=%s",
                                 config.GetBlockCursor() ? "true" : "false"));
+  file.AddLine("taboutline=" + config.GetTabOutlineColour());
   file.AddLine("font=" + config.GetFont().GetNativeFontInfoDesc());
   file.AddLine(wxString::Format(
       "safedrawing=%s", config.IsSafeDrawingEnabled() ? "true" : "false"));

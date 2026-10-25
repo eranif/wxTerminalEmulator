@@ -14,22 +14,26 @@ namespace {
 
 // Space in DIPs.
 constexpr int kMargin = 4;
+// The space between the label and the buttons.
+constexpr int kButtonGap = 16;
 constexpr int kPaddingX = 12;
 // The right padding of a tab with buttons, so the close button sits near the
-// end. A pill's round end has a radius of half its height, and the circle of
-// the button still fits inside it.
+// end. The highlight of the button still fits inside the rounded corners.
 constexpr int kButtonPaddingX = 6;
-// The circle around the close button is this much wider than the button.
-constexpr int kCloseCircleGrow = 4;
+// The highlight around the close button is this much wider than the button.
+constexpr int kCloseHighlightGrow = 4;
+constexpr int kCloseHighlightRadius = 4;
 constexpr int kPaddingY = 6;
 // The space between the edge of the bar and the tab.
 constexpr int kTopGap = 4;
 // The radius of the corners of the current tab and of the highlight.
 constexpr int kTabRadius = 8;
 constexpr int kHoverRadius = 6;
-// Pills: the space around a pill, which is the gap between two pills.
+// Pills: the space around a pill, which is the gap between two pills, and the
+// radius of its corners.
 constexpr int kPillGapX = 3;
 constexpr int kPillGapY = 4;
+constexpr int kPillRadius = 2;
 
 // The colour @p t (0 to 1) of the way from @p a to @p b.
 wxColour Mix(const wxColour &a, const wxColour &b, double t) {
@@ -40,21 +44,22 @@ wxColour Mix(const wxColour &a, const wxColour &b, double t) {
                   mix(a.Blue(), b.Blue()));
 }
 
-// The close button: an X in the middle of @p rect, and with @p circle valid, a
-// filled circle around it. The X is drawn, not taken from the bitmap, so it is
-// in the centre of the circle. Both are anti-aliased (a small wxDC circle is
-// jagged on Windows); without a graphics context, @p fallback is drawn.
-// The circle is @p circleGrow pixels wider than @p rect; the X keeps its size.
-void DrawCloseButton(wxDC &dc, const wxRect &rect, const wxColour &circle,
-                     int circleGrow, const wxColour &cross,
+// The close button: an X in the middle of @p rect, and with @p highlight
+// valid, a filled rounded square around it. The X is drawn, not taken from the
+// bitmap, so it is in the centre of the square. Both are anti-aliased (small
+// wxDC curves are jagged on Windows); without a graphics context, @p fallback
+// is drawn. The square is @p grow pixels wider than @p rect, with corners of
+// @p radius; the X keeps its size.
+void DrawCloseButton(wxDC &dc, const wxRect &rect, const wxColour &highlight,
+                     int grow, int radius, const wxColour &cross,
                      const wxBitmap &fallback) {
   std::unique_ptr<wxGraphicsContext> gc{
       wxGraphicsContext::CreateFromUnknownDC(dc)};
   if (!gc) {
-    if (circle.IsOk()) {
-      dc.SetBrush(circle);
+    if (highlight.IsOk()) {
+      dc.SetBrush(highlight);
       dc.SetPen(*wxTRANSPARENT_PEN);
-      dc.DrawEllipse(rect.Inflate(circleGrow / 2, circleGrow / 2));
+      dc.DrawRoundedRectangle(rect.Inflate(grow / 2, grow / 2), radius);
     }
     dc.DrawBitmap(fallback, rect.GetPosition(), true);
     return;
@@ -63,12 +68,11 @@ void DrawCloseButton(wxDC &dc, const wxRect &rect, const wxColour &circle,
   const double diameter = std::min(rect.width, rect.height);
   const double cx = rect.x + rect.width / 2.0;
   const double cy = rect.y + rect.height / 2.0;
-  if (circle.IsOk()) {
-    const double circleDiameter = diameter + circleGrow;
-    gc->SetBrush(wxBrush(circle));
+  if (highlight.IsOk()) {
+    const double side = diameter + grow;
+    gc->SetBrush(wxBrush(highlight));
     gc->SetPen(*wxTRANSPARENT_PEN);
-    gc->DrawEllipse(cx - circleDiameter / 2, cy - circleDiameter / 2,
-                    circleDiameter, circleDiameter);
+    gc->DrawRoundedRectangle(cx - side / 2, cy - side / 2, side, side, radius);
   }
   // The X takes a little less than half of the button.
   const double half = diameter * 0.2;
@@ -90,6 +94,7 @@ GlyphTabArt::GlyphTabArt(const wxTerminalTheme &theme, Style style)
     m_bgBar = theme.bg;
     m_bgActive = Mix(theme.bg, theme.fg, 0.16);
     m_bgHover = Mix(theme.bg, theme.fg, 0.09);
+    m_outline = theme.magenta;
   } else {
     // The bar is darker than the terminal, like the bar of a browser.
     const double luminance = 0.299 * theme.bg.Red() + 0.587 * theme.bg.Green() +
@@ -139,9 +144,10 @@ int GlyphTabArt::DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
   if (m_style == Style::Pills) {
     shape.Deflate(wnd->FromDIP(kPillGapX), wnd->FromDIP(kPillGapY));
     if (page.active || page.hover) {
+      // The current pill has a thin outline in the accent colour.
       dc.SetBrush(page.active ? m_bgActive : m_bgHover);
-      dc.SetPen(*wxTRANSPARENT_PEN);
-      dc.DrawRoundedRectangle(shape, shape.height / 2.0);
+      dc.SetPen(page.active ? wxPen(m_outline, 1) : *wxTRANSPARENT_PEN);
+      dc.DrawRoundedRectangle(shape, wnd->FromDIP(kPillRadius));
     }
   } else {
     const int gap = wnd->FromDIP(kTopGap);
@@ -217,20 +223,21 @@ int GlyphTabArt::DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
       }
       if (button.id == wxAUI_BUTTON_CLOSE) {
         // The X is dimmed; while the mouse is over it, it is in the text
-        // colour, inside a circle.
+        // colour, inside a rounded square.
         const bool hot = button.curState == wxAUI_BUTTON_STATE_HOVER ||
                          button.curState == wxAUI_BUTTON_STATE_PRESSED;
         const wxColour &tabBg = page.active ? m_bgActive : m_bgHover;
         DrawCloseButton(dc, button.rect,
                         hot ? Mix(tabBg, m_fgActive, 0.25) : wxNullColour,
-                        wnd->FromDIP(kCloseCircleGrow),
+                        wnd->FromDIP(kCloseHighlightGrow),
+                        wnd->FromDIP(kCloseHighlightRadius),
                         hot ? m_fgActive : m_fgDimmed, bmp);
       } else {
         dc.DrawBitmap(bmp, button.rect.GetPosition(), true);
       }
       buttonX += buttonSize.x;
     }
-    xEnd -= wnd->FromDIP(kMargin);
+    xEnd -= wnd->FromDIP(kButtonGap);
   }
 
   // The text.
@@ -266,7 +273,7 @@ wxSize GlyphTabArt::GetPageTabSize(wxReadOnlyDC &dc, wxWindow *wnd,
       continue;
     }
     if (firstButton) {
-      size.x += wnd->FromDIP(kMargin);
+      size.x += wnd->FromDIP(kButtonGap);
       firstButton = false;
     }
     size.x += bb->GetBitmapFor(wnd).GetLogicalWidth();
