@@ -3,9 +3,11 @@
 #if wxCHECK_VERSION(3, 3, 0)
 
 #include <algorithm>
+#include <memory>
 #include <wx/control.h>
 #include <wx/dc.h>
 #include <wx/dcclient.h>
+#include <wx/graphics.h>
 #include <wx/window.h>
 
 namespace {
@@ -13,6 +15,10 @@ namespace {
 // Space in DIPs.
 constexpr int kMargin = 4;
 constexpr int kPaddingX = 12;
+// The right padding of a tab with buttons, so the close button sits near the
+// end. A pill's round end has a radius of half its height, and the circle of
+// the button still fits inside it.
+constexpr int kButtonPaddingX = 6;
 constexpr int kPaddingY = 6;
 // The space between the edge of the bar and the tab.
 constexpr int kTopGap = 4;
@@ -30,6 +36,41 @@ wxColour Mix(const wxColour &a, const wxColour &b, double t) {
   };
   return wxColour(mix(a.Red(), b.Red()), mix(a.Green(), b.Green()),
                   mix(a.Blue(), b.Blue()));
+}
+
+// The close button: an X in the middle of @p rect, and with @p circle valid, a
+// filled circle around it. The X is drawn, not taken from the bitmap, so it is
+// in the centre of the circle. Both are anti-aliased (a small wxDC circle is
+// jagged on Windows); without a graphics context, @p fallback is drawn.
+void DrawCloseButton(wxDC &dc, const wxRect &rect, const wxColour &circle,
+                     const wxColour &cross, const wxBitmap &fallback) {
+  std::unique_ptr<wxGraphicsContext> gc{
+      wxGraphicsContext::CreateFromUnknownDC(dc)};
+  if (!gc) {
+    if (circle.IsOk()) {
+      dc.SetBrush(circle);
+      dc.SetPen(*wxTRANSPARENT_PEN);
+      dc.DrawEllipse(rect);
+    }
+    dc.DrawBitmap(fallback, rect.GetPosition(), true);
+    return;
+  }
+
+  const double diameter = std::min(rect.width, rect.height);
+  const double cx = rect.x + rect.width / 2.0;
+  const double cy = rect.y + rect.height / 2.0;
+  if (circle.IsOk()) {
+    gc->SetBrush(wxBrush(circle));
+    gc->SetPen(*wxTRANSPARENT_PEN);
+    gc->DrawEllipse(cx - diameter / 2, cy - diameter / 2, diameter, diameter);
+  }
+  // The X takes a little less than half of the circle.
+  const double half = diameter * 0.2;
+  gc->SetPen(gc->CreatePen(wxGraphicsPenInfo(cross)
+                               .Width(std::max(1.0, diameter / 10))
+                               .Cap(wxCAP_ROUND)));
+  gc->StrokeLine(cx - half, cy - half, cx + half, cy + half);
+  gc->StrokeLine(cx - half, cy + half, cx + half, cy - half);
 }
 
 } // namespace
@@ -144,7 +185,8 @@ int GlyphTabArt::DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
   }
 
   const bool showButtons = page.active || page.hover;
-  int xEnd = shape.x + shape.width - wnd->FromDIP(kPaddingX);
+  int xEnd = shape.x + shape.width -
+             wnd->FromDIP(buttonsWidth ? kButtonPaddingX : kPaddingX);
   if (buttonsWidth) {
     xEnd -= buttonsWidth;
     int buttonX = xEnd;
@@ -167,7 +209,17 @@ int GlyphTabArt::DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
         // Move a pressed button a little, so it looks pressed.
         button.rect.Offset(1, 1);
       }
-      dc.DrawBitmap(bmp, button.rect.GetPosition(), true);
+      if (button.id == wxAUI_BUTTON_CLOSE) {
+        // A circle around the X only while the mouse is over it.
+        const bool hot = button.curState == wxAUI_BUTTON_STATE_HOVER ||
+                         button.curState == wxAUI_BUTTON_STATE_PRESSED;
+        const wxColour &tabBg = page.active ? m_bgActive : m_bgHover;
+        DrawCloseButton(dc, button.rect,
+                        hot ? Mix(tabBg, m_fgActive, 0.25) : wxNullColour,
+                        m_fgActive, bmp);
+      } else {
+        dc.DrawBitmap(bmp, button.rect.GetPosition(), true);
+      }
       buttonX += buttonSize.x;
     }
     xEnd -= wnd->FromDIP(kMargin);
@@ -218,10 +270,11 @@ wxSize GlyphTabArt::GetPageTabSize(wxReadOnlyDC &dc, wxWindow *wnd,
     size.IncTo(bitmapSize);
   }
 
-  // Twice the converted value, not the conversion of twice the value: the
+  // Each padding converted on its own, not the conversion of the sum: the
   // drawing uses each padding once per side, and the two can differ by a pixel
-  // with a scale like 105% or 150%.
-  size.x += 2 * wnd->FromDIP(kPaddingX);
+  // with a scale like 105% or 150%. With buttons, the right one is smaller.
+  size.x += wnd->FromDIP(kPaddingX) +
+            wnd->FromDIP(firstButton ? kPaddingX : kButtonPaddingX);
   size.y += 2 * wnd->FromDIP(kPaddingY);
   if (m_style == Style::Pills) {
     size.x += 2 * wnd->FromDIP(kPillGapX);
