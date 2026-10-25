@@ -48,6 +48,11 @@ using EnvMap = std::unordered_map<wxString, wxString>;
 
 constexpr int kFeedTimerIntervalMs = 10;
 constexpr std::size_t kMaxFeedBytesPerTick = 256 * 1024;
+// When the feed buffer holds this much, the PTY reader waits for the GUI to
+// catch up. The full pipe then makes the program wait, so after Ctrl+C there
+// is little old output left to show. It is a few ticks of work, so the GUI
+// never runs out of data.
+constexpr std::size_t kMaxFeedBufferBytes = 1024 * 1024;
 
 /**
  * @brief Builds a map of the current process environment variables.
@@ -512,7 +517,14 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
 }
 
 wxTerminalViewCtrl::~wxTerminalViewCtrl() {
-  m_feedShuttingDown.store(true);
+  {
+    // Under the lock, so a PTY reader that is about to wait sees the flag.
+    std::unique_lock lk{m_feedMutex};
+    m_feedShuttingDown.store(true);
+  }
+  // Wake a PTY reader that waits for room in the feed buffer: Stop() below
+  // joins it.
+  m_feedSpace.notify_all();
 
   // Un-Bind events using modern API
   Unbind(wxEVT_PAINT, &wxTerminalViewCtrl::OnPaint, this);
@@ -1074,15 +1086,29 @@ void wxTerminalViewCtrl::StartProcess(
       m_backend &&
       m_backend->Start(m_shell_command.ToStdString(wxConvUTF8), m_environment,
                        m_workingDirectory, [this](const std::string &out) {
+                         bool wasEmpty = false;
                          {
                            std::unique_lock lk{m_feedMutex};
+                           // Back-pressure: wait while the GUI is behind.
+                           m_feedSpace.wait(lk, [this]() {
+                             return m_feedBuffer.size() < kMaxFeedBufferBytes ||
+                                    m_feedShuttingDown.load();
+                           });
+                           if (m_feedShuttingDown.load()) {
+                             return;
+                           }
+                           wasEmpty = m_feedBuffer.empty();
                            m_feedBuffer.append(out);
                          }
                          // The callback runs on the PTY I/O thread; wxTimer
                          // must only be touched from the GUI thread, so hop
-                         // over via CallAfter. The IsRunning() guard in
-                         // WakeFeedTimer makes repeated wakes idempotent.
-                         CallAfter(&wxTerminalViewCtrl::WakeFeedTimer);
+                         // over via CallAfter. Only an empty buffer needs a
+                         // wake: otherwise the timer runs, or the tick that
+                         // emptied it is still to return and the wake that
+                         // follows sees the timer stopped.
+                         if (wasEmpty) {
+                           CallAfter(&wxTerminalViewCtrl::WakeFeedTimer);
+                         }
                        });
 
   if (ok && m_core.Cols() > 0 && m_core.Rows() > 0) {
@@ -4098,12 +4124,18 @@ bool wxTerminalViewCtrl::ProcessFeedBuffer() {
     // Process at most kMaxFeedBytesPerTick per tick so a flood of output
     // (e.g. `yes` or `cat bigfile`) can't monopolize the GUI thread. The
     // remainder stays in m_feedBuffer and is drained on subsequent ticks.
-    const std::size_t take =
-        std::min(m_feedBuffer.size(), kMaxFeedBytesPerTick);
-    chunk.assign(m_feedBuffer, 0, take);
-    m_feedBuffer.erase(0, take);
+    // The buffer is at most kMaxFeedBufferBytes plus one read, so erase()
+    // moves little; when everything fits in one tick, take it without a copy.
+    if (m_feedBuffer.size() <= kMaxFeedBytesPerTick) {
+      chunk.swap(m_feedBuffer);
+    } else {
+      chunk.assign(m_feedBuffer, 0, kMaxFeedBytesPerTick);
+      m_feedBuffer.erase(0, kMaxFeedBytesPerTick);
+    }
     hasMore = !m_feedBuffer.empty();
   }
+  // There is room now: wake the PTY reader if it waits.
+  m_feedSpace.notify_one();
 
   Feed(chunk);
   return hasMore;

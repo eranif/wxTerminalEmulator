@@ -129,11 +129,21 @@ Factory: `PtyBackend::Create(wxEvtHandler*)` returns
 ### Threading Model and Output Buffering
 
 - A PTY backend runs an I/O thread that reads the output of the child process.
-- The `on_output` callback runs on that thread and calls
-  `wxTerminalViewCtrl::Feed()`, which only appends to `m_feedBuffer`.
+- The `on_output` callback runs on that thread and appends to `m_feedBuffer`.
+  When the buffer holds `kMaxFeedBufferBytes` or more, the callback **waits**
+  on `m_feedSpace` until the GUI drains it (back-pressure: the pipe fills and
+  the program waits). So:
+  - never call `on_output` on the GUI thread once output can arrive (the
+    Windows `Start()` error paths call it before that, with an empty buffer);
+  - never join the reader (`PtyBackend::Stop()`) before `m_feedShuttingDown`
+    is set under `m_feedMutex` and `m_feedSpace` is notified (see the
+    `wxTerminalViewCtrl` destructor), or the GUI thread deadlocks.
+- The callback wakes the timer (`CallAfter(WakeFeedTimer)`) only when it
+  appends to an empty buffer.
 - A `wxTimer` (`m_feedTimer`, started by `WakeFeedTimer()`) drains the buffer on
-  the GUI thread, at most `kMaxFeedBytesPerTick` bytes per tick, so heavy output
-  cannot block the UI. The timer stops itself when the buffer is empty.
+  the GUI thread with `ProcessFeedBuffer()`, at most `kMaxFeedBytesPerTick`
+  bytes per tick, and passes them to `wxTerminalViewCtrl::Feed()`, so heavy
+  output cannot block the UI. The timer stops itself when the buffer is empty.
 - When the user scrolls back, the viewport stays where it is while new output
   arrives.
 

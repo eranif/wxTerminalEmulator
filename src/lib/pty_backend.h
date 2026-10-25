@@ -13,6 +13,9 @@ namespace terminal {
 class PtyBackend {
 public:
   PtyBackend(wxEvtHandler *eventHandler) : m_eventHandler{eventHandler} {}
+  // Called on the I/O thread with the output of the child. It may block until
+  // the view has room for more (back-pressure), so do not call it while
+  // holding a lock that Stop() or the GUI thread needs.
   using OutputCallback = std::function<void(const std::string &)>;
   using EnvironmentList = std::vector<std::string>;
 

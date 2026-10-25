@@ -26,6 +26,7 @@
 #include <wx/dc.h>
 #include <wx/timer.h>
 
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -915,5 +916,8 @@ private:
   wxColour m_progressBgColour; // invalid: the background of the theme
   std::mutex m_feedMutex;
   std::string m_feedBuffer;
+  // Signalled when m_feedBuffer gets room (or on shutdown): the PTY reader
+  // waits on it while the buffer is full.
+  std::condition_variable m_feedSpace;
   std::atomic_bool m_feedShuttingDown{false};
 };
