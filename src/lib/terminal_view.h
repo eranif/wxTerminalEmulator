@@ -886,8 +886,11 @@ private:
 
   void OnResizeEndTimer(wxTimerEvent &evt);
   void OnFeedTimer(wxTimerEvent &event);
-  // Drains up to kMaxFeedBytesPerTick from m_feedBuffer into the terminal core.
-  // Returns true if the buffer still holds data (the timer must re-arm).
+  // Drains m_feedBuffer while the GUI is idle; the timer is the fallback.
+  void OnFeedIdle(wxIdleEvent &event);
+  // Drains m_feedBuffer into the terminal core for at most kFeedTimeBudget.
+  // Returns true if the buffer still holds data (the caller must schedule
+  // another drain).
   bool ProcessFeedBuffer();
   // Wakes the feed timer if it is idle. Must be called on the GUI thread.
   void WakeFeedTimer();
@@ -916,6 +919,9 @@ private:
   wxColour m_progressBgColour; // invalid: the background of the theme
   std::mutex m_feedMutex;
   std::string m_feedBuffer;
+  // Bytes at the start of m_feedBuffer that were already taken. The buffer is
+  // compacted only now and then, so taking a chunk does not move the rest.
+  std::size_t m_feedReadPos{0};
   // Signalled when m_feedBuffer gets room (or on shutdown): the PTY reader
   // waits on it while the buffer is full.
   std::condition_variable m_feedSpace;

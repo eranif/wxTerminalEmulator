@@ -47,11 +47,15 @@ namespace {
 using EnvMap = std::unordered_map<wxString, wxString>;
 
 constexpr int kFeedTimerIntervalMs = 10;
-constexpr std::size_t kMaxFeedBytesPerTick = 256 * 1024;
+// ProcessFeedBuffer() parses chunks of this size until the buffer is empty or
+// the time budget is used, then returns so the view can paint and handle
+// input (about 60 frames a second while output floods in).
+constexpr std::size_t kFeedChunkBytes = 64 * 1024;
+constexpr std::chrono::milliseconds kFeedTimeBudget{8};
 // When the feed buffer holds this much, the PTY reader waits for the GUI to
 // catch up. The full pipe then makes the program wait, so after Ctrl+C there
-// is little old output left to show. It is a few ticks of work, so the GUI
-// never runs out of data.
+// is little old output left to show. It is more than one time budget of
+// work, so the GUI never runs out of data.
 constexpr std::size_t kMaxFeedBufferBytes = 1024 * 1024;
 
 /**
@@ -384,6 +388,7 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   m_feedTimer.SetOwner(this);
   Bind(wxEVT_TIMER, &wxTerminalViewCtrl::OnFeedTimer, this,
        m_feedTimer.GetId());
+  Bind(wxEVT_IDLE, &wxTerminalViewCtrl::OnFeedIdle, this);
 
   Bind(wxEVT_SHOW, &wxTerminalViewCtrl::OnShow, this);
   m_progressTimer.SetOwner(this);
@@ -563,6 +568,7 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   }
   Unbind(wxEVT_TIMER, &wxTerminalViewCtrl::OnFeedTimer, this,
          m_feedTimer.GetId());
+  Unbind(wxEVT_IDLE, &wxTerminalViewCtrl::OnFeedIdle, this);
   DestroyProgressBar();
   Unbind(wxEVT_SHOW, &wxTerminalViewCtrl::OnShow, this);
   Unbind(wxEVT_TIMER, &wxTerminalViewCtrl::OnProgressTimer, this,
@@ -575,6 +581,7 @@ wxTerminalViewCtrl::~wxTerminalViewCtrl() {
   {
     std::unique_lock lk{m_feedMutex};
     m_feedBuffer.clear();
+    m_feedReadPos = 0;
   }
 
 #if USE_TIMER_REFRESH
@@ -1091,13 +1098,14 @@ void wxTerminalViewCtrl::StartProcess(
                            std::unique_lock lk{m_feedMutex};
                            // Back-pressure: wait while the GUI is behind.
                            m_feedSpace.wait(lk, [this]() {
-                             return m_feedBuffer.size() < kMaxFeedBufferBytes ||
+                             return m_feedBuffer.size() - m_feedReadPos <
+                                        kMaxFeedBufferBytes ||
                                     m_feedShuttingDown.load();
                            });
                            if (m_feedShuttingDown.load()) {
                              return;
                            }
-                           wasEmpty = m_feedBuffer.empty();
+                           wasEmpty = m_feedBuffer.size() == m_feedReadPos;
                            m_feedBuffer.append(out);
                          }
                          // The callback runs on the PTY I/O thread; wxTimer
@@ -4114,31 +4122,69 @@ void wxTerminalViewCtrl::OnScroll(wxScrollWinEvent &evt) {
 }
 
 bool wxTerminalViewCtrl::ProcessFeedBuffer() {
+  // Work for at most kFeedTimeBudget so a flood of output (e.g. `yes` or
+  // `cat bigfile`) can't monopolize the GUI thread. The remainder stays in
+  // m_feedBuffer and is drained on the next idle event or timer tick.
+  const auto deadline = std::chrono::steady_clock::now() + kFeedTimeBudget;
   std::string chunk;
   bool hasMore = false;
-  {
-    std::unique_lock lk{m_feedMutex};
-    if (m_feedBuffer.empty()) {
-      return false;
+  do {
+    {
+      std::unique_lock lk{m_feedMutex};
+      const std::size_t pending = m_feedBuffer.size() - m_feedReadPos;
+      if (pending == 0) {
+        return false;
+      }
+      if (m_feedReadPos == 0 && pending <= kFeedChunkBytes) {
+        // Everything fits in one chunk: take it without a copy.
+        chunk.clear();
+        chunk.swap(m_feedBuffer);
+      } else {
+        // Copy one chunk and move the read position past it. Erasing the
+        // chunk would move the rest of the buffer (up to about 1 MB) for every
+        // chunk, while the PTY reader waits for this lock. Compact only when
+        // the buffer is empty or the read position passes half of it, so the
+        // moves stay small.
+        const std::size_t n = std::min(pending, kFeedChunkBytes);
+        chunk.assign(m_feedBuffer, m_feedReadPos, n);
+        m_feedReadPos += n;
+        if (m_feedReadPos == m_feedBuffer.size()) {
+          m_feedBuffer.clear();
+          m_feedReadPos = 0;
+        } else if (m_feedReadPos >= m_feedBuffer.size() / 2) {
+          m_feedBuffer.erase(0, m_feedReadPos);
+          m_feedReadPos = 0;
+        }
+      }
+      hasMore = m_feedBuffer.size() > m_feedReadPos;
     }
-    // Process at most kMaxFeedBytesPerTick per tick so a flood of output
-    // (e.g. `yes` or `cat bigfile`) can't monopolize the GUI thread. The
-    // remainder stays in m_feedBuffer and is drained on subsequent ticks.
-    // The buffer is at most kMaxFeedBufferBytes plus one read, so erase()
-    // moves little; when everything fits in one tick, take it without a copy.
-    if (m_feedBuffer.size() <= kMaxFeedBytesPerTick) {
-      chunk.swap(m_feedBuffer);
-    } else {
-      chunk.assign(m_feedBuffer, 0, kMaxFeedBytesPerTick);
-      m_feedBuffer.erase(0, kMaxFeedBytesPerTick);
-    }
-    hasMore = !m_feedBuffer.empty();
-  }
-  // There is room now: wake the PTY reader if it waits.
-  m_feedSpace.notify_one();
+    // There is room now: wake the PTY reader if it waits.
+    m_feedSpace.notify_one();
 
-  Feed(chunk);
+    Feed(chunk);
+  } while (hasMore && std::chrono::steady_clock::now() < deadline);
   return hasMore;
+}
+
+void wxTerminalViewCtrl::OnFeedIdle(wxIdleEvent &event) {
+  event.Skip();
+  if (m_feedShuttingDown.load()) {
+    return;
+  }
+  // Drain the buffer as soon as the GUI is idle, not only on the timer: a
+  // timer tick waits at least 10 ms (more on Windows), and during a flood that
+  // wait came on top of the work. Idle events come only when no paint or
+  // input is waiting, so the view still paints and reacts. While data remains,
+  // ask for another idle event.
+  if (ProcessFeedBuffer()) {
+    event.RequestMore();
+    // Push the timer out, so it fires only when no idle event comes within
+    // the interval (e.g. a modal resize loop on MSW). Otherwise a tick
+    // between two idle events adds a second time budget before the paint.
+    // Do not stop it: when idle events stop, nothing else would drain the
+    // buffer, because the PTY reader wakes the timer only on an empty one.
+    m_feedTimer.StartOnce(kFeedTimerIntervalMs);
+  }
 }
 
 void wxTerminalViewCtrl::WakeFeedTimer() {

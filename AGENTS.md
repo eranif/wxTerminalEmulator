@@ -140,10 +140,13 @@ Factory: `PtyBackend::Create(wxEvtHandler*)` returns
     `wxTerminalViewCtrl` destructor), or the GUI thread deadlocks.
 - The callback wakes the timer (`CallAfter(WakeFeedTimer)`) only when it
   appends to an empty buffer.
-- A `wxTimer` (`m_feedTimer`, started by `WakeFeedTimer()`) drains the buffer on
-  the GUI thread with `ProcessFeedBuffer()`, at most `kMaxFeedBytesPerTick`
-  bytes per tick, and passes them to `wxTerminalViewCtrl::Feed()`, so heavy
-  output cannot block the UI. The timer stops itself when the buffer is empty.
+- `ProcessFeedBuffer()` drains the buffer on the GUI thread in chunks of
+  `kFeedChunkBytes`, for at most `kFeedTimeBudget` per call, and passes them to
+  `wxTerminalViewCtrl::Feed()`, so heavy output cannot block the UI. It is
+  called from `wxEVT_IDLE` (`OnFeedIdle()`, which asks for more idle events
+  while data remains) and from a `wxTimer` (`m_feedTimer`, started by
+  `WakeFeedTimer()`). The timer is the fallback when no idle events come; it
+  stops itself when the buffer is empty.
 - When the user scrolls back, the viewport stays where it is while new output
   arrives.
 
