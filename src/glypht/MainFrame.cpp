@@ -706,7 +706,10 @@ void MyFrame::ApplyThemeToTab(wxTerminalViewCtrl *view) {
   }
   auto theme = m_config.GetActiveTheme();
   theme.isBlockCursor = m_config.GetBlockCursor();
-  theme.font = m_config.GetFont();
+  // Without a saved font, keep the default font of the theme.
+  if (m_config.GetFont().IsOk()) {
+    theme.font = m_config.GetFont();
+  }
   view->SetTheme(theme);
 }
 
