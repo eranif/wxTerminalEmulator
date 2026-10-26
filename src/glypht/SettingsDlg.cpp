@@ -29,9 +29,11 @@ SettingsDlg::SettingsDlg(wxWindow *parent, const AppConfig &config,
   m_checkBoxBlockCursor->SetValue(m_config.GetBlockCursor());
   m_filePickerShellExe->SetPath(m_config.GetShellExecutable());
   m_textCtrlShellArgs->SetValue(m_config.GetShellArgs());
-  if (m_config.GetFont().IsOk()) {
-    m_fontPickerFont->SetSelectedFont(m_config.GetFont());
-  }
+  // Without a saved font, show the default font of the theme, which the tabs
+  // use.
+  m_fontPickerFont->SetSelectedFont(m_config.GetFont().IsOk()
+                                        ? m_config.GetFont()
+                                        : m_theme.font);
 
   // An unknown key in config.ini shows the default, magenta.
   int outline = wxNOT_FOUND;
