@@ -30,6 +30,7 @@ All you need is **wxWidgets** and **CMake** — no third-party libraries are req
   - **Windows**: MinGW with Windows 10+ (for `ConPTY` support)
   - **macOS**: macOS 10.10+ with CoreText and OpenGL support
   - **Linux**: libutil for PTY support and the GTK 3 and OpenGL development packages (`build.sh` builds wxWidgets with OpenGL). The OpenGL renderer is off by default; to turn it on (`USE_OPENGL=1`) you also need GLEW (see [OpenGL on Linux](#opengl-on-linux))
+  - **FreeBSD**: the same as Linux (GTK 3, OpenGL, and GLEW for `USE_OPENGL=1`), plus bash, GNU make and pkg-config: `pkg install bash cmake git gmake pkgconf gtk3 glew`
 
 ### Rendering
 
@@ -105,7 +106,7 @@ wxWidgets panel that provides the visual interface:
 #### PTY Backend (`pty_backend.h`)
 Abstract interface for platform-specific pseudo-terminal implementations:
 - **Windows**: `WindowsPtyBackend` - Uses Windows ConPTY API for modern pseudo-console support
-- **POSIX**: `PosixPtyBackend` - Uses `forkpty` for Linux and macOS
+- **POSIX**: `PosixPtyBackend` - Uses `forkpty` for Linux, FreeBSD and macOS
 
 Each backend provides:
 - Process launching with specified command (or default shell)
@@ -175,17 +176,19 @@ GPU-accelerated rendering path (all platforms; enabled by default on Windows and
 
 #### Using `build.sh`
 
-The script builds everything on all platforms (macOS, Linux and Windows with
-MSYS2): it first downloads and builds wxWidgets (v3.3.4 by default, with OpenGL
+The script builds everything on all platforms (macOS, Linux, FreeBSD and
+Windows with MSYS2): it first downloads and builds wxWidgets (v3.3.4 by default, with OpenGL
 support) and then builds `glypht`. Everything goes into `.build-release/`. On
 Linux, `configure` is run with `--with-opengl`, so the OpenGL development
 packages must be installed (for example `libgl-dev`); the build stops with an
-error if they are missing.
+error if they are missing. FreeBSD is built like Linux, with `gmake` (GNU make)
+in place of `make`; the package is a `glypht-<version>-freebsd-<arch>.tar.gz`
+tarball.
 
 ```bash
 ./build.sh              # build wxWidgets (first run only) and glypht
 ./build.sh --cmake      # force the CMake configure step
-./build.sh --opengl     # Linux only: use the OpenGL renderer (the same as USE_OPENGL=1)
+./build.sh --opengl     # Linux and FreeBSD only: use the OpenGL renderer (the same as USE_OPENGL=1)
 ./build.sh clean        # make clean
 ./build.sh package      # build, then create the package for this OS
 ./build.sh distclean    # remove .build-release, including wxWidgets

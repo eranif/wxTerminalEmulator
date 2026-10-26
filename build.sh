@@ -1,4 +1,5 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
+set -e
 
 ROOT_DIR=$(cd "$(dirname "$0")" && pwd)
 BUILD_DIR=${ROOT_DIR}/.build-release
@@ -15,14 +16,24 @@ GLYPHT_VERSION=${GLYPHT_VERSION:-}
 WX_VERSION=${WX_VERSION:-v3.3.4}
 
 # Set USE_OPENGL=0 or USE_OPENGL=1 to override the CMake default (ON on
-# macOS and Windows, OFF on Linux).
+# macOS and Windows, OFF on Linux and FreeBSD).
 USE_OPENGL=${USE_OPENGL:-}
+
+# GNU make: the Makefiles of wxWidgets need it. On FreeBSD it is "gmake", and
+# "make" is BSD make.
+if [[ "${OS_NAME}" == "FreeBSD" ]]; then
+  MAKE_CMD=gmake
+else
+  MAKE_CMD=make
+fi
 
 . "${ROOT_DIR}/scripts/functions.rc"
 
 function jobs() {
   if [[ "${OS_NAME}" == "Darwin" ]]; then
     sysctl -n hw.physicalcpu
+  elif [[ "${OS_NAME}" == "FreeBSD" ]]; then
+    sysctl -n hw.ncpu
   else
     nproc
   fi
@@ -39,7 +50,7 @@ function check_prerequistes() {
     compiler="clang++"
   fi
 
-  for tool in ${compiler} cmake git make; do
+  for tool in ${compiler} cmake git ${MAKE_CMD}; do
     if command -v "${tool}" >/dev/null 2>&1; then
       INFO "Found ${tool}: $(command -v ${tool})"
     else
@@ -85,10 +96,18 @@ function apply_wx_patches_Linux() {
   done
 }
 
+# Also used on FreeBSD.
 function build_wx_widgets_Linux() {
   if [ -x "${WX_INSTALL_DIR}/bin/wx-config" ]; then
     INFO "wxWidgets already built at ${WX_INSTALL_DIR}; skipping"
     return 0
+  fi
+
+  local configure_args=()
+  if [[ "${OS_NAME}" == "FreeBSD" ]]; then
+    # The packages (GTK 3, libpng, ...) are in /usr/local, which the compiler
+    # does not search.
+    configure_args+=(CPPFLAGS=-I/usr/local/include LDFLAGS=-L/usr/local/lib)
   fi
 
   fetch_wx_widgets
@@ -96,8 +115,8 @@ function build_wx_widgets_Linux() {
   INFO "Building wxWidgets"
   ../configure --disable-debug_flag --with-gtk=3 --enable-stl \
     --prefix="${WX_INSTALL_DIR}" --disable-shared --enable-monolithic \
-    --with-opengl
-  make -j"$(jobs)" install
+    --with-opengl "${configure_args[@]}"
+  ${MAKE_CMD} -j"$(jobs)" install
   cd "${ROOT_DIR}"
 }
 
@@ -168,7 +187,7 @@ function build_glypht() {
   else
     INFO "wxTerminalEmulator already configured; skipping cmake"
   fi
-  make -j"$(jobs)"
+  ${MAKE_CMD} -j"$(jobs)"
   INFO "wxTerminalEmulator built successfully"
   cd "${ROOT_DIR}"
 }
@@ -183,6 +202,7 @@ function wx_config_path() {
   echo "${wx_config}"
 }
 
+# Also used on FreeBSD.
 function build_Linux() {
   if [ -z "${WX_CONFIG}" ]; then
     build_wx_widgets_Linux
@@ -272,9 +292,12 @@ function is_debian_like() {
   [[ " ${id} ${id_like} " == *" debian "* ]]
 }
 
+# Also used on FreeBSD, where only the tarball is made.
 function package_Linux() {
   local version=${GLYPHT_VERSION:-1.0.0}
-  local tarball="${BUILD_DIR}/glypht-${version}-linux-$(uname -m).tar.gz"
+  local os
+  os=$(echo "${OS_NAME}" | tr '[:upper:]' '[:lower:]')
+  local tarball="${BUILD_DIR}/glypht-${version}-${os}-$(uname -m).tar.gz"
   INFO "Creating ${tarball}"
   rm -f "${tarball}"
   tar -czf "${tarball}" -C "${BUILD_DIR}" glypht glypht.svg themes fonts
@@ -302,7 +325,7 @@ function package() {
     package_MSW
   elif [[ "${OS_NAME}" == "Darwin" ]]; then
     package_macOS
-  elif [[ "${OS_NAME}" == "Linux" ]]; then
+  elif [[ "${OS_NAME}" == "Linux" || "${OS_NAME}" == "FreeBSD" ]]; then
     package_Linux
   fi
 }
@@ -313,7 +336,7 @@ function clean() {
     return 0
   fi
   INFO "Cleaning build artifacts"
-  make -C "${BUILD_DIR}" clean
+  ${MAKE_CMD} -C "${BUILD_DIR}" clean
   INFO "Clean complete"
 }
 
@@ -328,7 +351,7 @@ function usage() {
   echo ""
   echo "Options:"
   echo "  --cmake     Force the cmake configure stage"
-  echo "  --opengl    Use the OpenGL renderer (Linux only; the same as USE_OPENGL=1)"
+  echo "  --opengl    Use the OpenGL renderer (Linux and FreeBSD only; the same as USE_OPENGL=1)"
   echo ""
   echo "Targets:"
   echo "  (none)      Build GlyphT (default)"
@@ -337,14 +360,15 @@ function usage() {
   echo "                macOS:   glypht-<version>-macos-<arch>.zip"
   echo "                Linux:   glypht-<version>-linux-<arch>.tar.gz"
   echo "                         and glypht_<version>_<arch>.deb (needs dpkg-dev)"
-  echo "  clean       Remove build artifacts (make clean)"
+  echo "                FreeBSD: glypht-<version>-freebsd-<arch>.tar.gz"
+  echo "  clean       Remove build artifacts (${MAKE_CMD} clean)"
   echo "  distclean   Remove the entire build directory, including wxWidgets"
   echo "  -h, --help  Show this help message"
   echo ""
   echo "Environment:"
-  echo "  USE_OPENGL=0|1              Choose the renderer (default: ON on macOS and Windows, OFF on Linux)"
+  echo "  USE_OPENGL=0|1              Choose the renderer (default: ON on macOS and Windows, OFF on Linux and FreeBSD)"
   echo "  WX_VERSION=<tag>            wxWidgets tag to build (default: ${WX_VERSION})"
-  echo "  WX_CONFIG=<path>            Use this wx-config and skip building wxWidgets (macOS, Linux)"
+  echo "  WX_CONFIG=<path>            Use this wx-config and skip building wxWidgets (macOS, Linux, FreeBSD)"
   echo "  MACOS_DEPLOYMENT_TARGET=<v> macOS deployment target (default: ${MACOS_DEPLOYMENT_TARGET})"
   echo "  GLYPHT_VERSION=<x.y.z>      Version used in the package name (default: 1.0.0)"
 }
@@ -358,6 +382,9 @@ function build() {
     build_macOS
   elif [[ "${OS_NAME}" == "Linux" ]]; then
     INFO "On Linux"
+    build_Linux
+  elif [[ "${OS_NAME}" == "FreeBSD" ]]; then
+    INFO "On FreeBSD"
     build_Linux
   else
     ERROR "Unsupported operating system: ${OS_NAME}"
@@ -373,8 +400,8 @@ while [ $# -gt 0 ]; do
     shift
     ;;
   --opengl)
-    if [[ "${OS_NAME}" != "Linux" ]]; then
-      ERROR "--opengl is only for Linux: OpenGL is the default on macOS and Windows"
+    if [[ "${OS_NAME}" != "Linux" && "${OS_NAME}" != "FreeBSD" ]]; then
+      ERROR "--opengl is only for Linux and FreeBSD: OpenGL is the default on macOS and Windows"
       exit 1
     fi
     USE_OPENGL=1

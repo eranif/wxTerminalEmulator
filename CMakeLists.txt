@@ -222,7 +222,7 @@ if(BUILD_GLYPHT)
     target_link_libraries(glypht PRIVATE ${wxWidgets_LIBRARIES}
                                          ${_WIN_EXTRA_LIBS})
   elseif(NOT APPLE)
-    # Linux needs libutil for forkpty
+    # Linux and FreeBSD need libutil for forkpty
     target_link_libraries(glypht PRIVATE util ${wxWidgets_LIBRARIES})
     # Copy SVG asset next to binary (Linux)
     message(STATUS "Copying glypht.svg asset file to binary directory...")

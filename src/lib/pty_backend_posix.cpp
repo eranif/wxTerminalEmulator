@@ -22,8 +22,15 @@
 
 #if defined(__APPLE__)
 #include <util.h>
+#elif defined(__FreeBSD__)
+#include <libutil.h>
+#include <termios.h>
 #else
 #include <pty.h>
+#endif
+
+#if defined(__FreeBSD__)
+extern char **environ;
 #endif
 
 namespace terminal {
@@ -146,6 +153,11 @@ bool PosixPtyBackend::Start(const std::string &command,
     if (hasEnv) {
 #if defined(__APPLE__)
       execve(shell_argv[0], shell_argv.data(), envp.data());
+#elif defined(__FreeBSD__)
+      // Not every FreeBSD release has execvpe(): execvp() searches PATH with
+      // the environment in environ.
+      environ = envp.data();
+      execvp(shell_argv[0], shell_argv.data());
 #else
       execvpe(shell_argv[0], shell_argv.data(), envp.data());
 #endif
