@@ -337,10 +337,9 @@ void MyFrame::ShowTabMenu(int tabIdx) {
     menu.Append(setId, footer ? _("Set Footer...") : _("Set Header..."));
     menu.Append(removeId, footer ? _("Remove Footer") : _("Remove Header"));
     menu.Enable(setId, clickedTerminal != nullptr);
-    menu.Enable(removeId,
-                clickedTerminal != nullptr &&
-                    (footer ? clickedTerminal->HasFooter()
-                            : clickedTerminal->HasHeader()));
+    menu.Enable(removeId, clickedTerminal != nullptr &&
+                              (footer ? clickedTerminal->HasFooter()
+                                      : clickedTerminal->HasHeader()));
     menu.Bind(
         wxEVT_MENU,
         [this, tabIdx, footer](wxCommandEvent &) {
@@ -443,6 +442,7 @@ void MyFrame::BuildMenuBar() {
   auto *fileMenu = new wxMenu();
   fileMenu->Append(wxID_NEW, _("New Terminal\tCtrl-T"));
   fileMenu->Append(wxID_CLOSE, _("Close Terminal"));
+  fileMenu->AppendSeparator();
   fileMenu->Append(wxID_PREFERENCES);
   fileMenu->AppendSeparator();
   fileMenu->Append(ID_Exit, "Exit");
@@ -450,7 +450,6 @@ void MyFrame::BuildMenuBar() {
 
   auto *optionsMenu = new wxMenu();
   optionsMenu->Append(ID_CenterLine, "Center Line...");
-  optionsMenu->AppendCheckItem(ID_SafeDrawing, "Safe Drawing");
   optionsMenu->Append(ID_SetSelection, "Set Selection...");
   optionsMenu->Append(ID_PrintLine, "Print Line...");
   optionsMenu->Append(ID_SendInput, "Send Input...");
@@ -488,7 +487,6 @@ void MyFrame::BuildMenuBar() {
   Bind(wxEVT_MENU, &MyFrame::OnPreviousTab, this, wxID_BACKWARD);
   Bind(wxEVT_MENU, &MyFrame::OnExit, this, ID_Exit);
   Bind(wxEVT_MENU, &MyFrame::OnCenterLine, this, ID_CenterLine);
-  Bind(wxEVT_MENU, &MyFrame::OnSafeDrawing, this, ID_SafeDrawing);
   Bind(wxEVT_MENU, &MyFrame::OnSetSelection, this, ID_SetSelection);
   Bind(wxEVT_MENU, &MyFrame::OnPrintLine, this, ID_PrintLine);
   Bind(wxEVT_MENU, &MyFrame::OnSendInput, this, ID_SendInput);
@@ -630,8 +628,6 @@ void MyFrame::ApplySettings() {
   }
   m_notebook->SetWindowStyleFlag(style);
   m_notebook->Refresh();
-
-  UpdateSafeDrawingMenuCheck();
 }
 
 void MyFrame::ApplyThemeToAllTabs(const wxTerminalTheme &theme,
@@ -680,7 +676,6 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   m_config.SetSafeDrawingEnabled(m_config.IsSafeDrawingEnabled() ||
                                  wxTerminalViewCtrl::IsOpenGLEnabled());
   terminal->EnableSafeDrawing(m_config.IsSafeDrawingEnabled());
-  UpdateSafeDrawingMenuCheck();
   terminal->RegisterKeyEventFilter([this](const wxKeyEvent &key) {
     if (key.GetKeyCode() != WXK_TAB || !key.RawControlDown() || key.AltDown()) {
       return false;
@@ -703,20 +698,6 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
                  &MyFrame::OnAppSelectionChanged, this);
   terminal->EnsureStarted();
   return terminal;
-}
-
-void MyFrame::UpdateSafeDrawingMenuCheck() {
-  if (auto *menuBar = GetMenuBar()) {
-    auto *optionsMenu = menuBar->GetMenu(1);
-    if (optionsMenu && optionsMenu->FindItem(ID_SafeDrawing)) {
-#if USE_OPENGL
-      optionsMenu->Enable(ID_SafeDrawing, false);
-      optionsMenu->Check(ID_SafeDrawing, true);
-#else
-      optionsMenu->Check(ID_SafeDrawing, m_config.IsSafeDrawingEnabled());
-#endif
-    }
-  }
 }
 
 void MyFrame::ApplyThemeToTab(wxTerminalViewCtrl *view) {
@@ -811,12 +792,6 @@ void MyFrame::OnCenterLine(wxCommandEvent &event) {
     return;
   }
   activeView->CenterLine(static_cast<std::size_t>(lineNumber - 1));
-}
-
-void MyFrame::OnSafeDrawing(wxCommandEvent &event) {
-  m_config.SetSafeDrawingEnabled(event.IsChecked());
-  ApplySettings();
-  PersistSettings();
 }
 
 void MyFrame::OnSetSelection(wxCommandEvent &event) {
@@ -1155,11 +1130,11 @@ void MyFrame::ApplyNativeAppTheme() {
 void MyFrame::OnSettings(wxCommandEvent &event) {
   wxUnusedVar(event);
   // Preview the theme in all tabs while the dialog is open.
-  SettingsDlg dlg{this, m_config,
-                  [this](const wxTerminalTheme &theme,
-                         const wxString &outlineColour) {
-                    ApplyThemeToAllTabs(theme, outlineColour);
-                  }};
+  SettingsDlg dlg{
+      this, m_config,
+      [this](const wxTerminalTheme &theme, const wxString &outlineColour) {
+        ApplyThemeToAllTabs(theme, outlineColour);
+      }};
   const bool accepted = dlg.ShowModal() == wxID_OK;
 
   // The user already sees the previewed theme, so keep it however the dialog
@@ -1174,6 +1149,9 @@ void MyFrame::OnSettings(wxCommandEvent &event) {
     m_config.SetFont(dlg.GetFont());
     m_config.SetShellExecutable(dlg.GetShellExecutable());
     m_config.SetShellArgs(dlg.GetShellArgs());
+    if (!wxTerminalViewCtrl::IsOpenGLEnabled()) {
+      m_config.SetSafeDrawingEnabled(!dlg.GetOptimisedPaint());
+    }
     // Used by the tabs that are opened from now on. Open tabs keep their shell.
     m_defaultShellCommand = ResolveDefaultShell();
   }

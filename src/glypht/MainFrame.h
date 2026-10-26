@@ -173,7 +173,6 @@ class MyFrame : public wxFrame {
 public:
   enum {
     ID_CenterLine = wxID_HIGHEST + 1,
-    ID_SafeDrawing,
     ID_SetSelection,
     ID_PrintLine,
     ID_SendInput,
@@ -217,7 +216,6 @@ public:
   static MyTerminal *TerminalOf(wxWindow *page);
   MyTerminal *CreateTerminalPage(const TerminalPageConfig &config,
                                  bool selectIt);
-  void UpdateSafeDrawingMenuCheck();
   void ApplyThemeToTab(wxTerminalViewCtrl *view);
   // Set the theme of every terminal tab, and of the tabs themselves with the
   // tab outline colour @p outlineColour (a key of AppConfig).
@@ -229,7 +227,6 @@ public:
   std::optional<wxString> PromptForShell();
   void OnExit(wxCommandEvent &event);
   void OnCenterLine(wxCommandEvent &event);
-  void OnSafeDrawing(wxCommandEvent &event);
   void OnSetSelection(wxCommandEvent &event);
   void OnPrintLine(wxCommandEvent &event);
   void OnSendInput(wxCommandEvent &event);

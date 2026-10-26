@@ -36,6 +36,11 @@ public:
     return args.Trim(true).Trim(false);
   }
 
+  // True when "Optimise Drawings" is checked: the inverse of safe drawing.
+  bool GetOptimisedPaint() const {
+    return m_checkBoxOptimisedPaint->IsChecked();
+  }
+
 protected:
   void OnBackgroundColour(wxColourPickerEvent &event) override;
   void OnBlack(wxColourPickerEvent &event) override;

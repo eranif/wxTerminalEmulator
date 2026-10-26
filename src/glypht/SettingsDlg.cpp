@@ -1,4 +1,5 @@
 #include "SettingsDlg.hpp"
+#include "terminal_view.h"
 
 SettingsDlg::SettingsDlg(wxWindow *parent, const AppConfig &config,
                          PreviewCallback onPreview)
@@ -10,6 +11,19 @@ SettingsDlg::SettingsDlg(wxWindow *parent, const AppConfig &config,
   }
   m_choiceNames->SetStringSelection(m_config.GetThemeName());
 
+  // "Optimise Drawings" is the inverse of the stored "safedrawing" setting.
+  // The OpenGL renderer always draws cell by cell and ignores the setting, so
+  // the checkbox is off and disabled there.
+  m_checkBoxOptimisedPaint->SetToolTip(
+      _("Draw runs of cells with the same style together. Faster, but less "
+        "accurate for wide glyphs (CJK, emoji). Not used by the OpenGL "
+        "renderer."));
+  if (wxTerminalViewCtrl::IsOpenGLEnabled()) {
+    m_checkBoxOptimisedPaint->SetValue(false);
+    m_checkBoxOptimisedPaint->Disable();
+  } else {
+    m_checkBoxOptimisedPaint->SetValue(!m_config.IsSafeDrawingEnabled());
+  }
   m_textCtrlTitle->SetValue(m_config.GetNewTabTitle());
   m_checkBoxCloseButton->SetValue(m_config.GetShowCloseButton());
   m_checkBoxBlockCursor->SetValue(m_config.GetBlockCursor());
