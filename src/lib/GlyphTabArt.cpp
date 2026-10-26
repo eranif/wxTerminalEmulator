@@ -217,18 +217,27 @@ int GlyphTabArt::DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
       }
       button.rect = wxRect(buttonX, shape.y + (shape.height - buttonSize.y) / 2,
                            buttonSize.x, buttonSize.y);
-      if (button.curState == wxAUI_BUTTON_STATE_PRESSED) {
+      // curState is a bit mask: a pressed button is HOVER | PRESSED.
+      const bool pressed = (button.curState & wxAUI_BUTTON_STATE_PRESSED) != 0;
+      if (pressed) {
         // Move a pressed button a little, so it looks pressed.
         button.rect.Offset(1, 1);
       }
       if (button.id == wxAUI_BUTTON_CLOSE) {
         // The X is dimmed; while the mouse is over it, it is in the text
-        // colour, inside a rounded square.
-        const bool hot = button.curState == wxAUI_BUTTON_STATE_HOVER ||
-                         button.curState == wxAUI_BUTTON_STATE_PRESSED;
+        // colour, inside a rounded square. The square is darker while the
+        // button is pressed.
+        const bool hot =
+            pressed || (button.curState & wxAUI_BUTTON_STATE_HOVER) != 0;
         const wxColour &tabBg = page.active ? m_bgActive : m_bgHover;
-        DrawCloseButton(dc, button.rect,
-                        hot ? Mix(tabBg, m_fgActive, 0.25) : wxNullColour,
+        wxColour highlight;
+        if (hot) {
+          highlight = Mix(tabBg, m_fgActive, 0.25);
+          if (pressed) {
+            highlight = Mix(highlight, *wxBLACK, 0.25);
+          }
+        }
+        DrawCloseButton(dc, button.rect, hot ? highlight : wxNullColour,
                         wnd->FromDIP(kCloseHighlightGrow),
                         wnd->FromDIP(kCloseHighlightRadius),
                         hot ? m_fgActive : m_fgDimmed, bmp);
