@@ -30,7 +30,7 @@ All you need is **wxWidgets** and **CMake** — no third-party libraries are req
   - **Windows**: MinGW with Windows 10+ (for `ConPTY` support)
   - **macOS**: macOS 10.10+ with CoreText and OpenGL support
   - **Linux**: libutil for PTY support and the GTK 3 and OpenGL development packages (`build.sh` builds wxWidgets with OpenGL). The OpenGL renderer is off by default; to turn it on (`USE_OPENGL=1`) you also need GLEW (see [OpenGL on Linux](#opengl-on-linux))
-  - **FreeBSD**: the same as Linux (GTK 3, OpenGL, and GLEW for `USE_OPENGL=1`), plus bash, GNU make and pkg-config: `pkg install bash cmake git gmake pkgconf gtk3 glew`
+  - **FreeBSD**: the same as Linux (GTK 3, OpenGL, and GLEW for `USE_OPENGL=1`), plus bash, GNU make and pkg-config: `pkg install bash cmake git gmake pkgconf gtk3 glew` (see [Building on FreeBSD](#building-on-freebsd))
 
 ### Rendering
 
@@ -217,15 +217,56 @@ and the OpenGL view does not work in a Wayland session. If that happened,
 install the missing packages and run `./build.sh distclean` before you build
 again.
 
+#### Building on FreeBSD
+
+`build.sh` builds FreeBSD like Linux (wxWidgets with GTK 3), so it needs these
+packages. Install them as root (with `su`, `sudo` or `doas`):
+
+```sh
+pkg install bash cmake git gmake pkgconf gtk3 glew
+```
+
+| Package   | Why                                                               |
+|-----------|-------------------------------------------------------------------|
+| `bash`    | `build.sh` is a bash script (FreeBSD installs it in `/usr/local/bin`) |
+| `cmake`   | Configures GlyphT                                                 |
+| `git`     | Downloads wxWidgets                                               |
+| `gmake`   | GNU make: the Makefiles of wxWidgets do not work with BSD make    |
+| `pkgconf` | Provides `pkg-config`, which the wxWidgets `configure` uses to find GTK 3 |
+| `gtk3`    | The GTK 3 toolkit; FreeBSD packages include the headers, there is no `-dev` package |
+| `glew`    | Only for the OpenGL renderer (`USE_OPENGL=1` or `--opengl`)       |
+
+The compiler is `clang++`, which is part of the base system.
+
+`gtk3` does not install `pkg-config`. Without `pkgconf`, `configure` stops with
+"The pkg-config script could not be found or is too old". To check that
+everything is in place before you build:
+
+```sh
+pkg info bash cmake git gmake pkgconf gtk3 glew   # "No package(s) matching" = not installed
+pkg-config --modversion gtk+-3.0                  # prints the GTK 3 version
+```
+
+Then build as usual:
+
+```sh
+./build.sh              # or: ./build.sh --opengl
+```
+
+`build.sh` passes `/usr/local/include` and `/usr/local/lib` to the wxWidgets
+`configure`, because the packages are installed there. To run GlyphT you also
+need a graphical session (for example `pkg install xorg xfce`); it is not needed
+to build.
+
 Result:
 - macOS: `.build-release/glypht.app`
-- Linux: `.build-release/glypht`
+- Linux and FreeBSD: `.build-release/glypht`
 - Windows: `.build-release/install/bin/glypht.exe`
 
 Environment variables:
 - `WX_VERSION`: wxWidgets tag to build (default: `v3.3.4`)
-- `WX_CONFIG`: path to an existing `wx-config`; skips the wxWidgets build (macOS, Linux)
-- `USE_OPENGL=0|1`: choose the renderer (default: ON on macOS and Windows, OFF on Linux). On Linux the option `--opengl` is the same as `USE_OPENGL=1`
+- `WX_CONFIG`: path to an existing `wx-config`; skips the wxWidgets build (macOS, Linux, FreeBSD)
+- `USE_OPENGL=0|1`: choose the renderer (default: ON on macOS and Windows, OFF on Linux and FreeBSD). On Linux and FreeBSD the option `--opengl` is the same as `USE_OPENGL=1`
 - `MACOS_DEPLOYMENT_TARGET`: macOS deployment target (default: `13.0`)
 - `GLYPHT_VERSION`: version used in the package name (default: `1.0.0`)
 
@@ -503,6 +544,12 @@ This is an open-source project. Contributions are welcome via pull requests.
 - Link with `-lutil` flag
 - Default font: System teletype font
 - To enable OpenGL: use `-DUSE_OPENGL=ON`. It needs GLEW and wxWidgets built with the `gl` component. On WSL use `GDK_BACKEND=x11 DISPLAY=:0`, because WSLg Wayland EGL fails
+
+### FreeBSD
+- Built like Linux, with GTK 3; see [Building on FreeBSD](#building-on-freebsd) for the packages
+- `forkpty` comes from `libutil.h` (linked with `-lutil`)
+- **OpenGL rendering is disabled by default**, as on Linux. Enable it with `--opengl` (needs `glew`)
+- Default font: the bundled `Iosevka`, size 16
 
 ## Performance
 

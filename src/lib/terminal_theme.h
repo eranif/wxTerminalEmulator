@@ -6,6 +6,8 @@
 
 #ifdef __WXMAC__
 constexpr int kDefaultFontSize = 20;
+#elif defined(__FreeBSD__)
+constexpr int kDefaultFontSize = 16;
 #else
 constexpr int kDefaultFontSize = 14;
 #endif
@@ -69,6 +71,12 @@ struct wxTerminalTheme {
   }
 
   static inline wxFont MakeDefaultFont() {
+#if defined(__FreeBSD__)
+    // The bundled Iosevka (not "Iosevka Term", which Pango does not know).
+    return wxFont(wxFontInfo(kDefaultFontSize)
+                      .Family(wxFONTFAMILY_TELETYPE)
+                      .FaceName("Iosevka"));
+#else
     if (!BundledFontFace().empty()) {
       return wxFont(wxFontInfo(kDefaultFontSize)
                         .Family(wxFONTFAMILY_TELETYPE)
@@ -83,6 +91,7 @@ struct wxTerminalTheme {
 #else
     return wxFont(wxFontInfo(kDefaultFontSize).Family(wxFONTFAMILY_TELETYPE));
 #endif
+#endif // __FreeBSD__
   }
 
   // Helper: get ANSI colour by index (0-7) + bright flag
