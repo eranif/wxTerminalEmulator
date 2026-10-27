@@ -64,6 +64,20 @@ wxString ToStatusBarText(const wxString &text, size_t maxLen) {
   }
   return result;
 }
+
+// Opens a file or a directory that the user clicked in the terminal. A
+// relative path is resolved against the working directory of the terminal, wd
+// (the directory of GlyphT when wd is empty), and a leading "~" is expanded.
+bool TryOpenPath(const wxString &text, const wxString &wd) {
+  wxFileName path{text};
+  path.Normalize(wxPATH_NORM_TILDE | wxPATH_NORM_ABSOLUTE | wxPATH_NORM_DOTS,
+                 wd);
+  if (!path.Exists()) {
+    return false;
+  }
+  ::wxLaunchDefaultApplication(path.GetFullPath());
+  return true;
+}
 } // namespace
 
 MyFrame::MyFrame(const wxCmdLineParser &parser,
@@ -971,6 +985,10 @@ void MyFrame::OnTerminalLink(wxTerminalEvent &event) {
   while (text.EndsWith(".") || text.EndsWith(":") || text.EndsWith(","))
     text.RemoveLast();
 
+  // Nothing is left of a click on "." or "..", for example.
+  if (text.empty())
+    return;
+
   wxString clickedText = text;
   wxString clickedTextLowerCase = text.Lower();
 
@@ -985,22 +1003,7 @@ void MyFrame::OnTerminalLink(wxTerminalEvent &event) {
         dynamic_cast<wxTerminalViewCtrl *>(event.GetEventObject());
     if (ctrl == nullptr)
       return;
-
-    wxFileName fn{clickedText};
-    if (fn.FileExists()) {
-      ::wxLaunchDefaultApplication(fn.GetFullPath());
-      return;
-    }
-
-    if (fn.IsRelative()) {
-      // In case the file is relative, try to use the control's working
-      // directory.
-      fn.MakeAbsolute(ctrl->GetCurrentDir());
-      if (fn.FileExists()) {
-        ::wxLaunchDefaultApplication(fn.GetFullPath());
-        return;
-      }
-    }
+    TryOpenPath(clickedText, ctrl->GetCurrentDir());
   }
 }
 
