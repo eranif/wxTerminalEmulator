@@ -966,13 +966,41 @@ void MyFrame::OnTerminated(wxTerminalEvent &event) {
 
 void MyFrame::OnTerminalLink(wxTerminalEvent &event) {
   event.Skip();
-  wxString clickedText = event.GetClickedText();
-  if (clickedText.StartsWith("http://") || clickedText.StartsWith("https://")) {
+  wxString text = event.GetClickedText();
+
+  while (text.EndsWith(".") || text.EndsWith(":") || text.EndsWith(","))
+    text.RemoveLast();
+
+  wxString clickedText = text;
+  wxString clickedTextLowerCase = text.Lower();
+
+  if (clickedTextLowerCase.StartsWith("http://") ||
+      clickedTextLowerCase.StartsWith("https://")) {
     ::wxLaunchDefaultBrowser(clickedText);
   } else if (clickedText.StartsWith("file://")) {
     ::wxLaunchDefaultApplication(clickedText);
-  } else if (wxFileName::FileExists(clickedText)) {
-    ::wxLaunchDefaultApplication(clickedText);
+  } else {
+    // Try the file's path:
+    wxTerminalViewCtrl *ctrl =
+        dynamic_cast<wxTerminalViewCtrl *>(event.GetEventObject());
+    if (ctrl == nullptr)
+      return;
+
+    wxFileName fn{clickedText};
+    if (fn.FileExists()) {
+      ::wxLaunchDefaultApplication(fn.GetFullPath());
+      return;
+    }
+
+    if (fn.IsRelative()) {
+      // In case the file is relative, try to use the control's working
+      // directory.
+      fn.MakeAbsolute(ctrl->GetCurrentDir());
+      if (fn.FileExists()) {
+        ::wxLaunchDefaultApplication(fn.GetFullPath());
+        return;
+      }
+    }
   }
 }
 
