@@ -1,5 +1,6 @@
 #include "SettingsDlg.hpp"
 #include "terminal_view.h"
+#include <algorithm>
 
 SettingsDlg::SettingsDlg(wxWindow *parent, const AppConfig &config,
                          PreviewCallback onPreview)
@@ -31,9 +32,8 @@ SettingsDlg::SettingsDlg(wxWindow *parent, const AppConfig &config,
   m_textCtrlShellArgs->SetValue(m_config.GetShellArgs());
   // Without a saved font, show the default font of the theme, which the tabs
   // use.
-  m_fontPickerFont->SetSelectedFont(m_config.GetFont().IsOk()
-                                        ? m_config.GetFont()
-                                        : m_theme.font);
+  m_fontPickerFont->SetSelectedFont(
+      m_config.GetFont().IsOk() ? m_config.GetFont() : m_theme.font);
 
   // An unknown key in config.ini shows the default, magenta.
   int outline = wxNOT_FOUND;
@@ -49,6 +49,22 @@ SettingsDlg::SettingsDlg(wxWindow *parent, const AppConfig &config,
   }
   m_choiceOutlineColour->SetSelection(outline != wxNOT_FOUND ? outline
                                                              : magenta);
+
+  m_choiceTabPosition->Append(_("Top"));
+  m_tabPositions.push_back(TabPosition::Top);
+  m_choiceTabPosition->Append(_("Bottom"));
+  m_tabPositions.push_back(TabPosition::Bottom);
+#if wxCHECK_VERSION(3, 3, 0)
+  m_choiceTabPosition->Append(_("Left"));
+  m_tabPositions.push_back(TabPosition::Left);
+  m_choiceTabPosition->Append(_("Right"));
+  m_tabPositions.push_back(TabPosition::Right);
+#endif
+  const auto it = std::find(m_tabPositions.begin(), m_tabPositions.end(),
+                            m_config.GetTabPosition());
+  m_choiceTabPosition->SetSelection(
+      it != m_tabPositions.end() ? static_cast<int>(it - m_tabPositions.begin())
+                                 : 0);
 
   m_colourPickerBg->SetColour(m_theme.bg);
   m_colourPickerFg->SetColour(m_theme.fg);
@@ -71,6 +87,15 @@ wxString SettingsDlg::GetTabOutlineColour() const {
     return m_config.GetTabOutlineColour();
   }
   return colours[index].key;
+}
+
+TabPosition SettingsDlg::GetTabPosition() const {
+  const int index =
+      m_choiceTabPosition ? m_choiceTabPosition->GetSelection() : wxNOT_FOUND;
+  if (index < 0 || static_cast<size_t>(index) >= m_tabPositions.size()) {
+    return m_config.GetTabPosition();
+  }
+  return m_tabPositions[index];
 }
 
 void SettingsDlg::OnBackgroundColour(wxColourPickerEvent &event) {

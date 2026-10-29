@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GlyphBook.h"
 #include "TabMRU.h"
 #include "TabSwitcherDlg.h"
 #include "app_persistence.h"
@@ -32,6 +33,23 @@
 #include <wx/tokenzr.h>
 
 using EnvironmentList = terminal::PtyBackend::EnvironmentList;
+
+// The tabbed book of the window. With wxWidgets 3.3 it can have tabs on any
+// side; before that it is a wxAuiNotebook (tabs at the top or at the bottom).
+#if wxCHECK_VERSION(3, 3, 0)
+using TabBook = GlyphBook;
+#else
+using TabBook = wxAuiNotebook;
+#endif
+
+// The parent for the pages of @p book.
+inline wxWindow *PagesParentOf(TabBook *book) {
+#if wxCHECK_VERSION(3, 3, 0)
+  return book->GetPagesParent();
+#else
+  return book;
+#endif
+}
 
 #ifndef WXTERMINAL_SVG_SOURCE_PATH
 #define WXTERMINAL_SVG_SOURCE_PATH ""
@@ -81,7 +99,7 @@ class MyTerminal : public wxTerminalViewCtrl {
 public:
   // @p parent is the panel of the tab (see TerminalPanel), which is the page of
   // @p notebook.
-  MyTerminal(wxWindow *parent, wxAuiNotebook *notebook,
+  MyTerminal(wxWindow *parent, TabBook *notebook,
              const wxString &shellCommand,
              const std::optional<EnvironmentList> &environment,
              std::optional<wxString> workingDirectory = std::nullopt,
@@ -138,7 +156,7 @@ public:
   const wxString &GetCustomLabel() const { return m_customLabel; }
 
 private:
-  wxAuiNotebook *m_notebook{nullptr};
+  TabBook *m_notebook{nullptr};
   wxString m_customLabel;
 };
 
@@ -147,10 +165,10 @@ private:
 // is a wxBookCtrlBase, so the terminal can't use it as the parent for that).
 class TerminalPanel : public wxPanel {
 public:
-  TerminalPanel(wxAuiNotebook *notebook, const wxString &shellCommand,
+  TerminalPanel(TabBook *notebook, const wxString &shellCommand,
                 const std::optional<EnvironmentList> &environment,
                 std::optional<wxString> workingDirectory)
-      : wxPanel(notebook) {
+      : wxPanel(PagesParentOf(notebook)) {
     m_terminal = new MyTerminal(this, notebook, shellCommand, environment,
                                 workingDirectory);
     auto *sizer = new wxBoxSizer(wxVERTICAL);
@@ -262,7 +280,7 @@ public:
   void OnClose(wxCloseEvent &event);
 
 private:
-  wxAuiNotebook *m_notebook{nullptr};
+  TabBook *m_notebook{nullptr};
   // The tabs in most-recently-used order.
   TabMRU m_tabMru;
   TabSwitcherDlg *m_tabSwitcher{nullptr};

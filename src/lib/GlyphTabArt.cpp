@@ -24,7 +24,7 @@ constexpr int kButtonPaddingX = 6;
 constexpr int kCloseHighlightGrow = 4;
 constexpr int kCloseHighlightRadius = 4;
 constexpr int kPaddingY = 6;
-// The space between the edge of the bar and the tab.
+// Browser: the space between the outer edge of the bar and the tab.
 constexpr int kTopGap = 4;
 // The radius of the corners of the current tab and of the highlight.
 constexpr int kTabRadius = 8;
@@ -34,6 +34,19 @@ constexpr int kHoverRadius = 6;
 constexpr int kPillGapX = 3;
 constexpr int kPillGapY = 4;
 constexpr int kPillRadius = 2;
+// Pills in a vertical bar: the space between a pill and the sides of the bar,
+// and above and below a pill.
+constexpr int kVPillGapX = 6;
+constexpr int kVPillGapY = 2;
+
+// The corners of a rectangle that are rounded (see DrawRoundedRect()).
+enum Corner {
+  kTopLeft = 1,
+  kTopRight = 2,
+  kBottomRight = 4,
+  kBottomLeft = 8,
+  kAllCorners = kTopLeft | kTopRight | kBottomRight | kBottomLeft
+};
 
 // The colour @p t (0 to 1) of the way from @p a to @p b.
 wxColour Mix(const wxColour &a, const wxColour &b, double t) {
@@ -42,6 +55,87 @@ wxColour Mix(const wxColour &a, const wxColour &b, double t) {
   };
   return wxColour(mix(a.Red(), b.Red()), mix(a.Green(), b.Green()),
                   mix(a.Blue(), b.Blue()));
+}
+
+bool IsHorizontal(wxDirection inner) {
+  return inner == wxTOP || inner == wxBOTTOM;
+}
+
+// A rectangle with rounded @p corners (a mask of Corner) of @p radius.
+void AddRoundedRect(wxGraphicsPath &path, double x, double y, double w,
+                    double h, double radius, int corners) {
+  const double r = std::min({radius, w / 2, h / 2});
+  const auto rr = [&](int corner) { return (corners & corner) ? r : 0.0; };
+  path.MoveToPoint(x + rr(kTopLeft), y);
+  path.AddLineToPoint(x + w - rr(kTopRight), y);
+  if (corners & kTopRight) {
+    path.AddArcToPoint(x + w, y, x + w, y + r, r);
+  }
+  path.AddLineToPoint(x + w, y + h - rr(kBottomRight));
+  if (corners & kBottomRight) {
+    path.AddArcToPoint(x + w, y + h, x + w - r, y + h, r);
+  }
+  path.AddLineToPoint(x + rr(kBottomLeft), y + h);
+  if (corners & kBottomLeft) {
+    path.AddArcToPoint(x, y + h, x, y + h - r, r);
+  }
+  path.AddLineToPoint(x, y + rr(kTopLeft));
+  if (corners & kTopLeft) {
+    path.AddArcToPoint(x, y, x + r, y, r);
+  }
+  path.CloseSubpath();
+}
+
+// Fill @p rect with @p fill, with the @p corners (a mask of Corner) rounded
+// with @p radius. With @p outline valid, a line of @p outlineWidth pixels is
+// drawn inside the edge. The shape is anti-aliased (wxDC curves are jagged on
+// Windows); without a graphics context it is drawn with the wxDC.
+void DrawRoundedRect(wxDC &dc, const wxRect &rect, int radius, int corners,
+                     const wxColour &fill, const wxColour &outline = {},
+                     int outlineWidth = 1) {
+  std::unique_ptr<wxGraphicsContext> gc{
+      wxGraphicsContext::CreateFromUnknownDC(dc)};
+  if (!gc) {
+    dc.SetBrush(fill);
+    dc.SetPen(outline.IsOk() ? wxPen(outline, outlineWidth)
+                             : *wxTRANSPARENT_PEN);
+    // The corners that are not rounded are drawn outside of the clipping
+    // rectangle.
+    wxRect r = rect;
+    if (!(corners & (kTopLeft | kTopRight))) {
+      r.y -= radius;
+      r.height += radius;
+    }
+    if (!(corners & (kBottomLeft | kBottomRight))) {
+      r.height += radius;
+    }
+    if (!(corners & (kTopLeft | kBottomLeft))) {
+      r.x -= radius;
+      r.width += radius;
+    }
+    if (!(corners & (kTopRight | kBottomRight))) {
+      r.width += radius;
+    }
+    wxDCClipper clip(dc, rect);
+    dc.DrawRoundedRectangle(r, radius);
+    return;
+  }
+
+  gc->SetBrush(wxBrush(fill));
+  double inset = 0;
+  if (outline.IsOk()) {
+    gc->SetPen(wxPen(outline, outlineWidth));
+    // The line is centred on the path: keep it inside the rectangle, and
+    // sharp.
+    inset = outlineWidth / 2.0;
+  } else {
+    gc->SetPen(*wxTRANSPARENT_PEN);
+  }
+  wxGraphicsPath path = gc->CreatePath();
+  AddRoundedRect(path, rect.x + inset, rect.y + inset,
+                 rect.width - 2 * inset, rect.height - 2 * inset, radius,
+                 corners);
+  gc->DrawPath(path);
 }
 
 // The close button: an X in the middle of @p rect, and with @p highlight
@@ -136,46 +230,113 @@ int GlyphTabArt::DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
   const wxSize size = GetPageTabSize(dc, wnd, page, &xExtent);
   page.rect = wxRect(rect.GetPosition(), size);
 
-  // The part of the tab that is drawn is "shape". Browser: the tab is a little
-  // away from the edge of the bar, and the content is below (or above, with
-  // wxAUI_NB_BOTTOM) the gap. Pills: there is a gap around the pill.
-  const bool bottom = (m_flags & wxAUI_NB_BOTTOM) != 0;
-  wxRect shape = page.rect;
+  // The terminal is below the tabs, or above them with wxAUI_NB_BOTTOM.
+  const wxDirection inner = (m_flags & wxAUI_NB_BOTTOM) ? wxTOP : wxBOTTOM;
+  const wxRect shape = GetShapeRect(wnd, page.rect, inner);
+  DrawShape(dc, wnd, page, shape, inner);
+  DrawContent(dc, wnd, page, shape);
+  return xExtent;
+}
+
+void GlyphTabArt::DrawVerticalTab(wxDC &dc, wxWindow *wnd,
+                                  wxAuiNotebookPage &page, const wxRect &rect,
+                                  wxDirection inner) {
+  wxDCClipper clip(dc, rect);
+  page.rect = rect;
+  const wxRect shape = GetShapeRect(wnd, rect, inner);
+  DrawShape(dc, wnd, page, shape, inner);
+  DrawContent(dc, wnd, page, shape);
+}
+
+void GlyphTabArt::DrawVerticalBarEdge(wxDC &dc, wxWindow *wnd,
+                                      const wxRect &rect, wxDirection inner) {
+  if (m_style != Style::Pills) {
+    return;
+  }
+  const int width = std::max(1, wnd->FromDIP(1));
+  const int x = inner == wxRIGHT ? rect.GetRight() - width + 1 : rect.x;
+  dc.SetBrush(m_bgHover);
+  dc.SetPen(*wxTRANSPARENT_PEN);
+  dc.DrawRectangle(x, rect.y, width, rect.height);
+}
+
+wxRect GlyphTabArt::GetShapeRect(wxWindow *wnd, const wxRect &rect,
+                                 wxDirection inner) const {
+  wxRect shape = rect;
   if (m_style == Style::Pills) {
-    shape.Deflate(wnd->FromDIP(kPillGapX), wnd->FromDIP(kPillGapY));
-    if (page.active || page.hover) {
-      // The current pill has a thin outline in the accent colour.
-      dc.SetBrush(page.active ? m_bgActive : m_bgHover);
-      dc.SetPen(page.active ? wxPen(m_outline, 1) : *wxTRANSPARENT_PEN);
-      dc.DrawRoundedRectangle(shape, wnd->FromDIP(kPillRadius));
+    // There is a gap around the pill.
+    if (IsHorizontal(inner)) {
+      shape.Deflate(wnd->FromDIP(kPillGapX), wnd->FromDIP(kPillGapY));
+    } else {
+      shape.Deflate(wnd->FromDIP(kVPillGapX), wnd->FromDIP(kVPillGapY));
     }
-  } else {
-    const int gap = wnd->FromDIP(kTopGap);
-    shape.height -= gap;
-    if (!bottom) {
-      shape.y += gap;
-    }
-    if (page.active) {
-      // Rounded corners on the side of the bar. The other corners are made
-      // outside of the clipping rectangle, so the tab goes into the terminal.
-      const int radius = wnd->FromDIP(kTabRadius);
-      wxRect r = shape;
-      r.height += radius;
-      if (bottom) {
-        r.y -= radius;
-      }
-      dc.SetBrush(m_bgActive);
-      dc.SetPen(*wxTRANSPARENT_PEN);
-      dc.DrawRoundedRectangle(r, radius);
-    } else if (page.hover) {
-      wxRect r = shape;
-      r.Deflate(wnd->FromDIP(2), wnd->FromDIP(2));
-      dc.SetBrush(m_bgHover);
-      dc.SetPen(*wxTRANSPARENT_PEN);
-      dc.DrawRoundedRectangle(r, wnd->FromDIP(kHoverRadius));
-    }
+    return shape;
   }
 
+  // Browser: the tab is a little away from the outer edge of the bar, and
+  // touches the terminal on the inner edge.
+  const int gap = wnd->FromDIP(kTopGap);
+  switch (inner) {
+  case wxBOTTOM:
+    shape.y += gap;
+    shape.height -= gap;
+    break;
+  case wxTOP:
+    shape.height -= gap;
+    break;
+  case wxRIGHT:
+    shape.x += gap;
+    shape.width -= gap;
+    break;
+  default:
+    shape.width -= gap;
+    break;
+  }
+  return shape;
+}
+
+void GlyphTabArt::DrawShape(wxDC &dc, wxWindow *wnd,
+                            const wxAuiNotebookPage &page, const wxRect &shape,
+                            wxDirection inner) const {
+  if (m_style == Style::Pills) {
+    if (page.active || page.hover) {
+      // The current pill has a thin outline in the accent colour.
+      DrawRoundedRect(dc, shape, wnd->FromDIP(kPillRadius), kAllCorners,
+                      page.active ? m_bgActive : m_bgHover,
+                      page.active ? m_outline : wxColour{},
+                      std::max(1, wnd->FromDIP(1)));
+    }
+    return;
+  }
+
+  if (page.active) {
+    // Rounded corners on the outer side. The inner side touches the terminal,
+    // and has its colour, so the tab looks like a part of it.
+    int corners = kAllCorners;
+    switch (inner) {
+    case wxBOTTOM:
+      corners = kTopLeft | kTopRight;
+      break;
+    case wxTOP:
+      corners = kBottomLeft | kBottomRight;
+      break;
+    case wxRIGHT:
+      corners = kTopLeft | kBottomLeft;
+      break;
+    default:
+      corners = kTopRight | kBottomRight;
+      break;
+    }
+    DrawRoundedRect(dc, shape, wnd->FromDIP(kTabRadius), corners, m_bgActive);
+  } else if (page.hover) {
+    wxRect r = shape;
+    r.Deflate(wnd->FromDIP(2), wnd->FromDIP(2));
+    DrawRoundedRect(dc, r, wnd->FromDIP(kHoverRadius), kAllCorners, m_bgHover);
+  }
+}
+
+void GlyphTabArt::DrawContent(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
+                              const wxRect &shape) {
   // The icon, if any.
   int xStart = shape.x + wnd->FromDIP(kPaddingX);
   if (page.bitmap.IsOk()) {
@@ -186,68 +347,7 @@ int GlyphTabArt::DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
     xStart += bitmapSize.x + wnd->FromDIP(kMargin);
   }
 
-  // The buttons, at the right end. Their room is always kept, so the width of
-  // a tab does not change when the mouse moves over it, but they are drawn only
-  // on the current tab and on the tab under the mouse.
-  int buttonsWidth = 0;
-  for (const auto &button : page.buttons) {
-    if (const wxBitmapBundle *bb = GetButtonBitmapBundle(button)) {
-      buttonsWidth += bb->GetBitmapFor(wnd).GetLogicalWidth();
-    }
-  }
-
-  const bool showButtons = page.active || page.hover;
-  int xEnd = shape.x + shape.width -
-             wnd->FromDIP(buttonsWidth ? kButtonPaddingX : kPaddingX);
-  if (buttonsWidth) {
-    xEnd -= buttonsWidth;
-    int buttonX = xEnd;
-    for (auto &button : page.buttons) {
-      const wxBitmapBundle *bb = GetButtonBitmapBundle(button);
-      if (!bb) {
-        continue;
-      }
-      const wxBitmap bmp = bb->GetBitmapFor(wnd);
-      const wxSize buttonSize = bmp.GetLogicalSize();
-      if (!showButtons) {
-        // An empty rectangle cannot be clicked.
-        button.rect = wxRect();
-        buttonX += buttonSize.x;
-        continue;
-      }
-      button.rect = wxRect(buttonX, shape.y + (shape.height - buttonSize.y) / 2,
-                           buttonSize.x, buttonSize.y);
-      // curState is a bit mask: a pressed button is HOVER | PRESSED.
-      const bool pressed = (button.curState & wxAUI_BUTTON_STATE_PRESSED) != 0;
-      if (pressed) {
-        // Move a pressed button a little, so it looks pressed.
-        button.rect.Offset(1, 1);
-      }
-      if (button.id == wxAUI_BUTTON_CLOSE) {
-        // The X is dimmed; while the mouse is over it, it is in the text
-        // colour, inside a rounded square. The square is darker while the
-        // button is pressed.
-        const bool hot =
-            pressed || (button.curState & wxAUI_BUTTON_STATE_HOVER) != 0;
-        const wxColour &tabBg = page.active ? m_bgActive : m_bgHover;
-        wxColour highlight;
-        if (hot) {
-          highlight = Mix(tabBg, m_fgActive, 0.25);
-          if (pressed) {
-            highlight = Mix(highlight, *wxBLACK, 0.25);
-          }
-        }
-        DrawCloseButton(dc, button.rect, hot ? highlight : wxNullColour,
-                        wnd->FromDIP(kCloseHighlightGrow),
-                        wnd->FromDIP(kCloseHighlightRadius),
-                        hot ? m_fgActive : m_fgDimmed, bmp);
-      } else {
-        dc.DrawBitmap(bmp, button.rect.GetPosition(), true);
-      }
-      buttonX += buttonSize.x;
-    }
-    xEnd -= wnd->FromDIP(kButtonGap);
-  }
+  const int xEnd = DrawButtons(dc, wnd, page, shape);
 
   // The text.
   // The current tab uses the normal font too: AUI makes the selected font
@@ -263,29 +363,93 @@ int GlyphTabArt::DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
   if (dc.GetTextExtent(text).x > textRoom) {
     text = wxControl::Ellipsize(text, dc, wxELLIPSIZE_END, textRoom);
   }
-  const int textHeight = dc.GetTextExtent(text).y;
+  // The height of the font, not of the text, so labels with and without
+  // emoji are on the same line.
+  const int textHeight = dc.GetCharHeight();
   dc.DrawText(text, xStart, shape.y + (shape.height - textHeight) / 2);
-
-  return xExtent;
 }
 
-wxSize GlyphTabArt::GetPageTabSize(wxReadOnlyDC &dc, wxWindow *wnd,
-                                   const wxAuiNotebookPage &page,
-                                   int *xExtent) {
-  dc.SetFont(m_normalFont);
-  wxSize size = dc.GetTextExtent(page.caption);
-
-  bool firstButton = true;
+int GlyphTabArt::GetButtonsWidth(wxWindow *wnd,
+                                 const wxAuiNotebookPage &page) const {
+  int width = 0;
   for (const auto &button : page.buttons) {
+    if (const wxBitmapBundle *bb = GetButtonBitmapBundle(button)) {
+      width += bb->GetBitmapFor(wnd).GetLogicalWidth();
+    }
+  }
+  return width;
+}
+
+int GlyphTabArt::DrawButtons(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
+                             const wxRect &shape) {
+  // The buttons, at the right end. Their room is always kept, so the width of
+  // a tab does not change when the mouse moves over it, but they are drawn only
+  // on the current tab and on the tab under the mouse.
+  const int buttonsWidth = GetButtonsWidth(wnd, page);
+  int xEnd = shape.x + shape.width -
+             wnd->FromDIP(buttonsWidth ? kButtonPaddingX : kPaddingX);
+  if (!buttonsWidth) {
+    return xEnd;
+  }
+
+  const bool showButtons = page.active || page.hover;
+  xEnd -= buttonsWidth;
+  int buttonX = xEnd;
+  for (auto &button : page.buttons) {
     const wxBitmapBundle *bb = GetButtonBitmapBundle(button);
     if (!bb) {
       continue;
     }
-    if (firstButton) {
-      size.x += wnd->FromDIP(kButtonGap);
-      firstButton = false;
+    const wxBitmap bmp = bb->GetBitmapFor(wnd);
+    const wxSize buttonSize = bmp.GetLogicalSize();
+    if (!showButtons) {
+      // An empty rectangle cannot be clicked.
+      button.rect = wxRect();
+      buttonX += buttonSize.x;
+      continue;
     }
-    size.x += bb->GetBitmapFor(wnd).GetLogicalWidth();
+    button.rect = wxRect(buttonX, shape.y + (shape.height - buttonSize.y) / 2,
+                         buttonSize.x, buttonSize.y);
+    // curState is a bit mask: a pressed button is HOVER | PRESSED.
+    const bool pressed = (button.curState & wxAUI_BUTTON_STATE_PRESSED) != 0;
+    if (pressed) {
+      // Move a pressed button a little, so it looks pressed.
+      button.rect.Offset(1, 1);
+    }
+    if (button.id == wxAUI_BUTTON_CLOSE) {
+      // The X is dimmed; while the mouse is over it, it is in the text
+      // colour, inside a rounded square. The square is darker while the
+      // button is pressed.
+      const bool hot =
+          pressed || (button.curState & wxAUI_BUTTON_STATE_HOVER) != 0;
+      const wxColour &tabBg = page.active ? m_bgActive : m_bgHover;
+      wxColour highlight;
+      if (hot) {
+        highlight = Mix(tabBg, m_fgActive, 0.25);
+        if (pressed) {
+          highlight = Mix(highlight, *wxBLACK, 0.25);
+        }
+      }
+      DrawCloseButton(dc, button.rect, highlight,
+                      wnd->FromDIP(kCloseHighlightGrow),
+                      wnd->FromDIP(kCloseHighlightRadius),
+                      hot ? m_fgActive : m_fgDimmed, bmp);
+    } else {
+      dc.DrawBitmap(bmp, button.rect.GetPosition(), true);
+    }
+    buttonX += buttonSize.x;
+  }
+  return xEnd - wnd->FromDIP(kButtonGap);
+}
+
+wxSize GlyphTabArt::GetContentSize(wxReadOnlyDC &dc, wxWindow *wnd,
+                                   const wxAuiNotebookPage &page) const {
+  dc.SetFont(m_normalFont);
+  wxSize size = dc.GetTextExtent(page.caption);
+  size.y = std::max(size.y, dc.GetCharHeight());
+
+  if (const int buttonsWidth = GetButtonsWidth(wnd, page)) {
+    size.x += wnd->FromDIP(kButtonGap) + buttonsWidth;
   }
 
   if (page.bitmap.IsOk()) {
@@ -293,12 +457,20 @@ wxSize GlyphTabArt::GetPageTabSize(wxReadOnlyDC &dc, wxWindow *wnd,
     size.x += bitmapSize.x + wnd->FromDIP(kMargin);
     size.IncTo(bitmapSize);
   }
+  return size;
+}
+
+wxSize GlyphTabArt::GetPageTabSize(wxReadOnlyDC &dc, wxWindow *wnd,
+                                   const wxAuiNotebookPage &page,
+                                   int *xExtent) {
+  wxSize size = GetContentSize(dc, wnd, page);
 
   // Each padding converted on its own, not the conversion of the sum: the
   // drawing uses each padding once per side, and the two can differ by a pixel
   // with a scale like 105% or 150%. With buttons, the right one is smaller.
   size.x += wnd->FromDIP(kPaddingX) +
-            wnd->FromDIP(firstButton ? kPaddingX : kButtonPaddingX);
+            wnd->FromDIP(GetButtonsWidth(wnd, page) ? kButtonPaddingX
+                                                    : kPaddingX);
   size.y += 2 * wnd->FromDIP(kPaddingY);
   if (m_style == Style::Pills) {
     size.x += 2 * wnd->FromDIP(kPillGapX);
@@ -314,6 +486,28 @@ wxSize GlyphTabArt::GetPageTabSize(wxReadOnlyDC &dc, wxWindow *wnd,
     *xExtent = size.x;
   }
   return size;
+}
+
+int GlyphTabArt::GetVerticalTabHeight(wxReadOnlyDC &dc, wxWindow *wnd,
+                                      const wxAuiNotebookPage &page) {
+  int height = GetContentSize(dc, wnd, page).y + 2 * wnd->FromDIP(kPaddingY);
+  if (m_style == Style::Pills) {
+    height += 2 * wnd->FromDIP(kVPillGapY);
+  }
+  return height;
+}
+
+int GlyphTabArt::GetVerticalTabWidth(wxReadOnlyDC &dc, wxWindow *wnd,
+                                     const wxAuiNotebookPage &page) {
+  int width = GetContentSize(dc, wnd, page).x + wnd->FromDIP(kPaddingX) +
+              wnd->FromDIP(GetButtonsWidth(wnd, page) ? kButtonPaddingX
+                                                      : kPaddingX);
+  if (m_style == Style::Pills) {
+    width += 2 * wnd->FromDIP(kVPillGapX);
+  } else {
+    width += wnd->FromDIP(kTopGap);
+  }
+  return width;
 }
 
 int GlyphTabArt::GetBestTabCtrlSize(wxWindow *wnd,

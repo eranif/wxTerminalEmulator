@@ -80,6 +80,8 @@ wxTerminalEmulator/
 | **PtyBackend** | `src/lib/pty_backend.h` | Interface for platform PTY implementations |
 | **TerminalGLRenderer** | `src/lib/terminal_gl_renderer.h` | OpenGL renderer, only when `USE_OPENGL=1` |
 | **GlyphTabArt** | `src/lib/GlyphTabArt.h` | Pill or browser style tabs for a `wxAuiNotebook`, painted with a `wxTerminalTheme` (wxWidgets 3.3+ only) |
+| **GlyphBook** | `src/lib/GlyphBook.h` | `wxBookCtrlBase` with the API and events of `wxAuiNotebook` and tabs on any side (`wxAUI_NB_TOP/BOTTOM/LEFT/RIGHT`). Inside: a `wxAuiNotebook` for the pages and a `GlyphTabBar` for the left and right sides. The `wxEVT_AUINOTEBOOK_*` events of the inner notebook are sent again with the book as the source. In GlyphT it is `TabBook` in `MainFrame.h` (wxWidgets 3.3+ only; a `wxAuiNotebook` before that) |
+| **GlyphTabBar** | `src/lib/GlyphTabBar.h` | The vertical tab bar used by `GlyphBook`, drawn with `GlyphTabArt` (wxAUI has no vertical tabs) |
 | **Demo app** | `src/glypht/main.cpp` | Example usage with tabs, themes, menus |
 
 ## Repo-Specific Patterns

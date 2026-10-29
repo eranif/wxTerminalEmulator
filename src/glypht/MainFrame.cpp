@@ -1,5 +1,4 @@
 #include "MainFrame.h"
-#include "GlyphTabArt.h"
 #include "SettingsDlg.hpp"
 #include <algorithm>
 #include <random>
@@ -78,6 +77,26 @@ bool TryOpenPath(const wxString &text, const wxString &wd) {
   ::wxLaunchDefaultApplication(path.GetFullPath());
   return true;
 }
+
+// The window style flag of the book for the tab position of the settings. The
+// sides need wxWidgets 3.3 (GlyphBook); before that the tabs are at the top.
+long TabPositionFlag(TabPosition position) {
+  switch (position) {
+  case TabPosition::Bottom:
+    return wxAUI_NB_BOTTOM;
+#if wxCHECK_VERSION(3, 3, 0)
+  case TabPosition::Left:
+    return wxAUI_NB_LEFT;
+  case TabPosition::Right:
+    return wxAUI_NB_RIGHT;
+#endif
+  default:
+    return wxAUI_NB_TOP;
+  }
+}
+
+constexpr long kTabPositionFlags =
+    wxAUI_NB_TOP | wxAUI_NB_BOTTOM | wxAUI_NB_LEFT | wxAUI_NB_RIGHT;
 } // namespace
 
 MyFrame::MyFrame(const wxCmdLineParser &parser,
@@ -130,20 +149,23 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   SetStatusWidths(kStatusFieldCount, statusWidths);
   BuildMenuBar();
   long nbStyle = wxAUI_NB_DEFAULT_STYLE &
-                 ~(wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS);
+                 ~(wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS |
+                   kTabPositionFlags);
+  nbStyle |= TabPositionFlag(m_config.GetTabPosition());
   if (m_config.GetShowCloseButton()) {
     nbStyle |= wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS;
   }
 
-  m_notebook = new wxAuiNotebook(this, wxID_ANY, wxDefaultPosition,
-                                 wxDefaultSize, nbStyle);
+  m_notebook = new TabBook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+                           nbStyle);
 #if wxCHECK_VERSION(3, 3, 0)
-  {
-    auto *art = new GlyphTabArt(m_config.GetActiveTheme());
-    art->SetOutlineColour(AppConfig::GetTabOutlineColourOf(
-        m_config.GetActiveTheme(), m_config.GetTabOutlineColour()));
-    m_notebook->SetArtProvider(art);
-  }
+  m_notebook->SetTheme(m_config.GetActiveTheme(),
+                       AppConfig::GetTabOutlineColourOf(
+                           m_config.GetActiveTheme(),
+                           m_config.GetTabOutlineColour()));
+  m_notebook->SetTabBarWidth(m_config.GetTabBarWidth());
+  m_notebook->SetTabBarWidthChangedCallback(
+      [this](int width) { m_config.SetTabBarWidth(width); });
 #endif
   m_cliShellCommand = shellCommand;
   m_defaultShellCommand = ResolveDefaultShell();
@@ -333,7 +355,8 @@ bool MyFrame::RestoreLayout() {
 
 void MyFrame::ShowTabMenu(int tabIdx) {
   if (tabIdx == wxNOT_FOUND) {
-    tabIdx = m_notebook->HitTest(::wxGetMousePosition());
+    tabIdx =
+        m_notebook->HitTest(m_notebook->ScreenToClient(::wxGetMousePosition()));
   }
   auto *clickedTerminal =
       tabIdx == wxNOT_FOUND
@@ -343,6 +366,8 @@ void MyFrame::ShowTabMenu(int tabIdx) {
   wxMenu menu;
   menu.Append(XRCID("rename-tab"), _("Set Label..."));
   menu.Append(wxID_CLEAR, _("Reset Label..."));
+  menu.Enable(XRCID("rename-tab"), clickedTerminal != nullptr);
+  menu.Enable(wxID_CLEAR, clickedTerminal != nullptr);
   menu.AppendSeparator();
   // The header and the footer have the same two items.
   for (const bool footer : {false, true}) {
@@ -378,36 +403,23 @@ void MyFrame::ShowTabMenu(int tabIdx) {
   }
   menu.Bind(
       wxEVT_MENU,
-      [this](wxCommandEvent &) {
-        int tabIdx = m_notebook->HitTest(::wxGetMousePosition());
-        if (tabIdx == wxNOT_FOUND) {
+      [clickedTerminal](wxCommandEvent &) {
+        if (clickedTerminal == nullptr) {
           return;
         }
         wxString name = ::wxGetTextFromUser(_("New Tab Name:"));
         if (name.empty()) {
           return;
         }
-        auto *terminal =
-            TerminalOf(m_notebook->GetPage(static_cast<size_t>(tabIdx)));
-        if (terminal == nullptr) {
-          return;
-        }
-        terminal->SetTabLabel(name);
+        clickedTerminal->SetTabLabel(name);
       },
       XRCID("rename-tab"));
   menu.Bind(
       wxEVT_MENU,
-      [this](wxCommandEvent &) {
-        int tabIdx = m_notebook->HitTest(::wxGetMousePosition());
-        if (tabIdx == wxNOT_FOUND) {
-          return;
+      [clickedTerminal](wxCommandEvent &) {
+        if (clickedTerminal != nullptr) {
+          clickedTerminal->ResetTabLabel();
         }
-        auto *terminal =
-            TerminalOf(m_notebook->GetPage(static_cast<size_t>(tabIdx)));
-        if (terminal == nullptr) {
-          return;
-        }
-        terminal->ResetTabLabel();
       },
       wxID_CLEAR);
   m_notebook->PopupMenu(&menu);
@@ -634,9 +646,11 @@ void MyFrame::ApplySettings() {
     }
   }
 
-  // Tab close button
+  // Tab close button and tab position
   long style = m_notebook->GetWindowStyleFlag();
-  style &= ~(wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS);
+  style &= ~(wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS |
+             kTabPositionFlags);
+  style |= TabPositionFlag(m_config.GetTabPosition());
   if (m_config.GetShowCloseButton()) {
     style |= wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS;
   }
@@ -657,10 +671,8 @@ void MyFrame::ApplyThemeToAllTabs(const wxTerminalTheme &theme,
   }
 #if wxCHECK_VERSION(3, 3, 0)
   // The tabs use the colours of the theme.
-  auto *art = new GlyphTabArt(theme);
-  art->SetOutlineColour(AppConfig::GetTabOutlineColourOf(theme, outlineColour));
-  m_notebook->SetArtProvider(art);
-  m_notebook->Refresh();
+  m_notebook->SetTheme(theme,
+                       AppConfig::GetTabOutlineColourOf(theme, outlineColour));
 #else
   wxUnusedVar(outlineColour);
 #endif
@@ -1180,6 +1192,7 @@ void MyFrame::OnSettings(wxCommandEvent &event) {
     m_config.SetShowCloseButton(dlg.GetShowCloseButton());
     m_config.SetBlockCursor(dlg.GetBlockCursor());
     m_config.SetTabOutlineColour(dlg.GetTabOutlineColour());
+    m_config.SetTabPosition(dlg.GetTabPosition());
     m_config.SetFont(dlg.GetFont());
     m_config.SetShellExecutable(dlg.GetShellExecutable());
     m_config.SetShellArgs(dlg.GetShellArgs());

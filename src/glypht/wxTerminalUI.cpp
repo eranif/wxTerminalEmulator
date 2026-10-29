@@ -6,57 +6,49 @@
 
 #include "wxTerminalUI.hpp"
 
+
 #include <wx/filesys.h>
 #include <wx/fs_mem.h>
-#include <wx/xrc/xh_all.h>
 #include <wx/xrc/xmlres.h>
+#include <wx/xrc/xh_all.h>
 
 // Load the bitmaps from the XRC resources that are embedded in this file
-#if wxCHECK_VERSION(2, 8, 5) && wxABI_VERSION >= 20805
-#define XRC_ADD_FILE(name, data, size, mime)                                   \
-  wxMemoryFSHandler::AddFileWithMimeType(name, data, size, mime)
+#if wxCHECK_VERSION(2,8,5) && wxABI_VERSION >= 20805
+    #define XRC_ADD_FILE(name, data, size, mime) \
+        wxMemoryFSHandler::AddFileWithMimeType(name, data, size, mime)
 #else
-#define XRC_ADD_FILE(name, data, size, mime)                                   \
-  wxMemoryFSHandler::AddFile(name, data, size)
+    #define XRC_ADD_FILE(name, data, size, mime) \
+        wxMemoryFSHandler::AddFile(name, data, size)
 #endif
 
 static size_t xml_res_size_0 = 137;
 static unsigned char xml_res_file_0[] = {
-    '<', '?', 'x', 'm', 'l', ' ', 'v', 'e', 'r', 's', 'i', 'o', 'n', '=',
-    '"', '1', '.', '0', '"', ' ', 'e', 'n', 'c', 'o', 'd', 'i', 'n', 'g',
-    '=', '"', 'U', 'T', 'F', '-', '8', '"', '?', '>', 10,  '<', 'r', 'e',
-    's', 'o', 'u', 'r', 'c', 'e', ' ', 'x', 'm', 'l', 'n', 's', '=', '"',
-    'h', 't', 't', 'p', ':', '/', '/', 'w', 'w', 'w', '.', 'w', 'x', 'w',
-    'i', 'd', 'g', 'e', 't', 's', '.', 'o', 'r', 'g', '/', 'w', 'x', 'x',
-    'r', 'c', '"', '>', 10,  ' ', ' ', '<', '!', '-', '-', ' ', 'H', 'a',
-    'n', 'd', 'l', 'e', 'r', ' ', 'G', 'e', 'n', 'e', 'r', 'a', 't', 'i',
-    'o', 'n', ' ', 'i', 's', ' ', 'O', 'N', ' ', '-', '-', '>', 10,  '<',
-    '/', 'r', 'e', 's', 'o', 'u', 'r', 'c', 'e', '>', 10};
+'<','?','x','m','l',' ','v','e','r','s','i','o','n','=','"','1','.','0',
+'"',' ','e','n','c','o','d','i','n','g','=','"','U','T','F','-','8','"',
+'?','>',10,'<','r','e','s','o','u','r','c','e',' ','x','m','l','n','s',
+'=','"','h','t','t','p',':','/','/','w','w','w','.','w','x','w','i','d',
+'g','e','t','s','.','o','r','g','/','w','x','x','r','c','"','>',10,' ',
+' ','<','!','-','-',' ','H','a','n','d','l','e','r',' ','G','e','n','e',
+'r','a','t','i','o','n',' ','i','s',' ','O','N',' ','-','-','>',10,'<',
+'/','r','e','s','o','u','r','c','e','>',10};
 
-static void wxCrafterntzRqwInitBitmapResources() {
+static void wxCrafterntzRqwInitBitmapResources()
+{
 
-  // Check for memory FS. If not present, load the handler:
-  {
-    wxMemoryFSHandler::AddFile(wxT("XRC_resource/dummy_file"),
-                               wxT("dummy one"));
-    wxFileSystem fsys;
-    wxFSFile *f = fsys.OpenFile(wxT("memory:XRC_resource/dummy_file"));
-    wxMemoryFSHandler::RemoveFile(wxT("XRC_resource/dummy_file"));
-    if (f)
-      delete f;
-    else
-      wxFileSystem::AddHandler(new wxMemoryFSHandlerBase);
-  }
+    // Check for memory FS. If not present, load the handler:
+    {
+        wxMemoryFSHandler::AddFile(wxT("XRC_resource/dummy_file"), wxT("dummy one"));
+        wxFileSystem fsys;
+        wxFSFile *f = fsys.OpenFile(wxT("memory:XRC_resource/dummy_file"));
+        wxMemoryFSHandler::RemoveFile(wxT("XRC_resource/dummy_file"));
+        if (f) delete f;
+        else wxFileSystem::AddHandler(new wxMemoryFSHandlerBase);
+    }
 
-  XRC_ADD_FILE(wxT("XRC_resource/"
-                   "wxTerminalUI.cpp$_home_eran_devl_wxTerminalEmulator_src_"
-                   "glypht_wxTerminalUI_wxterminalemulator_bitmaps.xrc"),
-               xml_res_file_0, xml_res_size_0, wxT("text/xml"));
-  wxXmlResource::Get()->Load(
-      wxT("memory:XRC_resource/"
-          "wxTerminalUI.cpp$_home_eran_devl_wxTerminalEmulator_src_glypht_"
-          "wxTerminalUI_wxterminalemulator_bitmaps.xrc"));
+    XRC_ADD_FILE(wxT("XRC_resource/wxTerminalUI.cpp$C__msys64_home_eran_devl_wxTerminalEmulator_src_glypht_wxTerminalUI_wxterminalemulator_bitmaps.xrc"), xml_res_file_0, xml_res_size_0, wxT("text/xml"));
+    wxXmlResource::Get()->Load(wxT("memory:XRC_resource/wxTerminalUI.cpp$C__msys64_home_eran_devl_wxTerminalEmulator_src_glypht_wxTerminalUI_wxterminalemulator_bitmaps.xrc"));
 }
+
 
 #ifdef WXC_MAYBE_UNUSED
 #undef WXC_MAYBE_UNUSED
@@ -75,495 +67,348 @@ namespace {
 WXC_MAYBE_UNUSED
 wxBorder get_border_simple_theme_aware_bit() {
 #if wxVERSION_NUMBER >= 3300 && defined(__WXMSW__)
-  return wxSystemSettings::GetAppearance().IsDark() ? wxBORDER_SIMPLE
-                                                    : wxBORDER_DEFAULT;
+    return wxSystemSettings::GetAppearance().IsDark() ? wxBORDER_SIMPLE : wxBORDER_DEFAULT;
 #else
-  return wxBORDER_DEFAULT;
+    return wxBORDER_DEFAULT;
 #endif
 } // get_border_simple_theme_aware_bit
 bool bBitmapLoaded = false;
 } // namespace
 
-SettingsBaseDlg::SettingsBaseDlg(wxWindow *parent, wxWindowID id,
-                                 const wxString &title, const wxPoint &pos,
-                                 const wxSize &size, long style)
-    : wxDialog(parent, id, title, pos, size, style) {
-  if (!bBitmapLoaded) {
-    // We need to initialise the default bitmap handler
-    wxXmlResource::Get()->AddHandler(new wxBitmapXmlHandler);
-    wxCrafterntzRqwInitBitmapResources();
-    bBitmapLoaded = true;
-  }
-
-  wxBoxSizer *boxSizer126 = new wxBoxSizer(wxVERTICAL);
-  this->SetSizer(boxSizer126);
-
-  m_panel127 = new wxPanel(this, wxID_ANY, wxDefaultPosition,
-                           wxDLG_UNIT(this, wxSize(-1, -1)), wxTAB_TRAVERSAL);
-
-  boxSizer126->Add(m_panel127, 1, wxEXPAND, WXC_FROM_DIP(5));
-
-  wxBoxSizer *boxSizer128 = new wxBoxSizer(wxVERTICAL);
-  m_panel127->SetSizer(boxSizer128);
-
-  m_notebook132 =
-      new wxNotebook(m_panel127, wxID_ANY, wxDefaultPosition,
-                     wxDLG_UNIT(m_panel127, wxSize(-1, -1)), wxBK_DEFAULT);
-  m_notebook132->SetName(wxT("m_notebook132"));
-
-  boxSizer128->Add(m_notebook132, 1, wxALL | wxEXPAND, WXC_FROM_DIP(10));
-
-  m_panel171 =
-      new wxPanel(m_notebook132, wxID_ANY, wxDefaultPosition,
-                  wxDLG_UNIT(m_notebook132, wxSize(-1, -1)), wxTAB_TRAVERSAL);
-  m_notebook132->AddPage(m_panel171, _("General"), true);
-
-  wxBoxSizer *boxSizer189 = new wxBoxSizer(wxVERTICAL);
-  m_panel171->SetSizer(boxSizer189);
-
-  wxStaticBoxSizer *staticBoxSizerShell = new wxStaticBoxSizer(
-      new wxStaticBox(m_panel171, wxID_ANY, _("Shell:")), wxVERTICAL);
-
-  boxSizer189->Add(staticBoxSizerShell, 0, wxALL | wxEXPAND, WXC_FROM_DIP(5));
-
-  wxFlexGridSizer *flexGridSizer172 = new wxFlexGridSizer(0, 2, 0, 0);
-  flexGridSizer172->SetFlexibleDirection(wxBOTH);
-  flexGridSizer172->SetNonFlexibleGrowMode(wxFLEX_GROWMODE_SPECIFIED);
-  flexGridSizer172->AddGrowableCol(1);
-
-  staticBoxSizerShell->Add(flexGridSizer172, 1, wxALL | wxEXPAND,
-                           WXC_FROM_DIP(5));
-
-  m_staticText182 = new wxStaticText(m_panel171, wxID_ANY, _("Shell Command:"),
-                                     wxDefaultPosition,
-                                     wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
-
-  flexGridSizer172->Add(m_staticText182, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  m_filePickerShellExe = new wxFilePickerCtrl(
-      m_panel171, wxID_ANY, wxEmptyString, _("Select a file"), wxT("*"),
-      wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1, -1)),
-      wxFLP_DEFAULT_STYLE | wxFLP_USE_TEXTCTRL | wxFLP_SMALL);
-
-  flexGridSizer172->Add(m_filePickerShellExe, 0, wxALL | wxEXPAND,
-                        WXC_FROM_DIP(5));
-
-  m_staticText184 = new wxStaticText(m_panel171, wxID_ANY,
-                                     _("Shell Arguments:"), wxDefaultPosition,
-                                     wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
-
-  flexGridSizer172->Add(m_staticText184, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  m_textCtrlShellArgs =
-      new wxTextCtrl(m_panel171, wxID_ANY, wxT(""), wxDefaultPosition,
-                     wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
-#if wxVERSION_NUMBER >= 3000
-  m_textCtrlShellArgs->SetHint(wxT(""));
-#endif
-
-  flexGridSizer172->Add(m_textCtrlShellArgs, 0, wxALL | wxEXPAND,
-                        WXC_FROM_DIP(5));
-
-  wxStaticBoxSizer *staticBoxSizerTab = new wxStaticBoxSizer(
-      new wxStaticBox(m_panel171, wxID_ANY, _("Tab:")), wxVERTICAL);
-
-  boxSizer189->Add(staticBoxSizerTab, 0, wxALL | wxEXPAND, WXC_FROM_DIP(5));
-
-  wxFlexGridSizer *flexGridSizer192 = new wxFlexGridSizer(0, 2, 0, 0);
-  flexGridSizer192->SetFlexibleDirection(wxBOTH);
-  flexGridSizer192->SetNonFlexibleGrowMode(wxFLEX_GROWMODE_SPECIFIED);
-  flexGridSizer192->AddGrowableCol(1);
-
-  staticBoxSizerTab->Add(flexGridSizer192, 1, wxALL | wxEXPAND,
-                         WXC_FROM_DIP(5));
-
-  m_staticText173 = new wxStaticText(m_panel171, wxID_ANY, _("New Tab Title:"),
-                                     wxDefaultPosition,
-                                     wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
-
-  flexGridSizer192->Add(m_staticText173, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  m_textCtrlTitle =
-      new wxTextCtrl(m_panel171, wxID_ANY, wxT("Terminal"), wxDefaultPosition,
-                     wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
-#if wxVERSION_NUMBER >= 3000
-  m_textCtrlTitle->SetHint(wxT(""));
-#endif
-
-  flexGridSizer192->Add(m_textCtrlTitle, 0, wxALL | wxEXPAND, WXC_FROM_DIP(5));
-
-  wxBoxSizer *boxSizer193 = new wxBoxSizer(wxVERTICAL);
-
-  staticBoxSizerTab->Add(boxSizer193, 0, wxEXPAND, WXC_FROM_DIP(5));
-
-  m_checkBoxCloseButton = new wxCheckBox(
-      m_panel171, wxID_ANY, _("Show Close Button on Tab"), wxDefaultPosition,
-      wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
-  m_checkBoxCloseButton->SetValue(true);
-
-  boxSizer193->Add(m_checkBoxCloseButton, 0, wxALL | wxEXPAND, WXC_FROM_DIP(5));
-
-  wxStaticBoxSizer *staticBoxSizerMisc = new wxStaticBoxSizer(
-      new wxStaticBox(m_panel171, wxID_ANY, _("Misc:")), wxVERTICAL);
-
-  boxSizer189->Add(staticBoxSizerMisc, 0, wxALL | wxEXPAND, WXC_FROM_DIP(5));
-
-  wxBoxSizer *boxSizer197 = new wxBoxSizer(wxVERTICAL);
-
-  staticBoxSizerMisc->Add(boxSizer197, 1, wxALL | wxEXPAND, WXC_FROM_DIP(5));
-
-  m_checkBoxOptimisedPaint = new wxCheckBox(
-      m_panel171, wxID_ANY, _("Optimise Drawings"), wxDefaultPosition,
-      wxDLG_UNIT(m_panel171, wxSize(-1, -1)), 0);
-  m_checkBoxOptimisedPaint->SetValue(false);
-
-  boxSizer197->Add(m_checkBoxOptimisedPaint, 0, wxALL, WXC_FROM_DIP(5));
-
-  m_panel133 =
-      new wxPanel(m_notebook132, wxID_ANY, wxDefaultPosition,
-                  wxDLG_UNIT(m_notebook132, wxSize(-1, -1)), wxTAB_TRAVERSAL);
-  m_notebook132->AddPage(m_panel133, _("Colours && Fonts"), false);
-
-  wxBoxSizer *boxSizer149 = new wxBoxSizer(wxVERTICAL);
-  m_panel133->SetSizer(boxSizer149);
-
-  wxStaticBoxSizer *staticBoxSizerGeneral = new wxStaticBoxSizer(
-      new wxStaticBox(m_panel133, wxID_ANY, _("General:")), wxVERTICAL);
-
-  boxSizer149->Add(staticBoxSizerGeneral, 0, wxALL | wxEXPAND, WXC_FROM_DIP(5));
-
-  wxFlexGridSizer *flexGridSizer134 = new wxFlexGridSizer(0, 2, 0, 0);
-  flexGridSizer134->SetFlexibleDirection(wxBOTH);
-  flexGridSizer134->SetNonFlexibleGrowMode(wxFLEX_GROWMODE_SPECIFIED);
-  flexGridSizer134->AddGrowableCol(1);
-
-  staticBoxSizerGeneral->Add(flexGridSizer134, 1, wxALL | wxEXPAND,
-                             WXC_FROM_DIP(5));
-
-  m_staticText146 =
-      new wxStaticText(m_panel133, wxID_ANY, _("Name:"), wxDefaultPosition,
-                       wxDLG_UNIT(m_panel133, wxSize(-1, -1)), 0);
-
-  flexGridSizer134->Add(m_staticText146, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  wxArrayString m_choiceNamesArr;
-  m_choiceNames =
-      new wxChoice(m_panel133, wxID_ANY, wxDefaultPosition,
-                   wxDLG_UNIT(m_panel133, wxSize(-1, -1)), m_choiceNamesArr, 0);
-
-  flexGridSizer134->Add(m_choiceNames, 0, wxALL | wxEXPAND, WXC_FROM_DIP(5));
-
-  m_staticText135 = new wxStaticText(m_panel133, wxID_ANY,
-                                     _("Background Colour:"), wxDefaultPosition,
-                                     wxDLG_UNIT(m_panel133, wxSize(-1, -1)), 0);
-
-  flexGridSizer134->Add(m_staticText135, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  m_colourPickerBg = new wxColourPickerCtrl(
-      m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition,
-      wxDLG_UNIT(m_panel133, wxSize(-1, -1)), wxCLRP_DEFAULT_STYLE);
-
-  flexGridSizer134->Add(m_colourPickerBg, 0, wxALL | wxEXPAND, WXC_FROM_DIP(5));
-
-  m_staticText137 = new wxStaticText(m_panel133, wxID_ANY, _("Text Colour:"),
-                                     wxDefaultPosition,
-                                     wxDLG_UNIT(m_panel133, wxSize(-1, -1)), 0);
-
-  flexGridSizer134->Add(m_staticText137, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  m_colourPickerFg = new wxColourPickerCtrl(
-      m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition,
-      wxDLG_UNIT(m_panel133, wxSize(-1, -1)), wxCLRP_DEFAULT_STYLE);
-
-  flexGridSizer134->Add(m_colourPickerFg, 0, wxALL | wxEXPAND, WXC_FROM_DIP(5));
-
-  m_staticText180 = new wxStaticText(m_panel133, wxID_ANY, _("Global Font:"),
-                                     wxDefaultPosition,
-                                     wxDLG_UNIT(m_panel133, wxSize(-1, -1)), 0);
-
-  flexGridSizer134->Add(m_staticText180, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  m_fontPickerFont =
-      new wxFontPickerCtrl(m_panel133, wxID_ANY, wxNullFont, wxDefaultPosition,
-                           wxDLG_UNIT(m_panel133, wxSize(-1, -1)),
-                           wxFNTP_DEFAULT_STYLE | wxFNTP_USE_TEXTCTRL);
-
-  flexGridSizer134->Add(m_fontPickerFont, 0, wxALL | wxEXPAND, WXC_FROM_DIP(5));
-
-  wxBoxSizer *boxSizer195 = new wxBoxSizer(wxVERTICAL);
-
-  staticBoxSizerGeneral->Add(boxSizer195, 0, wxEXPAND, WXC_FROM_DIP(5));
-
-  m_checkBoxBlockCursor = new wxCheckBox(
-      m_panel133, wxID_ANY, _("Use Block Cursor"), wxDefaultPosition,
-      wxDLG_UNIT(m_panel133, wxSize(-1, -1)), 0);
-  m_checkBoxBlockCursor->SetValue(true);
-
-  boxSizer195->Add(m_checkBoxBlockCursor, 0, wxALL, WXC_FROM_DIP(5));
-
-  wxStaticBoxSizer *staticBoxSizerColours = new wxStaticBoxSizer(
-      new wxStaticBox(m_panel133, wxID_ANY, _("Colours:")), wxVERTICAL);
-
-  boxSizer149->Add(staticBoxSizerColours, 0, wxALL | wxEXPAND, WXC_FROM_DIP(5));
-
-  wxFlexGridSizer *flexGridSizer150 = new wxFlexGridSizer(0, 4, 0, 0);
-  flexGridSizer150->SetFlexibleDirection(wxBOTH);
-  flexGridSizer150->SetNonFlexibleGrowMode(wxFLEX_GROWMODE_SPECIFIED);
-  flexGridSizer150->AddGrowableCol(1);
-  flexGridSizer150->AddGrowableCol(3);
-
-  staticBoxSizerColours->Add(flexGridSizer150, 1, wxALL | wxEXPAND,
-                             WXC_FROM_DIP(5));
-
-  m_staticText151 =
-      new wxStaticText(m_panel133, wxID_ANY, _("Black:"), wxDefaultPosition,
-                       wxDLG_UNIT(m_panel133, wxSize(-1, -1)), 0);
-
-  flexGridSizer150->Add(m_staticText151, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  m_colourPickerBlack = new wxColourPickerCtrl(
-      m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition,
-      wxDLG_UNIT(m_panel133, wxSize(-1, -1)), wxCLRP_DEFAULT_STYLE);
-
-  flexGridSizer150->Add(m_colourPickerBlack, 0, wxALL, WXC_FROM_DIP(5));
-
-  m_staticText153 =
-      new wxStaticText(m_panel133, wxID_ANY, _("Red:"), wxDefaultPosition,
-                       wxDLG_UNIT(m_panel133, wxSize(-1, -1)), 0);
-
-  flexGridSizer150->Add(m_staticText153, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  m_colourPickerRed = new wxColourPickerCtrl(
-      m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition,
-      wxDLG_UNIT(m_panel133, wxSize(-1, -1)), wxCLRP_DEFAULT_STYLE);
-
-  flexGridSizer150->Add(m_colourPickerRed, 0, wxALL, WXC_FROM_DIP(5));
-
-  m_staticText155 =
-      new wxStaticText(m_panel133, wxID_ANY, _("Green:"), wxDefaultPosition,
-                       wxDLG_UNIT(m_panel133, wxSize(-1, -1)), 0);
-
-  flexGridSizer150->Add(m_staticText155, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  m_colourPickerGreen = new wxColourPickerCtrl(
-      m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition,
-      wxDLG_UNIT(m_panel133, wxSize(-1, -1)), wxCLRP_DEFAULT_STYLE);
-
-  flexGridSizer150->Add(m_colourPickerGreen, 0, wxALL, WXC_FROM_DIP(5));
-
-  m_staticText157 =
-      new wxStaticText(m_panel133, wxID_ANY, _("Yellow:"), wxDefaultPosition,
-                       wxDLG_UNIT(m_panel133, wxSize(-1, -1)), 0);
-
-  flexGridSizer150->Add(m_staticText157, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  m_colourPickerYellow = new wxColourPickerCtrl(
-      m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition,
-      wxDLG_UNIT(m_panel133, wxSize(-1, -1)), wxCLRP_DEFAULT_STYLE);
-
-  flexGridSizer150->Add(m_colourPickerYellow, 0, wxALL, WXC_FROM_DIP(5));
-
-  m_staticText161 =
-      new wxStaticText(m_panel133, wxID_ANY, _("Blue"), wxDefaultPosition,
-                       wxDLG_UNIT(m_panel133, wxSize(-1, -1)), 0);
-
-  flexGridSizer150->Add(m_staticText161, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  m_colourPickerBlue = new wxColourPickerCtrl(
-      m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition,
-      wxDLG_UNIT(m_panel133, wxSize(-1, -1)), wxCLRP_DEFAULT_STYLE);
-
-  flexGridSizer150->Add(m_colourPickerBlue, 0, wxALL, WXC_FROM_DIP(5));
-
-  m_staticText163 =
-      new wxStaticText(m_panel133, wxID_ANY, _("Magenta:"), wxDefaultPosition,
-                       wxDLG_UNIT(m_panel133, wxSize(-1, -1)), 0);
-
-  flexGridSizer150->Add(m_staticText163, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  m_colourPickerMagent = new wxColourPickerCtrl(
-      m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition,
-      wxDLG_UNIT(m_panel133, wxSize(-1, -1)), wxCLRP_DEFAULT_STYLE);
-
-  flexGridSizer150->Add(m_colourPickerMagent, 0, wxALL, WXC_FROM_DIP(5));
-
-  m_staticText165 =
-      new wxStaticText(m_panel133, wxID_ANY, _("Cyan:"), wxDefaultPosition,
-                       wxDLG_UNIT(m_panel133, wxSize(-1, -1)), 0);
-
-  flexGridSizer150->Add(m_staticText165, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  m_colourPickerCyan = new wxColourPickerCtrl(
-      m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition,
-      wxDLG_UNIT(m_panel133, wxSize(-1, -1)), wxCLRP_DEFAULT_STYLE);
-
-  flexGridSizer150->Add(m_colourPickerCyan, 0, wxALL, WXC_FROM_DIP(5));
-
-  m_staticText167 =
-      new wxStaticText(m_panel133, wxID_ANY, _("White:"), wxDefaultPosition,
-                       wxDLG_UNIT(m_panel133, wxSize(-1, -1)), 0);
-
-  flexGridSizer150->Add(m_staticText167, 0,
-                        wxALL | wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL,
-                        WXC_FROM_DIP(5));
-
-  m_colourPickerWhite = new wxColourPickerCtrl(
-      m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition,
-      wxDLG_UNIT(m_panel133, wxSize(-1, -1)), wxCLRP_DEFAULT_STYLE);
-
-  flexGridSizer150->Add(m_colourPickerWhite, 0, wxALL, WXC_FROM_DIP(5));
-
-  m_staticLine170 =
-      new wxStaticLine(m_panel133, wxID_ANY, wxDefaultPosition,
-                       wxDLG_UNIT(m_panel133, wxSize(-1, -1)), wxLI_HORIZONTAL);
-
-  staticBoxSizerColours->Add(m_staticLine170, 0, wxALL | wxEXPAND,
-                             WXC_FROM_DIP(5));
-
-  m_checkBoxBrightColours = new wxCheckBox(
-      m_panel133, wxID_ANY, _("Show Bright Colours"), wxDefaultPosition,
-      wxDLG_UNIT(m_panel133, wxSize(-1, -1)), 0);
-  m_checkBoxBrightColours->SetValue(false);
-
-  staticBoxSizerColours->Add(m_checkBoxBrightColours, 0, wxALL,
-                             WXC_FROM_DIP(5));
-
-  wxStaticBoxSizer *staticBoxSizerOutlineColour = new wxStaticBoxSizer(
-      new wxStaticBox(m_panel133, wxID_ANY, _("Tab Outline Colour:")),
-      wxVERTICAL);
-
-  boxSizer149->Add(staticBoxSizerOutlineColour, 0, wxALL | wxEXPAND,
-                   WXC_FROM_DIP(5));
-
-  wxArrayString m_choiceOutlineColourArr;
-  m_choiceOutlineColour = new wxChoice(m_panel133, wxID_ANY, wxDefaultPosition,
-                                       wxDLG_UNIT(m_panel133, wxSize(-1, -1)),
-                                       m_choiceOutlineColourArr, 0);
-
-  staticBoxSizerOutlineColour->Add(m_choiceOutlineColour, 0, wxALL | wxEXPAND,
-                                   WXC_FROM_DIP(5));
-
-  m_stdBtnSizer129 = new wxStdDialogButtonSizer();
-
-  boxSizer128->Add(m_stdBtnSizer129, 0, wxALL | wxALIGN_CENTER_HORIZONTAL,
-                   WXC_FROM_DIP(10));
-
-  m_button130 = new wxButton(m_panel127, wxID_OK, wxT(""), wxDefaultPosition,
-                             wxDLG_UNIT(m_panel127, wxSize(-1, -1)), 0);
-  m_button130->SetDefault();
-  m_stdBtnSizer129->AddButton(m_button130);
-
-  m_button131 =
-      new wxButton(m_panel127, wxID_CANCEL, wxT(""), wxDefaultPosition,
-                   wxDLG_UNIT(m_panel127, wxSize(-1, -1)), 0);
-  m_stdBtnSizer129->AddButton(m_button131);
-  m_stdBtnSizer129->Realize();
-
-#if wxVERSION_NUMBER >= 2900
-  if (!wxPersistenceManager::Get().Find(m_notebook132)) {
-    wxPersistenceManager::Get().RegisterAndRestore(m_notebook132);
-  } else {
-    wxPersistenceManager::Get().Restore(m_notebook132);
-  }
-#endif
-
-  SetName(wxT("SettingsBaseDlg"));
-  SetSize(wxDLG_UNIT(this, wxSize(-1, -1)));
-  if (GetSizer()) {
-    GetSizer()->Fit(this);
-  }
-  if (GetParent()) {
-    CentreOnParent(wxBOTH);
-  } else {
-    CentreOnScreen(wxBOTH);
-  }
-  if (!wxPersistenceManager::Get().Find(this)) {
-    wxPersistenceManager::Get().RegisterAndRestore(this);
-  } else {
-    wxPersistenceManager::Get().Restore(this);
-  }
-  // Connect events
-  m_choiceNames->Bind(wxEVT_COMMAND_CHOICE_SELECTED,
-                      &SettingsBaseDlg::OnThemeChanged, this);
-  m_colourPickerBg->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                         &SettingsBaseDlg::OnBackgroundColour, this);
-  m_colourPickerFg->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                         &SettingsBaseDlg::OnTextColour, this);
-  m_colourPickerBlack->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                            &SettingsBaseDlg::OnBlack, this);
-  m_colourPickerRed->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                          &SettingsBaseDlg::OnRed, this);
-  m_colourPickerGreen->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                            &SettingsBaseDlg::OnGreen, this);
-  m_colourPickerYellow->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                             &SettingsBaseDlg::OnYellow, this);
-  m_colourPickerBlue->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                           &SettingsBaseDlg::OnBlue, this);
-  m_colourPickerMagent->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                             &SettingsBaseDlg::OnMagenta, this);
-  m_colourPickerCyan->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                           &SettingsBaseDlg::OnCyan, this);
-  m_colourPickerWhite->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                            &SettingsBaseDlg::OnWhite, this);
-  m_checkBoxBrightColours->Bind(wxEVT_COMMAND_CHECKBOX_CLICKED,
-                                &SettingsBaseDlg::OnShowBrightColours, this);
-  m_choiceOutlineColour->Bind(wxEVT_COMMAND_CHOICE_SELECTED,
-                              &SettingsBaseDlg::OnOutlineColourChanged, this);
+SettingsBaseDlg::SettingsBaseDlg(wxWindow* parent, wxWindowID id, const wxString& title, const wxPoint& pos, const wxSize& size, long style)
+    : wxDialog(parent, id, title, pos, size, style)
+{
+    if ( !bBitmapLoaded ) {
+        // We need to initialise the default bitmap handler
+        wxXmlResource::Get()->AddHandler(new wxBitmapXmlHandler);
+        wxCrafterntzRqwInitBitmapResources();
+        bBitmapLoaded = true;
+    }
+    
+    wxBoxSizer* boxSizer126 = new wxBoxSizer(wxVERTICAL);
+    this->SetSizer(boxSizer126);
+    
+    m_panel127 = new wxPanel(this, wxID_ANY, wxDefaultPosition, wxDLG_UNIT(this, wxSize(-1,-1)), wxTAB_TRAVERSAL);
+    
+    boxSizer126->Add(m_panel127, 1, wxEXPAND, WXC_FROM_DIP(5));
+    
+    wxBoxSizer* boxSizer128 = new wxBoxSizer(wxVERTICAL);
+    m_panel127->SetSizer(boxSizer128);
+    
+    m_notebook132 = new wxNotebook(m_panel127, wxID_ANY, wxDefaultPosition, wxDLG_UNIT(m_panel127, wxSize(-1,-1)), wxBK_DEFAULT);
+    m_notebook132->SetName(wxT("m_notebook132"));
+    
+    boxSizer128->Add(m_notebook132, 1, wxALL|wxEXPAND, WXC_FROM_DIP(10));
+    
+    m_panel171 = new wxPanel(m_notebook132, wxID_ANY, wxDefaultPosition, wxDLG_UNIT(m_notebook132, wxSize(-1,-1)), wxTAB_TRAVERSAL);
+    m_notebook132->AddPage(m_panel171, _("General"), true);
+    
+    wxBoxSizer* boxSizer189 = new wxBoxSizer(wxVERTICAL);
+    m_panel171->SetSizer(boxSizer189);
+    
+    wxStaticBoxSizer* staticBoxSizerShell = new wxStaticBoxSizer( new wxStaticBox(m_panel171, wxID_ANY, _("Shell:")), wxVERTICAL);
+    
+    boxSizer189->Add(staticBoxSizerShell, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    wxFlexGridSizer* flexGridSizer172 = new wxFlexGridSizer(0, 2, 0, 0);
+    flexGridSizer172->SetFlexibleDirection( wxBOTH );
+    flexGridSizer172->SetNonFlexibleGrowMode( wxFLEX_GROWMODE_SPECIFIED );
+    flexGridSizer172->AddGrowableCol(1);
+    
+    staticBoxSizerShell->Add(flexGridSizer172, 1, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_staticText182 = new wxStaticText(m_panel171, wxID_ANY, _("Shell Command:"), wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1,-1)), 0);
+    
+    flexGridSizer172->Add(m_staticText182, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    m_filePickerShellExe = new wxFilePickerCtrl(m_panel171, wxID_ANY, wxEmptyString, _("Select a file"), wxT("*"), wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1,-1)), wxFLP_DEFAULT_STYLE|wxFLP_USE_TEXTCTRL|wxFLP_SMALL);
+    
+    flexGridSizer172->Add(m_filePickerShellExe, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_staticText184 = new wxStaticText(m_panel171, wxID_ANY, _("Shell Arguments:"), wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1,-1)), 0);
+    
+    flexGridSizer172->Add(m_staticText184, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    m_textCtrlShellArgs = new wxTextCtrl(m_panel171, wxID_ANY, wxT(""), wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1,-1)), 0);
+    #if wxVERSION_NUMBER >= 3000
+    m_textCtrlShellArgs->SetHint(wxT(""));
+    #endif
+    
+    flexGridSizer172->Add(m_textCtrlShellArgs, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    wxStaticBoxSizer* staticBoxSizerTab = new wxStaticBoxSizer( new wxStaticBox(m_panel171, wxID_ANY, _("Tab:")), wxVERTICAL);
+    
+    boxSizer189->Add(staticBoxSizerTab, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    wxFlexGridSizer* flexGridSizer192 = new wxFlexGridSizer(0, 2, 0, 0);
+    flexGridSizer192->SetFlexibleDirection( wxBOTH );
+    flexGridSizer192->SetNonFlexibleGrowMode( wxFLEX_GROWMODE_SPECIFIED );
+    flexGridSizer192->AddGrowableCol(1);
+    
+    staticBoxSizerTab->Add(flexGridSizer192, 1, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_staticText173 = new wxStaticText(m_panel171, wxID_ANY, _("New Tab Title:"), wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1,-1)), 0);
+    
+    flexGridSizer192->Add(m_staticText173, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    m_textCtrlTitle = new wxTextCtrl(m_panel171, wxID_ANY, wxT("Terminal"), wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1,-1)), 0);
+    #if wxVERSION_NUMBER >= 3000
+    m_textCtrlTitle->SetHint(wxT(""));
+    #endif
+    
+    flexGridSizer192->Add(m_textCtrlTitle, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_staticText199 = new wxStaticText(m_panel171, wxID_ANY, _("Tab Position:"), wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1,-1)), 0);
+    
+    flexGridSizer192->Add(m_staticText199, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    wxArrayString m_choiceTabPositionArr;
+    m_choiceTabPosition = new wxChoice(m_panel171, wxID_ANY, wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1,-1)), m_choiceTabPositionArr, 0);
+    
+    flexGridSizer192->Add(m_choiceTabPosition, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    wxBoxSizer* boxSizer193 = new wxBoxSizer(wxVERTICAL);
+    
+    staticBoxSizerTab->Add(boxSizer193, 0, wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_checkBoxCloseButton = new wxCheckBox(m_panel171, wxID_ANY, _("Show Close Button on Tab"), wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1,-1)), 0);
+    m_checkBoxCloseButton->SetValue(true);
+    
+    boxSizer193->Add(m_checkBoxCloseButton, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    wxStaticBoxSizer* staticBoxSizerMisc = new wxStaticBoxSizer( new wxStaticBox(m_panel171, wxID_ANY, _("Misc:")), wxVERTICAL);
+    
+    boxSizer189->Add(staticBoxSizerMisc, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    wxBoxSizer* boxSizer197 = new wxBoxSizer(wxVERTICAL);
+    
+    staticBoxSizerMisc->Add(boxSizer197, 1, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_checkBoxOptimisedPaint = new wxCheckBox(m_panel171, wxID_ANY, _("Optimise Drawings"), wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1,-1)), 0);
+    m_checkBoxOptimisedPaint->SetValue(false);
+    
+    boxSizer197->Add(m_checkBoxOptimisedPaint, 0, wxALL, WXC_FROM_DIP(5));
+    
+    m_panel133 = new wxPanel(m_notebook132, wxID_ANY, wxDefaultPosition, wxDLG_UNIT(m_notebook132, wxSize(-1,-1)), wxTAB_TRAVERSAL);
+    m_notebook132->AddPage(m_panel133, _("Colours && Fonts"), false);
+    
+    wxBoxSizer* boxSizer149 = new wxBoxSizer(wxVERTICAL);
+    m_panel133->SetSizer(boxSizer149);
+    
+    wxStaticBoxSizer* staticBoxSizerGeneral = new wxStaticBoxSizer( new wxStaticBox(m_panel133, wxID_ANY, _("General:")), wxVERTICAL);
+    
+    boxSizer149->Add(staticBoxSizerGeneral, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    wxFlexGridSizer* flexGridSizer134 = new wxFlexGridSizer(0, 2, 0, 0);
+    flexGridSizer134->SetFlexibleDirection( wxBOTH );
+    flexGridSizer134->SetNonFlexibleGrowMode( wxFLEX_GROWMODE_SPECIFIED );
+    flexGridSizer134->AddGrowableCol(1);
+    
+    staticBoxSizerGeneral->Add(flexGridSizer134, 1, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_staticText146 = new wxStaticText(m_panel133, wxID_ANY, _("Name:"), wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), 0);
+    
+    flexGridSizer134->Add(m_staticText146, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    wxArrayString m_choiceNamesArr;
+    m_choiceNames = new wxChoice(m_panel133, wxID_ANY, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), m_choiceNamesArr, 0);
+    
+    flexGridSizer134->Add(m_choiceNames, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_staticText135 = new wxStaticText(m_panel133, wxID_ANY, _("Background Colour:"), wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), 0);
+    
+    flexGridSizer134->Add(m_staticText135, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    m_colourPickerBg = new wxColourPickerCtrl(m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), wxCLRP_DEFAULT_STYLE);
+    
+    flexGridSizer134->Add(m_colourPickerBg, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_staticText137 = new wxStaticText(m_panel133, wxID_ANY, _("Text Colour:"), wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), 0);
+    
+    flexGridSizer134->Add(m_staticText137, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    m_colourPickerFg = new wxColourPickerCtrl(m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), wxCLRP_DEFAULT_STYLE);
+    
+    flexGridSizer134->Add(m_colourPickerFg, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_staticText180 = new wxStaticText(m_panel133, wxID_ANY, _("Global Font:"), wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), 0);
+    
+    flexGridSizer134->Add(m_staticText180, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    m_fontPickerFont = new wxFontPickerCtrl(m_panel133, wxID_ANY, wxNullFont, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), wxFNTP_DEFAULT_STYLE|wxFNTP_USE_TEXTCTRL);
+    
+    flexGridSizer134->Add(m_fontPickerFont, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    wxBoxSizer* boxSizer195 = new wxBoxSizer(wxVERTICAL);
+    
+    staticBoxSizerGeneral->Add(boxSizer195, 0, wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_checkBoxBlockCursor = new wxCheckBox(m_panel133, wxID_ANY, _("Use Block Cursor"), wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), 0);
+    m_checkBoxBlockCursor->SetValue(true);
+    
+    boxSizer195->Add(m_checkBoxBlockCursor, 0, wxALL, WXC_FROM_DIP(5));
+    
+    wxStaticBoxSizer* staticBoxSizerColours = new wxStaticBoxSizer( new wxStaticBox(m_panel133, wxID_ANY, _("Colours:")), wxVERTICAL);
+    
+    boxSizer149->Add(staticBoxSizerColours, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    wxFlexGridSizer* flexGridSizer150 = new wxFlexGridSizer(0, 4, 0, 0);
+    flexGridSizer150->SetFlexibleDirection( wxBOTH );
+    flexGridSizer150->SetNonFlexibleGrowMode( wxFLEX_GROWMODE_SPECIFIED );
+    flexGridSizer150->AddGrowableCol(1);
+    flexGridSizer150->AddGrowableCol(3);
+    
+    staticBoxSizerColours->Add(flexGridSizer150, 1, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_staticText151 = new wxStaticText(m_panel133, wxID_ANY, _("Black:"), wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), 0);
+    
+    flexGridSizer150->Add(m_staticText151, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    m_colourPickerBlack = new wxColourPickerCtrl(m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), wxCLRP_DEFAULT_STYLE);
+    
+    flexGridSizer150->Add(m_colourPickerBlack, 0, wxALL, WXC_FROM_DIP(5));
+    
+    m_staticText153 = new wxStaticText(m_panel133, wxID_ANY, _("Red:"), wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), 0);
+    
+    flexGridSizer150->Add(m_staticText153, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    m_colourPickerRed = new wxColourPickerCtrl(m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), wxCLRP_DEFAULT_STYLE);
+    
+    flexGridSizer150->Add(m_colourPickerRed, 0, wxALL, WXC_FROM_DIP(5));
+    
+    m_staticText155 = new wxStaticText(m_panel133, wxID_ANY, _("Green:"), wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), 0);
+    
+    flexGridSizer150->Add(m_staticText155, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    m_colourPickerGreen = new wxColourPickerCtrl(m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), wxCLRP_DEFAULT_STYLE);
+    
+    flexGridSizer150->Add(m_colourPickerGreen, 0, wxALL, WXC_FROM_DIP(5));
+    
+    m_staticText157 = new wxStaticText(m_panel133, wxID_ANY, _("Yellow:"), wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), 0);
+    
+    flexGridSizer150->Add(m_staticText157, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    m_colourPickerYellow = new wxColourPickerCtrl(m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), wxCLRP_DEFAULT_STYLE);
+    
+    flexGridSizer150->Add(m_colourPickerYellow, 0, wxALL, WXC_FROM_DIP(5));
+    
+    m_staticText161 = new wxStaticText(m_panel133, wxID_ANY, _("Blue"), wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), 0);
+    
+    flexGridSizer150->Add(m_staticText161, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    m_colourPickerBlue = new wxColourPickerCtrl(m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), wxCLRP_DEFAULT_STYLE);
+    
+    flexGridSizer150->Add(m_colourPickerBlue, 0, wxALL, WXC_FROM_DIP(5));
+    
+    m_staticText163 = new wxStaticText(m_panel133, wxID_ANY, _("Magenta:"), wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), 0);
+    
+    flexGridSizer150->Add(m_staticText163, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    m_colourPickerMagent = new wxColourPickerCtrl(m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), wxCLRP_DEFAULT_STYLE);
+    
+    flexGridSizer150->Add(m_colourPickerMagent, 0, wxALL, WXC_FROM_DIP(5));
+    
+    m_staticText165 = new wxStaticText(m_panel133, wxID_ANY, _("Cyan:"), wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), 0);
+    
+    flexGridSizer150->Add(m_staticText165, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    m_colourPickerCyan = new wxColourPickerCtrl(m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), wxCLRP_DEFAULT_STYLE);
+    
+    flexGridSizer150->Add(m_colourPickerCyan, 0, wxALL, WXC_FROM_DIP(5));
+    
+    m_staticText167 = new wxStaticText(m_panel133, wxID_ANY, _("White:"), wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), 0);
+    
+    flexGridSizer150->Add(m_staticText167, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    m_colourPickerWhite = new wxColourPickerCtrl(m_panel133, wxID_ANY, *wxBLACK, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), wxCLRP_DEFAULT_STYLE);
+    
+    flexGridSizer150->Add(m_colourPickerWhite, 0, wxALL, WXC_FROM_DIP(5));
+    
+    m_staticLine170 = new wxStaticLine(m_panel133, wxID_ANY, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), wxLI_HORIZONTAL);
+    
+    staticBoxSizerColours->Add(m_staticLine170, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_checkBoxBrightColours = new wxCheckBox(m_panel133, wxID_ANY, _("Show Bright Colours"), wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), 0);
+    m_checkBoxBrightColours->SetValue(false);
+    
+    staticBoxSizerColours->Add(m_checkBoxBrightColours, 0, wxALL, WXC_FROM_DIP(5));
+    
+    wxStaticBoxSizer* staticBoxSizerOutlineColour = new wxStaticBoxSizer( new wxStaticBox(m_panel133, wxID_ANY, _("Tab Outline Colour:")), wxVERTICAL);
+    
+    boxSizer149->Add(staticBoxSizerOutlineColour, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    wxArrayString m_choiceOutlineColourArr;
+    m_choiceOutlineColour = new wxChoice(m_panel133, wxID_ANY, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), m_choiceOutlineColourArr, 0);
+    
+    staticBoxSizerOutlineColour->Add(m_choiceOutlineColour, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_stdBtnSizer129 = new wxStdDialogButtonSizer();
+    
+    boxSizer128->Add(m_stdBtnSizer129, 0, wxALL|wxALIGN_CENTER_HORIZONTAL, WXC_FROM_DIP(10));
+    
+    m_button130 = new wxButton(m_panel127, wxID_OK, wxT(""), wxDefaultPosition, wxDLG_UNIT(m_panel127, wxSize(-1, -1)), 0);
+    m_button130->SetDefault();
+    m_stdBtnSizer129->AddButton(m_button130);
+    
+    m_button131 = new wxButton(m_panel127, wxID_CANCEL, wxT(""), wxDefaultPosition, wxDLG_UNIT(m_panel127, wxSize(-1, -1)), 0);
+    m_stdBtnSizer129->AddButton(m_button131);
+    m_stdBtnSizer129->Realize();
+    
+    
+    #if wxVERSION_NUMBER >= 2900
+    if(!wxPersistenceManager::Get().Find(m_notebook132)){
+        wxPersistenceManager::Get().RegisterAndRestore(m_notebook132);
+    } else {
+        wxPersistenceManager::Get().Restore(m_notebook132);
+    }
+    #endif
+    
+    SetName(wxT("SettingsBaseDlg"));
+    SetSize(wxDLG_UNIT(this, wxSize(-1,-1)));
+    if (GetSizer()) {
+         GetSizer()->Fit(this);
+    }
+    if(GetParent()) {
+        CentreOnParent(wxBOTH);
+    } else {
+        CentreOnScreen(wxBOTH);
+    }
+    if(!wxPersistenceManager::Get().Find(this)) {
+        wxPersistenceManager::Get().RegisterAndRestore(this);
+    } else {
+        wxPersistenceManager::Get().Restore(this);
+    }
+    // Connect events
+    m_choiceNames->Bind(wxEVT_COMMAND_CHOICE_SELECTED, &SettingsBaseDlg::OnThemeChanged, this);
+    m_colourPickerBg->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnBackgroundColour, this);
+    m_colourPickerFg->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnTextColour, this);
+    m_colourPickerBlack->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnBlack, this);
+    m_colourPickerRed->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnRed, this);
+    m_colourPickerGreen->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnGreen, this);
+    m_colourPickerYellow->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnYellow, this);
+    m_colourPickerBlue->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnBlue, this);
+    m_colourPickerMagent->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnMagenta, this);
+    m_colourPickerCyan->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnCyan, this);
+    m_colourPickerWhite->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnWhite, this);
+    m_checkBoxBrightColours->Bind(wxEVT_COMMAND_CHECKBOX_CLICKED, &SettingsBaseDlg::OnShowBrightColours, this);
+    m_choiceOutlineColour->Bind(wxEVT_COMMAND_CHOICE_SELECTED, &SettingsBaseDlg::OnOutlineColourChanged, this);
+    
 }
 
-SettingsBaseDlg::~SettingsBaseDlg() {
-  m_choiceNames->Unbind(wxEVT_COMMAND_CHOICE_SELECTED,
-                        &SettingsBaseDlg::OnThemeChanged, this);
-  m_colourPickerBg->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                           &SettingsBaseDlg::OnBackgroundColour, this);
-  m_colourPickerFg->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                           &SettingsBaseDlg::OnTextColour, this);
-  m_colourPickerBlack->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                              &SettingsBaseDlg::OnBlack, this);
-  m_colourPickerRed->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                            &SettingsBaseDlg::OnRed, this);
-  m_colourPickerGreen->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                              &SettingsBaseDlg::OnGreen, this);
-  m_colourPickerYellow->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                               &SettingsBaseDlg::OnYellow, this);
-  m_colourPickerBlue->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                             &SettingsBaseDlg::OnBlue, this);
-  m_colourPickerMagent->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                               &SettingsBaseDlg::OnMagenta, this);
-  m_colourPickerCyan->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                             &SettingsBaseDlg::OnCyan, this);
-  m_colourPickerWhite->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED,
-                              &SettingsBaseDlg::OnWhite, this);
-  m_checkBoxBrightColours->Unbind(wxEVT_COMMAND_CHECKBOX_CLICKED,
-                                  &SettingsBaseDlg::OnShowBrightColours, this);
-  m_choiceOutlineColour->Unbind(wxEVT_COMMAND_CHOICE_SELECTED,
-                                &SettingsBaseDlg::OnOutlineColourChanged, this);
+SettingsBaseDlg::~SettingsBaseDlg()
+{
+    m_choiceNames->Unbind(wxEVT_COMMAND_CHOICE_SELECTED, &SettingsBaseDlg::OnThemeChanged, this);
+    m_colourPickerBg->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnBackgroundColour, this);
+    m_colourPickerFg->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnTextColour, this);
+    m_colourPickerBlack->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnBlack, this);
+    m_colourPickerRed->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnRed, this);
+    m_colourPickerGreen->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnGreen, this);
+    m_colourPickerYellow->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnYellow, this);
+    m_colourPickerBlue->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnBlue, this);
+    m_colourPickerMagent->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnMagenta, this);
+    m_colourPickerCyan->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnCyan, this);
+    m_colourPickerWhite->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnWhite, this);
+    m_checkBoxBrightColours->Unbind(wxEVT_COMMAND_CHECKBOX_CLICKED, &SettingsBaseDlg::OnShowBrightColours, this);
+    m_choiceOutlineColour->Unbind(wxEVT_COMMAND_CHOICE_SELECTED, &SettingsBaseDlg::OnOutlineColourChanged, this);
+    
 }

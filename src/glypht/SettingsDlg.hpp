@@ -5,6 +5,7 @@
 #include "wxTerminalUI.hpp"
 
 #include <functional>
+#include <vector>
 
 class SettingsDlg : public SettingsBaseDlg {
 public:
@@ -25,6 +26,7 @@ public:
   bool GetBlockCursor() const { return m_checkBoxBlockCursor->GetValue(); }
   /// The key of the tab outline colour (see AppConfig::GetTabOutlineColours()).
   wxString GetTabOutlineColour() const;
+  TabPosition GetTabPosition() const;
   wxFont GetFont() const { return m_fontPickerFont->GetSelectedFont(); }
   /// The shell executable chosen in the dialog, or empty for the default shell.
   wxString GetShellExecutable() const {
@@ -66,4 +68,6 @@ private:
   const AppConfig &m_config;
   bool m_normalColours{true};
   PreviewCallback m_onPreview;
+  // The position of each item of m_choiceTabPosition.
+  std::vector<TabPosition> m_tabPositions;
 };

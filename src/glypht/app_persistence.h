@@ -13,6 +13,10 @@ struct TabOutlineColour {
   wxColour wxTerminalTheme::*member;
 };
 
+/// Where the tabs are. Left and Right need wxWidgets 3.3 (see GlyphTabBar);
+/// with an older wxWidgets they are shown at the top.
+enum class TabPosition { Top, Bottom, Left, Right };
+
 struct AppConfig {
   AppConfig();
 
@@ -76,6 +80,17 @@ struct AppConfig {
   static wxColour GetTabOutlineColourOf(const wxTerminalTheme &theme,
                                         const wxString &key);
 
+  void SetTabPosition(TabPosition position) { tabPosition = position; }
+  TabPosition GetTabPosition() const { return tabPosition; }
+  /// The value of @p position in config.ini, and back. An unknown value is
+  /// Top.
+  static wxString TabPositionToString(TabPosition position);
+  static TabPosition TabPositionFromString(const wxString &value);
+
+  /// The width of the vertical tab bar, in DIPs.
+  void SetTabBarWidth(int width) { tabBarWidth = width; }
+  int GetTabBarWidth() const { return tabBarWidth; }
+
   /// Optional shell to start in new tabs, instead of the default shell of the
   /// platform. Empty means: use the default shell.
   void SetShellExecutable(const wxString &path) { shellExecutable = path; }
@@ -110,6 +125,8 @@ private:
   bool showCloseButton{true};
   bool blockCursor{true};
   wxString tabOutlineColour{"magenta"};
+  TabPosition tabPosition{TabPosition::Top};
+  int tabBarWidth{200};
   wxString shellExecutable;
   wxString shellArgs;
   wxString lastShell;

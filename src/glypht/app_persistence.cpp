@@ -105,6 +105,33 @@ wxColour AppConfig::GetTabOutlineColourOf(const wxTerminalTheme &theme,
   return wxColour(colour.Red(), colour.Green(), colour.Blue());
 }
 
+wxString AppConfig::TabPositionToString(TabPosition position) {
+  switch (position) {
+  case TabPosition::Bottom:
+    return "bottom";
+  case TabPosition::Left:
+    return "left";
+  case TabPosition::Right:
+    return "right";
+  default:
+    return "top";
+  }
+}
+
+TabPosition AppConfig::TabPositionFromString(const wxString &value) {
+  const wxString v = value.Lower();
+  if (v == "bottom") {
+    return TabPosition::Bottom;
+  }
+  if (v == "left") {
+    return TabPosition::Left;
+  }
+  if (v == "right") {
+    return TabPosition::Right;
+  }
+  return TabPosition::Top;
+}
+
 AppConfig::AppConfig() {
   themes["dark"] = wxTerminalTheme::MakeDarkTheme();
   themes["light"] = wxTerminalTheme::MakeLightTheme();
@@ -294,6 +321,13 @@ bool AppPersistence::Load(AppConfig &config) {
                               value == "yes" || value == "on");
       } else if (key == "taboutline") {
         config.SetTabOutlineColour(value);
+      } else if (key == "tabposition") {
+        config.SetTabPosition(AppConfig::TabPositionFromString(value));
+      } else if (key == "tabbarwidth") {
+        long width = 0;
+        if (value.ToLong(&width) && width > 0) {
+          config.SetTabBarWidth(static_cast<int>(width));
+        }
       } else if (key == "shell") {
         config.SetShellExecutable(value);
       } else if (key == "lastshell") {
@@ -353,6 +387,9 @@ bool AppPersistence::Save(const AppConfig &config) {
   file.AddLine(wxString::Format("blockcursor=%s",
                                 config.GetBlockCursor() ? "true" : "false"));
   file.AddLine("taboutline=" + config.GetTabOutlineColour());
+  file.AddLine("tabposition=" +
+               AppConfig::TabPositionToString(config.GetTabPosition()));
+  file.AddLine(wxString::Format("tabbarwidth=%d", config.GetTabBarWidth()));
   file.AddLine("font=" + config.GetFont().GetNativeFontInfoDesc());
   file.AddLine(wxString::Format(
       "safedrawing=%s", config.IsSafeDrawingEnabled() ? "true" : "false"));

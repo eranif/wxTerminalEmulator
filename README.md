@@ -143,10 +143,29 @@ Color scheme management:
 #### Tab Art (`GlyphTabArt.h`)
 Tabs for a `wxAuiNotebook` (wxWidgets 3.3 or newer), painted with the colours of a `wxTerminalTheme`:
 - `GlyphTabArt::Style::Pills` (the default): the tab bar has the colour of the terminal, each tab is a small rounded rectangle, and the current one is filled
-- `GlyphTabArt::Style::Browser`: a darker bar, and a current tab with rounded top corners that looks joined with the terminal
+- `GlyphTabArt::Style::Browser`: a darker bar, and a current tab with rounded corners on the outer side that looks joined with the terminal
 - Use it with `notebook->SetArtProvider(new GlyphTabArt(theme))`. After a theme change, give the notebook a new art
 - The close button is shown on the current tab and on the tab under the mouse
+- The shapes are anti-aliased when a `wxGraphicsContext` is available
 - The class is empty with an older wxWidgets, so check `wxCHECK_VERSION(3, 3, 0)` before you use it
+
+#### Tabbed Book With Tabs On Any Side (`GlyphBook.h`)
+`GlyphBook` is a `wxBookCtrlBase` with the API and the events of a `wxAuiNotebook` (wxWidgets 3.3 or newer), and tabs at the top, at the bottom, on the left or on the right. wxAUI has no vertical tabs (`wxAUI_NB_LEFT` and `wxAUI_NB_RIGHT` are not implemented), so inside it is a `wxAuiNotebook` for the pages and a `GlyphTabBar` for the left and right sides:
+```cpp
+auto *book = new GlyphBook(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+                           wxAUI_NB_DEFAULT_STYLE | wxAUI_NB_LEFT);
+book->SetTheme(theme);                      // colours of a wxTerminalTheme
+book->AddPage(new wxTextCtrl(book->GetPagesParent(), wxID_ANY), "One", true);
+book->Bind(wxEVT_AUINOTEBOOK_PAGE_CHANGED, &MyFrame::OnPage, this);
+book->SetTabPosition(wxRIGHT);              // or change the flags at any time
+```
+- The tab side is the window style: `wxAUI_NB_TOP`, `wxAUI_NB_BOTTOM`, `wxAUI_NB_LEFT` or `wxAUI_NB_RIGHT`. `SetTabPosition()` changes it
+- The `wxEVT_AUINOTEBOOK_*` events of the notebook are sent again with the book as the event object, and go to the parents of the book. `Veto()` works (a vetoed `wxEVT_AUINOTEBOOK_PAGE_CLOSE` keeps the page)
+- Create the pages with `GetPagesParent()` as their parent. Another parent works too, but the page is moved when it is added
+- With tabs on the left or right the book cannot be split: `wxAUI_NB_TAB_SPLIT`, `wxAUI_NB_TAB_MOVE` and `wxAUI_NB_TAB_EXTERNAL_MOVE` are ignored
+- Vertical tabs: a click selects a page, the close button or a middle click closes it, a right click sends `wxEVT_AUINOTEBOOK_TAB_RIGHT_UP`, and dragging a tab moves it. Drag the edge next to the pages to change the width (`SetTabBarWidth()`); the mouse wheel scrolls many tabs
+- `GlyphTabBar` (`GlyphTabBar.h`) is the vertical bar. Use `GlyphBook` instead of using the bar directly
+- In GlyphT, pick "Tab Position" (Top, Bottom, Left or Right) in the settings. It is saved as `tabposition=` in `config.ini`, and the width of the bar as `tabbarwidth=`
 
 #### Terminal Logger (`terminal_logger.h/cpp`)
 Debugging and diagnostics support:
