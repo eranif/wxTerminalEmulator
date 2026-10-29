@@ -125,8 +125,14 @@ void GlyphTabBar::SyncWithNotebook() {
            a.page.bitmap.IsOk() == b.page.bitmap.IsOk() &&
            a.page.buttons.size() == b.page.buttons.size();
   };
+
   if (std::equal(tabs.begin(), tabs.end(), m_tabs.begin(), m_tabs.end(),
                  same)) {
+    // Same tabs, but an icon can be another bitmap (a spinner).
+    for (size_t i = 0; i < tabs.size(); ++i) {
+      m_tabs[i].page.bitmap = tabs[i].page.bitmap;
+    }
+    Refresh();
     return;
   }
 
