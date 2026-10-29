@@ -155,6 +155,7 @@ public:
 protected:
   wxWindow *DoRemovePage(size_t page) override;
   wxSize DoGetBestSize() const override;
+  void OnChildFocus(wxChildFocusEvent& event);
 
 private:
   void Init();

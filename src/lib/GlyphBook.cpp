@@ -11,13 +11,13 @@ namespace {
 // The events of the notebook that the book sends again.
 const std::vector<wxEventTypeTag<wxAuiNotebookEvent>> &ForwardedEvents() {
   static const std::vector<wxEventTypeTag<wxAuiNotebookEvent>> events = {
-      wxEVT_AUINOTEBOOK_PAGE_CLOSE,     wxEVT_AUINOTEBOOK_PAGE_CHANGED,
-      wxEVT_AUINOTEBOOK_PAGE_CHANGING,  wxEVT_AUINOTEBOOK_PAGE_CLOSED,
-      wxEVT_AUINOTEBOOK_BUTTON,         wxEVT_AUINOTEBOOK_BEGIN_DRAG,
-      wxEVT_AUINOTEBOOK_END_DRAG,       wxEVT_AUINOTEBOOK_DRAG_MOTION,
-      wxEVT_AUINOTEBOOK_ALLOW_DND,      wxEVT_AUINOTEBOOK_TAB_MIDDLE_DOWN,
-      wxEVT_AUINOTEBOOK_TAB_MIDDLE_UP,  wxEVT_AUINOTEBOOK_TAB_RIGHT_DOWN,
-      wxEVT_AUINOTEBOOK_TAB_RIGHT_UP,   wxEVT_AUINOTEBOOK_DRAG_DONE,
+      wxEVT_AUINOTEBOOK_PAGE_CLOSE,    wxEVT_AUINOTEBOOK_PAGE_CHANGED,
+      wxEVT_AUINOTEBOOK_PAGE_CHANGING, wxEVT_AUINOTEBOOK_PAGE_CLOSED,
+      wxEVT_AUINOTEBOOK_BUTTON,        wxEVT_AUINOTEBOOK_BEGIN_DRAG,
+      wxEVT_AUINOTEBOOK_END_DRAG,      wxEVT_AUINOTEBOOK_DRAG_MOTION,
+      wxEVT_AUINOTEBOOK_ALLOW_DND,     wxEVT_AUINOTEBOOK_TAB_MIDDLE_DOWN,
+      wxEVT_AUINOTEBOOK_TAB_MIDDLE_UP, wxEVT_AUINOTEBOOK_TAB_RIGHT_DOWN,
+      wxEVT_AUINOTEBOOK_TAB_RIGHT_UP,  wxEVT_AUINOTEBOOK_DRAG_DONE,
       wxEVT_AUINOTEBOOK_BG_DCLICK};
   return events;
 }
@@ -36,10 +36,14 @@ GlyphBook::GlyphBook(wxWindow *parent, wxWindowID id, const wxPoint &pos,
                      const wxSize &size, long style, const wxString &name) {
   Init();
   Create(parent, id, pos, size, style, name);
+  // Disable AUI's behavior: when a non active child accepts the focus, AUI
+  // changes the selection.
+  m_notebook->Bind(wxEVT_CHILD_FOCUS, &GlyphBook::OnChildFocus, this);
 }
 
 GlyphBook::~GlyphBook() {
   // The notebook is destroyed after this destructor: it must not call us.
+  m_notebook->Unbind(wxEVT_CHILD_FOCUS, &GlyphBook::OnChildFocus, this);
   if (m_notebook) {
     for (const auto &type : ForwardedEvents()) {
       m_notebook->Unbind(type, &GlyphBook::ForwardEvent, this);
@@ -82,6 +86,8 @@ bool GlyphBook::Create(wxWindow *parent, wxWindowID id, const wxPoint &pos,
   return true;
 }
 
+void GlyphBook::OnChildFocus(wxChildFocusEvent &event) { wxUnusedVar(event); }
+
 // Appearance
 // ----------
 
@@ -96,8 +102,8 @@ void GlyphBook::SetTheme(const wxTerminalTheme &theme, const wxColour &outline,
 
 void GlyphBook::SetArtProvider(GlyphTabArt *art) {
   wxCHECK_RET(art, wxS("the tab art must not be null"));
-  m_tabBar->SetArt(std::unique_ptr<GlyphTabArt>(
-      static_cast<GlyphTabArt *>(art->Clone())));
+  m_tabBar->SetArt(
+      std::unique_ptr<GlyphTabArt>(static_cast<GlyphTabArt *>(art->Clone())));
   m_notebook->SetArtProvider(art);
   m_notebook->Refresh();
 }
@@ -260,7 +266,8 @@ bool GlyphBook::InsertPage(size_t pageIdx, wxWindow *page,
     page->Reparent(m_notebook);
   }
   DoInvalidateBestSize();
-  const bool ok = m_notebook->InsertPage(pageIdx, page, caption, select, bitmap);
+  const bool ok =
+      m_notebook->InsertPage(pageIdx, page, caption, select, bitmap);
   SyncTabBar();
   return ok;
 }
