@@ -17,6 +17,9 @@ struct TabOutlineColour {
 /// with an older wxWidgets they are shown at the top.
 enum class TabPosition { Top, Bottom, Left, Right };
 
+/// The look of the tabs (see GlyphTabArt::Style).
+enum class TabStyle { Browser, Pills };
+
 struct AppConfig {
   AppConfig();
 
@@ -87,6 +90,13 @@ struct AppConfig {
   static wxString TabPositionToString(TabPosition position);
   static TabPosition TabPositionFromString(const wxString &value);
 
+  void SetTabStyle(TabStyle style) { tabStyle = style; }
+  TabStyle GetTabStyle() const { return tabStyle; }
+  /// The value of @p style in config.ini, and back. An unknown value is
+  /// Browser.
+  static wxString TabStyleToString(TabStyle style);
+  static TabStyle TabStyleFromString(const wxString &value);
+
   /// The width of the vertical tab bar, in DIPs.
   void SetTabBarWidth(int width) { tabBarWidth = width; }
   int GetTabBarWidth() const { return tabBarWidth; }
@@ -126,6 +136,7 @@ private:
   bool blockCursor{true};
   wxString tabOutlineColour{"magenta"};
   TabPosition tabPosition{TabPosition::Top};
+  TabStyle tabStyle{TabStyle::Browser};
   int tabBarWidth{200};
   wxString shellExecutable;
   wxString shellArgs;

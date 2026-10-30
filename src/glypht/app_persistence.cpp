@@ -132,6 +132,14 @@ TabPosition AppConfig::TabPositionFromString(const wxString &value) {
   return TabPosition::Top;
 }
 
+wxString AppConfig::TabStyleToString(TabStyle style) {
+  return style == TabStyle::Pills ? "pills" : "browser";
+}
+
+TabStyle AppConfig::TabStyleFromString(const wxString &value) {
+  return value.Lower() == "pills" ? TabStyle::Pills : TabStyle::Browser;
+}
+
 AppConfig::AppConfig() {
   themes["dark"] = wxTerminalTheme::MakeDarkTheme();
   themes["light"] = wxTerminalTheme::MakeLightTheme();
@@ -323,6 +331,8 @@ bool AppPersistence::Load(AppConfig &config) {
         config.SetTabOutlineColour(value);
       } else if (key == "tabposition") {
         config.SetTabPosition(AppConfig::TabPositionFromString(value));
+      } else if (key == "tabstyle") {
+        config.SetTabStyle(AppConfig::TabStyleFromString(value));
       } else if (key == "tabbarwidth") {
         long width = 0;
         if (value.ToLong(&width) && width > 0) {
@@ -389,6 +399,7 @@ bool AppPersistence::Save(const AppConfig &config) {
   file.AddLine("taboutline=" + config.GetTabOutlineColour());
   file.AddLine("tabposition=" +
                AppConfig::TabPositionToString(config.GetTabPosition()));
+  file.AddLine("tabstyle=" + AppConfig::TabStyleToString(config.GetTabStyle()));
   file.AddLine(wxString::Format("tabbarwidth=%d", config.GetTabBarWidth()));
   file.AddLine("font=" + config.GetFont().GetNativeFontInfoDesc());
   file.AddLine(wxString::Format(

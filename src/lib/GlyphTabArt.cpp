@@ -28,7 +28,6 @@ constexpr int kPaddingY = 6;
 constexpr int kTopGap = 4;
 // The radius of the corners of the current tab and of the highlight.
 constexpr int kTabRadius = 8;
-constexpr int kHoverRadius = 6;
 // Pills: the space around a pill, which is the gap between two pills, and the
 // radius of its corners.
 constexpr int kPillGapX = 3;
@@ -183,21 +182,28 @@ GlyphTabArt::GlyphTabArt(const wxTerminalTheme &theme, Style style)
     : wxAuiTabArtBase(), m_style(style), m_fgActive(theme.fg),
       m_fgNormal(Mix(theme.bg, theme.fg, 0.6)),
       m_fgDimmed(Mix(theme.bg, theme.fg, 0.4)) {
+  m_bgTerminal = theme.bg;
+  m_fgTheme = theme.fg;
+  m_outline = theme.magenta;
   if (m_style == Style::Pills) {
-    // The bar looks like the terminal, the pills are lighter.
-    m_bgBar = theme.bg;
-    m_bgActive = Mix(theme.bg, theme.fg, 0.16);
-    m_bgHover = Mix(theme.bg, theme.fg, 0.09);
-    m_outline = theme.magenta;
+    // The bar looks like the terminal.
+    SetBarColour(theme.bg);
   } else {
     // The bar is darker than the terminal, like the bar of a browser.
     const double luminance = 0.299 * theme.bg.Red() + 0.587 * theme.bg.Green() +
                              0.114 * theme.bg.Blue();
-    m_bgBar = Mix(theme.bg, *wxBLACK, luminance < 128.0 ? 0.35 : 0.08);
-    m_bgActive = theme.bg;
-    m_bgHover = Mix(m_bgBar, theme.fg, 0.12);
+    SetBarColour(Mix(theme.bg, *wxBLACK, luminance < 128.0 ? 0.35 : 0.08));
   }
   InitBitmaps();
+}
+
+void GlyphTabArt::SetBarColour(const wxColour &colour) {
+  // Both styles use the same colours: the current tab is the terminal
+  // background, and a hovered tab is a mix of the bar and the text colour.
+  // Only the shape and the outline differ.
+  m_bgBar = colour;
+  m_bgActive = m_bgTerminal;
+  m_bgHover = Mix(colour, m_fgTheme, 0.12);
 }
 
 wxAuiTabArt *GlyphTabArt::Clone() { return new GlyphTabArt(*this); }
@@ -229,6 +235,13 @@ int GlyphTabArt::DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
   int xExtent = 0;
   const wxSize size = GetPageTabSize(dc, wnd, page, &xExtent);
   page.rect = wxRect(rect.GetPosition(), size);
+  // Browser: the tab reaches the terminal, so it uses the whole height of the
+  // row that AUI gives, not the height of the tab. Otherwise a strip of the bar
+  // shows between the tab and the page when the row is taller. The hit area
+  // (page.rect) is the same, so the whole drawn tab can be clicked.
+  if (m_style == Style::Browser) {
+    page.rect.height = rect.height;
+  }
 
   // The terminal is below the tabs, or above them with wxAUI_NB_BOTTOM.
   const wxDirection inner = (m_flags & wxAUI_NB_BOTTOM) ? wxTOP : wxBOTTOM;
@@ -309,9 +322,9 @@ void GlyphTabArt::DrawShape(wxDC &dc, wxWindow *wnd,
     return;
   }
 
-  if (page.active) {
-    // Rounded corners on the outer side. The inner side touches the terminal,
-    // and has its colour, so the tab looks like a part of it.
+  if (page.active || page.hover) {
+    // Rounded corners on the outer side only. The inner side touches the
+    // terminal, so the tab looks like a part of it, also when it is hovered.
     int corners = kAllCorners;
     switch (inner) {
     case wxBOTTOM:
@@ -327,11 +340,8 @@ void GlyphTabArt::DrawShape(wxDC &dc, wxWindow *wnd,
       corners = kTopRight | kBottomRight;
       break;
     }
-    DrawRoundedRect(dc, shape, wnd->FromDIP(kTabRadius), corners, m_bgActive);
-  } else if (page.hover) {
-    wxRect r = shape;
-    r.Deflate(wnd->FromDIP(2), wnd->FromDIP(2));
-    DrawRoundedRect(dc, r, wnd->FromDIP(kHoverRadius), kAllCorners, m_bgHover);
+    DrawRoundedRect(dc, shape, wnd->FromDIP(kTabRadius), corners,
+                    page.active ? m_bgActive : m_bgHover);
   }
 }
 

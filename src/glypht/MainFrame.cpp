@@ -97,6 +97,14 @@ long TabPositionFlag(TabPosition position) {
 
 constexpr long kTabPositionFlags =
     wxAUI_NB_TOP | wxAUI_NB_BOTTOM | wxAUI_NB_LEFT | wxAUI_NB_RIGHT;
+
+#if wxCHECK_VERSION(3, 3, 0)
+// The look of the tabs of the settings, as the art of GlyphBook.
+GlyphTabArt::Style TabArtStyle(TabStyle style) {
+  return style == TabStyle::Pills ? GlyphTabArt::Style::Pills
+                                  : GlyphTabArt::Style::Browser;
+}
+#endif
 } // namespace
 
 MyFrame::MyFrame(const wxCmdLineParser &parser,
@@ -162,7 +170,8 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   m_notebook->SetTheme(m_config.GetActiveTheme(),
                        AppConfig::GetTabOutlineColourOf(
                            m_config.GetActiveTheme(),
-                           m_config.GetTabOutlineColour()));
+                           m_config.GetTabOutlineColour()),
+                       TabArtStyle(m_config.GetTabStyle()));
   m_notebook->SetTabBarWidth(m_config.GetTabBarWidth());
   m_notebook->SetTabBarWidthChangedCallback(
       [this](int width) { m_config.SetTabBarWidth(width); });
@@ -672,7 +681,8 @@ void MyFrame::ApplyThemeToAllTabs(const wxTerminalTheme &theme,
 #if wxCHECK_VERSION(3, 3, 0)
   // The tabs use the colours of the theme.
   m_notebook->SetTheme(theme,
-                       AppConfig::GetTabOutlineColourOf(theme, outlineColour));
+                       AppConfig::GetTabOutlineColourOf(theme, outlineColour),
+                       TabArtStyle(m_config.GetTabStyle()));
 #else
   wxUnusedVar(outlineColour);
 #endif
@@ -1193,6 +1203,7 @@ void MyFrame::OnSettings(wxCommandEvent &event) {
     m_config.SetBlockCursor(dlg.GetBlockCursor());
     m_config.SetTabOutlineColour(dlg.GetTabOutlineColour());
     m_config.SetTabPosition(dlg.GetTabPosition());
+    m_config.SetTabStyle(dlg.GetTabStyle());
     m_config.SetFont(dlg.GetFont());
     m_config.SetShellExecutable(dlg.GetShellExecutable());
     m_config.SetShellArgs(dlg.GetShellArgs());

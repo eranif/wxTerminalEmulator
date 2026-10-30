@@ -61,6 +61,10 @@ protected:
     wxTextCtrl* m_textCtrlTitle;
     wxStaticText* m_staticText199;
     wxChoice* m_choiceTabPosition;
+    wxStaticText* m_staticText201;
+    wxChoice* m_choiceTabStyle;
+    wxStaticText* m_staticText203;
+    wxChoice* m_choiceOutlineColour;
     wxCheckBox* m_checkBoxCloseButton;
     wxCheckBox* m_checkBoxOptimisedPaint;
     wxPanel* m_panel133;
@@ -91,12 +95,14 @@ protected:
     wxColourPickerCtrl* m_colourPickerWhite;
     wxStaticLine* m_staticLine170;
     wxCheckBox* m_checkBoxBrightColours;
-    wxChoice* m_choiceOutlineColour;
     wxStdDialogButtonSizer* m_stdBtnSizer129;
     wxButton* m_button130;
     wxButton* m_button131;
 
 protected:
+    virtual void OnDialogInit(wxInitDialogEvent& event) { event.Skip(); }
+    virtual void OnTabStyleUI(wxUpdateUIEvent& event) { event.Skip(); }
+    virtual void OnOutlineColourChanged(wxCommandEvent& event) { event.Skip(); }
     virtual void OnThemeChanged(wxCommandEvent& event) { event.Skip(); }
     virtual void OnBackgroundColour(wxColourPickerEvent& event) { event.Skip(); }
     virtual void OnTextColour(wxColourPickerEvent& event) { event.Skip(); }
@@ -109,7 +115,6 @@ protected:
     virtual void OnCyan(wxColourPickerEvent& event) { event.Skip(); }
     virtual void OnWhite(wxColourPickerEvent& event) { event.Skip(); }
     virtual void OnShowBrightColours(wxCommandEvent& event) { event.Skip(); }
-    virtual void OnOutlineColourChanged(wxCommandEvent& event) { event.Skip(); }
 
 public:
     wxStaticText* GetStaticText182() { return m_staticText182; }
@@ -120,6 +125,10 @@ public:
     wxTextCtrl* GetTextCtrlTitle() { return m_textCtrlTitle; }
     wxStaticText* GetStaticText199() { return m_staticText199; }
     wxChoice* GetChoiceTabPosition() { return m_choiceTabPosition; }
+    wxStaticText* GetStaticText201() { return m_staticText201; }
+    wxChoice* GetChoiceTabStyle() { return m_choiceTabStyle; }
+    wxStaticText* GetStaticText203() { return m_staticText203; }
+    wxChoice* GetChoiceOutlineColour() { return m_choiceOutlineColour; }
     wxCheckBox* GetCheckBoxCloseButton() { return m_checkBoxCloseButton; }
     wxCheckBox* GetCheckBoxOptimisedPaint() { return m_checkBoxOptimisedPaint; }
     wxPanel* GetPanel171() { return m_panel171; }
@@ -150,7 +159,6 @@ public:
     wxColourPickerCtrl* GetColourPickerWhite() { return m_colourPickerWhite; }
     wxStaticLine* GetStaticLine170() { return m_staticLine170; }
     wxCheckBox* GetCheckBoxBrightColours() { return m_checkBoxBrightColours; }
-    wxChoice* GetChoiceOutlineColour() { return m_choiceOutlineColour; }
     wxPanel* GetPanel133() { return m_panel133; }
     wxNotebook* GetNotebook132() { return m_notebook132; }
     wxPanel* GetPanel127() { return m_panel127; }

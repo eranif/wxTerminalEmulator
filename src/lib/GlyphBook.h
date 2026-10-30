@@ -69,11 +69,15 @@ public:
   // ----------
 
   // Paint the tabs with the colours of @p theme. @p outline is the outline of
-  // the current tab (the default is the magenta of the theme). Call it again
-  // after a theme change. Until the first call the tabs use the dark theme.
+  // the current tab (the default is the magenta of the theme). @p barColour is
+  // the colour behind the tabs. By default it is the system button face
+  // (wxSYS_COLOUR_BTNFACE) in both styles. The current tab and the hovered tab
+  // use the theme colours in both styles. Call it again after a theme change.
+  // Until the first call the tabs use the dark theme.
   void SetTheme(const wxTerminalTheme &theme,
                 const wxColour &outline = wxNullColour,
-                GlyphTabArt::Style style = GlyphTabArt::Style::Pills);
+                GlyphTabArt::Style style = GlyphTabArt::Style::Pills,
+                const wxColour &barColour = wxNullColour);
   // Paint the tabs with @p art. The book takes it, like wxAuiNotebook does.
   void SetArtProvider(GlyphTabArt *art);
 

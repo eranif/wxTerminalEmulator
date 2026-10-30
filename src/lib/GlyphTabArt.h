@@ -20,9 +20,11 @@
  * - Browser: the tab bar is darker than the terminal. The current tab has the
  *   terminal background and rounded corners on the outer side, so it looks
  *   like a part of the terminal next to it.
- * - Pills: the tab bar has the colour of the terminal. Each tab is a small
- *   rounded rectangle with a gap between them, and the current one is filled
- *   and outlined (see SetOutlineColour()).
+ * - Pills: each tab is a small rounded rectangle with a gap between them, and
+ *   the current one is outlined (see SetOutlineColour()).
+ *
+ * The colours are the same in both styles: the bar, the current tab and the
+ * hovered tab (see SetBarColour()). Only the shape and the outline differ.
  *
  * The art draws the tabs of a wxAuiNotebook (at the top or at the bottom), and
  * the tabs of a vertical GlyphTabBar (see DrawVerticalTab()). The shapes are
@@ -47,6 +49,9 @@ public:
   void SetActiveColour(const wxColour &colour) override;
   // The outline of the current pill. The default is the magenta of the theme.
   void SetOutlineColour(const wxColour &colour) { m_outline = colour; }
+  // The colour behind the tabs. The hover colour is derived from it; the current
+  // tab stays the terminal background.
+  void SetBarColour(const wxColour &colour);
 
   void DrawBackground(wxDC &dc, wxWindow *wnd, const wxRect &rect) override;
   int DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
@@ -110,9 +115,12 @@ private:
                         const wxAuiNotebookPage &page) const;
 
   Style m_style;
-  wxColour m_bgBar;    // Behind the tabs.
-  wxColour m_bgActive; // The current tab.
-  wxColour m_bgHover;  // A tab under the mouse.
+  wxColour m_bgBar;      // Behind the tabs.
+  wxColour m_bgActive;   // The current tab.
+  wxColour m_bgHover;    // A tab under the mouse.
+  wxColour m_bgTerminal; // The terminal background, for the current tab.
+  // The text colour of the theme, for the derived colours.
+  wxColour m_fgTheme;
   wxColour m_outline;  // Around the current pill.
   wxColour m_fgActive; // Text of the current tab.
   wxColour m_fgNormal; // Text of the other tabs.

@@ -167,6 +167,27 @@ SettingsBaseDlg::SettingsBaseDlg(wxWindow* parent, wxWindowID id, const wxString
     
     flexGridSizer192->Add(m_choiceTabPosition, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
     
+    m_staticText201 = new wxStaticText(m_panel171, wxID_ANY, _("Tab Style:"), wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1,-1)), 0);
+    
+    flexGridSizer192->Add(m_staticText201, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    wxArrayString m_choiceTabStyleArr;
+    m_choiceTabStyleArr.Add(_("Browser"));
+    m_choiceTabStyleArr.Add(_("Pills"));
+    m_choiceTabStyle = new wxChoice(m_panel171, wxID_ANY, wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1,-1)), m_choiceTabStyleArr, 0);
+    m_choiceTabStyle->SetSelection(0);
+    
+    flexGridSizer192->Add(m_choiceTabStyle, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
+    m_staticText203 = new wxStaticText(m_panel171, wxID_ANY, _("Tab Outline Colour:"), wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1,-1)), 0);
+    
+    flexGridSizer192->Add(m_staticText203, 0, wxALL|wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL, WXC_FROM_DIP(5));
+    
+    wxArrayString m_choiceOutlineColourArr;
+    m_choiceOutlineColour = new wxChoice(m_panel171, wxID_ANY, wxDefaultPosition, wxDLG_UNIT(m_panel171, wxSize(-1,-1)), m_choiceOutlineColourArr, 0);
+    
+    flexGridSizer192->Add(m_choiceOutlineColour, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
+    
     wxBoxSizer* boxSizer193 = new wxBoxSizer(wxVERTICAL);
     
     staticBoxSizerTab->Add(boxSizer193, 0, wxEXPAND, WXC_FROM_DIP(5));
@@ -333,15 +354,6 @@ SettingsBaseDlg::SettingsBaseDlg(wxWindow* parent, wxWindowID id, const wxString
     
     staticBoxSizerColours->Add(m_checkBoxBrightColours, 0, wxALL, WXC_FROM_DIP(5));
     
-    wxStaticBoxSizer* staticBoxSizerOutlineColour = new wxStaticBoxSizer( new wxStaticBox(m_panel133, wxID_ANY, _("Tab Outline Colour:")), wxVERTICAL);
-    
-    boxSizer149->Add(staticBoxSizerOutlineColour, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
-    
-    wxArrayString m_choiceOutlineColourArr;
-    m_choiceOutlineColour = new wxChoice(m_panel133, wxID_ANY, wxDefaultPosition, wxDLG_UNIT(m_panel133, wxSize(-1,-1)), m_choiceOutlineColourArr, 0);
-    
-    staticBoxSizerOutlineColour->Add(m_choiceOutlineColour, 0, wxALL|wxEXPAND, WXC_FROM_DIP(5));
-    
     m_stdBtnSizer129 = new wxStdDialogButtonSizer();
     
     boxSizer128->Add(m_stdBtnSizer129, 0, wxALL|wxALIGN_CENTER_HORIZONTAL, WXC_FROM_DIP(10));
@@ -379,6 +391,10 @@ SettingsBaseDlg::SettingsBaseDlg(wxWindow* parent, wxWindowID id, const wxString
         wxPersistenceManager::Get().Restore(this);
     }
     // Connect events
+    this->Bind(wxEVT_INIT_DIALOG, &SettingsBaseDlg::OnDialogInit, this);
+    m_staticText203->Bind(wxEVT_UPDATE_UI, &SettingsBaseDlg::OnTabStyleUI, this);
+    m_choiceOutlineColour->Bind(wxEVT_COMMAND_CHOICE_SELECTED, &SettingsBaseDlg::OnOutlineColourChanged, this);
+    m_choiceOutlineColour->Bind(wxEVT_UPDATE_UI, &SettingsBaseDlg::OnTabStyleUI, this);
     m_choiceNames->Bind(wxEVT_COMMAND_CHOICE_SELECTED, &SettingsBaseDlg::OnThemeChanged, this);
     m_colourPickerBg->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnBackgroundColour, this);
     m_colourPickerFg->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnTextColour, this);
@@ -391,12 +407,15 @@ SettingsBaseDlg::SettingsBaseDlg(wxWindow* parent, wxWindowID id, const wxString
     m_colourPickerCyan->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnCyan, this);
     m_colourPickerWhite->Bind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnWhite, this);
     m_checkBoxBrightColours->Bind(wxEVT_COMMAND_CHECKBOX_CLICKED, &SettingsBaseDlg::OnShowBrightColours, this);
-    m_choiceOutlineColour->Bind(wxEVT_COMMAND_CHOICE_SELECTED, &SettingsBaseDlg::OnOutlineColourChanged, this);
     
 }
 
 SettingsBaseDlg::~SettingsBaseDlg()
 {
+    this->Unbind(wxEVT_INIT_DIALOG, &SettingsBaseDlg::OnDialogInit, this);
+    m_staticText203->Unbind(wxEVT_UPDATE_UI, &SettingsBaseDlg::OnTabStyleUI, this);
+    m_choiceOutlineColour->Unbind(wxEVT_COMMAND_CHOICE_SELECTED, &SettingsBaseDlg::OnOutlineColourChanged, this);
+    m_choiceOutlineColour->Unbind(wxEVT_UPDATE_UI, &SettingsBaseDlg::OnTabStyleUI, this);
     m_choiceNames->Unbind(wxEVT_COMMAND_CHOICE_SELECTED, &SettingsBaseDlg::OnThemeChanged, this);
     m_colourPickerBg->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnBackgroundColour, this);
     m_colourPickerFg->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnTextColour, this);
@@ -409,6 +428,5 @@ SettingsBaseDlg::~SettingsBaseDlg()
     m_colourPickerCyan->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnCyan, this);
     m_colourPickerWhite->Unbind(wxEVT_COMMAND_COLOURPICKER_CHANGED, &SettingsBaseDlg::OnWhite, this);
     m_checkBoxBrightColours->Unbind(wxEVT_COMMAND_CHECKBOX_CLICKED, &SettingsBaseDlg::OnShowBrightColours, this);
-    m_choiceOutlineColour->Unbind(wxEVT_COMMAND_CHOICE_SELECTED, &SettingsBaseDlg::OnOutlineColourChanged, this);
     
 }

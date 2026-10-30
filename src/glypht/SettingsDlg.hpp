@@ -27,6 +27,8 @@ public:
   /// The key of the tab outline colour (see AppConfig::GetTabOutlineColours()).
   wxString GetTabOutlineColour() const;
   TabPosition GetTabPosition() const;
+  /// The look of the tabs picked in the dialog (Browser or Pills).
+  TabStyle GetTabStyle() const;
   wxFont GetFont() const { return m_fontPickerFont->GetSelectedFont(); }
   /// The shell executable chosen in the dialog, or empty for the default shell.
   wxString GetShellExecutable() const {
@@ -44,6 +46,8 @@ public:
   }
 
 protected:
+    void OnTabStyleUI(wxUpdateUIEvent& event) override;
+  void OnDialogInit(wxInitDialogEvent &event) override;
   void OnBackgroundColour(wxColourPickerEvent &event) override;
   void OnBlack(wxColourPickerEvent &event) override;
   void OnBlue(wxColourPickerEvent &event) override;

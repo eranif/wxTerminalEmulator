@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <vector>
+#include <wx/settings.h>
 #include <wx/sizer.h>
 
 namespace {
@@ -92,11 +93,15 @@ void GlyphBook::OnChildFocus(wxChildFocusEvent &event) { wxUnusedVar(event); }
 // ----------
 
 void GlyphBook::SetTheme(const wxTerminalTheme &theme, const wxColour &outline,
-                         GlyphTabArt::Style style) {
+                         GlyphTabArt::Style style, const wxColour &barColour) {
   auto art = std::make_unique<GlyphTabArt>(theme, style);
   if (outline.IsOk()) {
     art->SetOutlineColour(outline);
   }
+  // Both styles: the bar is the button face, unless a colour is given.
+  art->SetBarColour(barColour.IsOk()
+                        ? barColour
+                        : wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE));
   SetArtProvider(art.release());
 }
 
