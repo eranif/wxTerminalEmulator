@@ -43,8 +43,8 @@ GlyphTabBar::GlyphTabBar(wxWindow *parent, wxAuiNotebook *notebook, int width)
   // These are unbound when the bar is destroyed.
   notebook->Bind(wxEVT_AUINOTEBOOK_PAGE_CHANGED,
                  &GlyphTabBar::OnNotebookChanged, this);
-  notebook->Bind(wxEVT_AUINOTEBOOK_PAGE_CLOSED,
-                 &GlyphTabBar::OnNotebookChanged, this);
+  notebook->Bind(wxEVT_AUINOTEBOOK_PAGE_CLOSED, &GlyphTabBar::OnNotebookChanged,
+                 this);
 }
 
 void GlyphTabBar::SetArt(std::unique_ptr<GlyphTabArt> art) {
@@ -161,8 +161,7 @@ void GlyphTabBar::SyncWithNotebook() {
   const auto same = [](const Tab &a, const Tab &b) {
     return a.index == b.index && a.page.window == b.page.window &&
            a.page.caption == b.page.caption &&
-           a.page.tooltip == b.page.tooltip &&
-           a.page.active == b.page.active &&
+           a.page.tooltip == b.page.tooltip && a.page.active == b.page.active &&
            a.page.bitmap.IsOk() == b.page.bitmap.IsOk() &&
            a.page.buttons.size() == b.page.buttons.size();
   };
@@ -194,8 +193,8 @@ void GlyphTabBar::SyncWithNotebook() {
       return tab.page.window == window;
     });
   };
-  for (wxWindow **window : {&m_hover, &m_closeHover, &m_closePressed,
-                            &m_dragged}) {
+  for (wxWindow **window :
+       {&m_hover, &m_closeHover, &m_closePressed, &m_dragged}) {
     if (*window && !exists(*window)) {
       *window = nullptr;
     }
@@ -253,8 +252,7 @@ void GlyphTabBar::OnPaint(wxPaintEvent &WXUNUSED(event)) {
     return;
   }
 
-  m_art->DrawBackground(dc, this, client);
-  m_art->DrawVerticalBarEdge(dc, this, client, GetInnerSide());
+  m_art->DrawVerticalBackground(dc, this, client, GetInnerSide());
   for (auto &tab : m_tabs) {
     wxWindow *const window = tab.page.window;
     tab.page.hover = window == m_hover;
@@ -364,10 +362,10 @@ void GlyphTabBar::OnMotion(wxMouseEvent &event) {
   if (m_closePressed) {
     // The button looks pressed only while the mouse is on it.
     Tab *tab = TabAt(pt);
-    wxWindow *closeHover = tab && tab->page.window == m_closePressed &&
-                                   IsOnCloseButton(*tab, pt)
-                               ? m_closePressed
-                               : nullptr;
+    wxWindow *closeHover =
+        tab && tab->page.window == m_closePressed && IsOnCloseButton(*tab, pt)
+            ? m_closePressed
+            : nullptr;
     if (closeHover != m_closeHover) {
       m_closeHover = closeHover;
       Refresh();
@@ -475,7 +473,8 @@ void GlyphTabBar::OnRightUp(wxMouseEvent &event) {
 }
 
 void GlyphTabBar::OnWheel(wxMouseEvent &event) {
-  const int rows = event.GetWheelRotation() / std::max(1, event.GetWheelDelta());
+  const int rows =
+      event.GetWheelRotation() / std::max(1, event.GetWheelDelta());
   const int rowHeight =
       m_tabs.empty() ? FromDIP(24) : m_tabs.front().page.rect.height;
   ScrollBy(-rows * rowHeight);
@@ -510,9 +509,10 @@ void GlyphTabBar::DragTo(const wxPoint &pt) {
       }
     }
   }
-  const auto current = std::find_if(
-      m_tabs.begin(), m_tabs.end(),
-      [this](const Tab &tab) { return tab.page.window == m_dragged; });
+  const auto current =
+      std::find_if(m_tabs.begin(), m_tabs.end(), [this](const Tab &tab) {
+        return tab.page.window == m_dragged;
+      });
   if (current == m_tabs.end() ||
       static_cast<size_t>(current - m_tabs.begin()) == target) {
     return;
@@ -543,8 +543,7 @@ void GlyphTabBar::ClosePage(size_t index) {
   }
   m_notebook->DeletePage(index);
 
-  wxAuiNotebookEvent closed(wxEVT_AUINOTEBOOK_PAGE_CLOSED,
-                            m_notebook->GetId());
+  wxAuiNotebookEvent closed(wxEVT_AUINOTEBOOK_PAGE_CLOSED, m_notebook->GetId());
   closed.SetSelection(static_cast<int>(index));
   closed.SetEventObject(m_notebook);
   m_notebook->ProcessWindowEvent(closed);

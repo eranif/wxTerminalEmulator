@@ -172,12 +172,26 @@ private:
   // Send an event of the notebook again as an event of the book.
   void ForwardEvent(wxAuiNotebookEvent &event);
   void OnSize(wxSizeEvent &event);
+  // Make the art again from the stored theme (see SetTheme()).
+  void RebuildArt();
+  // Make the art again when the system colours change (the default bar colour
+  // is the button face).
+  void OnSysColourChanged(wxSysColourChangedEvent &event);
+  // Give the art to the bar and the notebook.
+  void ApplyArt(GlyphTabArt *art);
 
   wxAuiNotebook *m_notebook{nullptr};
   GlyphTabBar *m_tabBar{nullptr};
   // The window style, with the flags the notebook does not know.
   long m_style{wxAUI_NB_DEFAULT_STYLE};
   int m_tabBarWidth{200};
+  // The last SetTheme() call. The art is made again from it when the system
+  // colours change. Not used after SetArtProvider().
+  wxTerminalTheme m_theme;
+  wxColour m_outline;
+  GlyphTabArt::Style m_artStyle{GlyphTabArt::Style::Pills};
+  wxColour m_barColour;
+  bool m_themed{false};
 };
 
 #endif // wxCHECK_VERSION(3, 3, 0)

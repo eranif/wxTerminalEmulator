@@ -251,6 +251,4 @@ void SettingsDlg::OnDialogInit(wxInitDialogEvent &event) {
   CenterOnParent(); // Always centre.
 }
 
-void SettingsDlg::OnTabStyleUI(wxUpdateUIEvent &event) {
-  event.Enable(m_choiceTabStyle->GetStringSelection() == "Pills");
-}
+void SettingsDlg::OnTabStyleUI(wxUpdateUIEvent &event) { event.Enable(true); }

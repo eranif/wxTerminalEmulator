@@ -647,8 +647,10 @@ void MyFrame::ApplySettings() {
   if (m_config.GetFont().IsOk()) {
     theme.font = m_config.GetFont();
   }
-  ApplyThemeToAllTabs(theme, m_config.GetTabOutlineColour());
+  // The app appearance first: the bar of the tabs uses the button face, which
+  // depends on the appearance.
   ApplyNativeAppTheme();
+  ApplyThemeToAllTabs(theme, m_config.GetTabOutlineColour());
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
     if (auto *view = TerminalOf(m_notebook->GetPage(i))) {
       view->EnableSafeDrawing(m_config.IsSafeDrawingEnabled());

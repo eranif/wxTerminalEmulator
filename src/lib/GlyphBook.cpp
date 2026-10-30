@@ -76,6 +76,7 @@ bool GlyphBook::Create(wxWindow *parent, wxWindowID id, const wxPoint &pos,
     m_notebook->Bind(type, &GlyphBook::ForwardEvent, this);
   }
   Bind(wxEVT_SIZE, &GlyphBook::OnSize, this);
+  Bind(wxEVT_SYS_COLOUR_CHANGED, &GlyphBook::OnSysColourChanged, this);
 
   auto *sizer = new wxBoxSizer(wxHORIZONTAL);
   sizer->Add(m_tabBar, wxSizerFlags().Expand());
@@ -94,18 +95,42 @@ void GlyphBook::OnChildFocus(wxChildFocusEvent &event) { wxUnusedVar(event); }
 
 void GlyphBook::SetTheme(const wxTerminalTheme &theme, const wxColour &outline,
                          GlyphTabArt::Style style, const wxColour &barColour) {
-  auto art = std::make_unique<GlyphTabArt>(theme, style);
-  if (outline.IsOk()) {
-    art->SetOutlineColour(outline);
+  m_theme = theme;
+  m_outline = outline;
+  m_artStyle = style;
+  m_barColour = barColour;
+  m_themed = true;
+  RebuildArt();
+}
+
+void GlyphBook::RebuildArt() {
+  auto art = std::make_unique<GlyphTabArt>(m_theme, m_artStyle);
+  if (m_outline.IsOk()) {
+    art->SetOutlineColour(m_outline);
   }
   // Both styles: the bar is the button face, unless a colour is given.
-  art->SetBarColour(barColour.IsOk()
-                        ? barColour
+  art->SetBarColour(m_barColour.IsOk()
+                        ? m_barColour
                         : wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE));
-  SetArtProvider(art.release());
+  ApplyArt(art.release());
+}
+
+void GlyphBook::OnSysColourChanged(wxSysColourChangedEvent &event) {
+  event.Skip();
+  // The button face changes with the appearance of the app, so the bar of the
+  // tabs must be made again.
+  if (m_themed && !m_barColour.IsOk()) {
+    RebuildArt();
+  }
 }
 
 void GlyphBook::SetArtProvider(GlyphTabArt *art) {
+  // The art is the one of the application now: it is not made again.
+  m_themed = false;
+  ApplyArt(art);
+}
+
+void GlyphBook::ApplyArt(GlyphTabArt *art) {
   wxCHECK_RET(art, wxS("the tab art must not be null"));
   m_tabBar->SetArt(
       std::unique_ptr<GlyphTabArt>(static_cast<GlyphTabArt *>(art->Clone())));

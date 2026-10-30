@@ -56,6 +56,30 @@ wxColour Mix(const wxColour &a, const wxColour &b, double t) {
                   mix(a.Blue(), b.Blue()));
 }
 
+// The colour @p t (0 to 1) of the way from @p bg to black or to white, the one
+// that is far from the brightness of @p bg. Text in it is readable on @p bg,
+// whatever the theme text colour is.
+wxColour TextOn(const wxColour &bg, double t) {
+  const double luminance =
+      0.299 * bg.Red() + 0.587 * bg.Green() + 0.114 * bg.Blue();
+  return Mix(bg, luminance < 128.0 ? *wxWHITE : *wxBLACK, t);
+}
+
+// The strip of @p width pixels along the side @p inner of @p rect: the side
+// next to the terminal (see DrawPageTab()).
+wxRect InnerStrip(const wxRect &rect, wxDirection inner, int width) {
+  switch (inner) {
+  case wxBOTTOM:
+    return wxRect(rect.x, rect.GetBottom() + 1 - width, rect.width, width);
+  case wxTOP:
+    return wxRect(rect.x, rect.y, rect.width, width);
+  case wxRIGHT:
+    return wxRect(rect.GetRight() + 1 - width, rect.y, width, rect.height);
+  default:
+    return wxRect(rect.x, rect.y, width, rect.height);
+  }
+}
+
 bool IsHorizontal(wxDirection inner) {
   return inner == wxTOP || inner == wxBOTTOM;
 }
@@ -131,9 +155,8 @@ void DrawRoundedRect(wxDC &dc, const wxRect &rect, int radius, int corners,
     gc->SetPen(*wxTRANSPARENT_PEN);
   }
   wxGraphicsPath path = gc->CreatePath();
-  AddRoundedRect(path, rect.x + inset, rect.y + inset,
-                 rect.width - 2 * inset, rect.height - 2 * inset, radius,
-                 corners);
+  AddRoundedRect(path, rect.x + inset, rect.y + inset, rect.width - 2 * inset,
+                 rect.height - 2 * inset, radius, corners);
   gc->DrawPath(path);
 }
 
@@ -179,9 +202,7 @@ void DrawCloseButton(wxDC &dc, const wxRect &rect, const wxColour &highlight,
 } // namespace
 
 GlyphTabArt::GlyphTabArt(const wxTerminalTheme &theme, Style style)
-    : wxAuiTabArtBase(), m_style(style), m_fgActive(theme.fg),
-      m_fgNormal(Mix(theme.bg, theme.fg, 0.6)),
-      m_fgDimmed(Mix(theme.bg, theme.fg, 0.4)) {
+    : wxAuiTabArtBase(), m_style(style), m_fgActive(theme.fg) {
   m_bgTerminal = theme.bg;
   m_fgTheme = theme.fg;
   m_outline = theme.magenta;
@@ -204,6 +225,13 @@ void GlyphTabArt::SetBarColour(const wxColour &colour) {
   m_bgBar = colour;
   m_bgActive = m_bgTerminal;
   m_bgHover = Mix(colour, m_fgTheme, 0.12);
+  // The text of the other tabs and their buttons is drawn on the bar, and the
+  // text of a hovered tab on the hover colour. Their colours are chosen for
+  // contrast with that background: a light text on a dark bar and a dark text
+  // on a light bar, whatever the text colour of the theme is.
+  m_fgNormal = TextOn(colour, 0.6);
+  m_fgDimmed = TextOn(colour, 0.4);
+  m_fgHover = TextOn(m_bgHover, 0.85);
 }
 
 wxAuiTabArt *GlyphTabArt::Clone() { return new GlyphTabArt(*this); }
@@ -220,11 +248,17 @@ wxColour GlyphTabArt::GetButtonColour(wxAuiButtonId WXUNUSED(button),
   return state == wxAUI_BUTTON_STATE_DISABLED ? m_fgDimmed : m_fgActive;
 }
 
-void GlyphTabArt::DrawBackground(wxDC &dc, wxWindow *WXUNUSED(wnd),
-                                 const wxRect &rect) {
+void GlyphTabArt::DrawBackground(wxDC &dc, wxWindow *wnd, const wxRect &rect) {
   dc.SetBrush(m_bgBar);
   dc.SetPen(*wxTRANSPARENT_PEN);
   dc.DrawRectangle(rect);
+  if (m_style == Style::Browser) {
+    // A line in the outline colour along the side next to the pages. The
+    // current tab covers it (see DrawShape()), so it is not drawn under it.
+    const wxDirection inner = (m_flags & wxAUI_NB_BOTTOM) ? wxTOP : wxBOTTOM;
+    dc.SetBrush(m_outline);
+    dc.DrawRectangle(InnerStrip(rect, inner, std::max(1, wnd->FromDIP(1))));
+  }
 }
 
 int GlyphTabArt::DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
@@ -261,16 +295,15 @@ void GlyphTabArt::DrawVerticalTab(wxDC &dc, wxWindow *wnd,
   DrawContent(dc, wnd, page, shape);
 }
 
-void GlyphTabArt::DrawVerticalBarEdge(wxDC &dc, wxWindow *wnd,
-                                      const wxRect &rect, wxDirection inner) {
-  if (m_style != Style::Pills) {
-    return;
-  }
-  const int width = std::max(1, wnd->FromDIP(1));
-  const int x = inner == wxRIGHT ? rect.GetRight() - width + 1 : rect.x;
-  dc.SetBrush(m_bgHover);
+void GlyphTabArt::DrawVerticalBackground(wxDC &dc, wxWindow *wnd,
+                                         const wxRect &rect,
+                                         wxDirection inner) {
+  dc.SetBrush(m_bgBar);
   dc.SetPen(*wxTRANSPARENT_PEN);
-  dc.DrawRectangle(x, rect.y, width, rect.height);
+  dc.DrawRectangle(rect);
+  // The line along the side next to the pages. The current tab covers it.
+  dc.SetBrush(m_style == Style::Pills ? m_bgHover : m_outline);
+  dc.DrawRectangle(InnerStrip(rect, inner, std::max(1, wnd->FromDIP(1))));
 }
 
 wxRect GlyphTabArt::GetShapeRect(wxWindow *wnd, const wxRect &rect,
@@ -340,8 +373,49 @@ void GlyphTabArt::DrawShape(wxDC &dc, wxWindow *wnd,
       corners = kTopRight | kBottomRight;
       break;
     }
-    DrawRoundedRect(dc, shape, wnd->FromDIP(kTabRadius), corners,
-                    page.active ? m_bgActive : m_bgHover);
+    const int radius = wnd->FromDIP(kTabRadius);
+    const int width = std::max(1, wnd->FromDIP(1));
+    if (!page.active) {
+      // The hovered tab stops above the line along the side next to the pages,
+      // so the line is still visible under it.
+      wxRect hover = shape;
+      switch (inner) {
+      case wxBOTTOM:
+        hover.height -= width;
+        break;
+      case wxTOP:
+        hover.y += width;
+        hover.height -= width;
+        break;
+      case wxRIGHT:
+        hover.width -= width;
+        break;
+      default:
+        hover.x += width;
+        hover.width -= width;
+        break;
+      }
+      DrawRoundedRect(dc, hover, radius, corners, m_bgHover);
+      return;
+    }
+    // The current tab has the outline colour on its outer sides, so it stands
+    // out from the bar (the colours of the bar and the tab can be close).
+    DrawRoundedRect(dc, shape, radius, corners, m_bgActive, m_outline, width);
+    // The side next to the terminal has no outline: paint it with the tab
+    // colour, so the tab joins the terminal.
+    // The strip stops one line-width before each end of the side, so the two
+    // outline sides keep their colour down to the line along the page.
+    wxRect strip = InnerStrip(shape, inner, width);
+    if (IsHorizontal(inner)) {
+      strip.x += width;
+      strip.width -= 2 * width;
+    } else {
+      strip.y += width;
+      strip.height -= 2 * width;
+    }
+    dc.SetBrush(m_bgActive);
+    dc.SetPen(*wxTRANSPARENT_PEN);
+    dc.DrawRectangle(strip);
   }
 }
 
@@ -363,7 +437,9 @@ void GlyphTabArt::DrawContent(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
   // The current tab uses the normal font too: AUI makes the selected font
   // bold, and the bold measuring font would make every tab wider.
   dc.SetFont(m_normalFont);
-  dc.SetTextForeground(page.active || page.hover ? m_fgActive : m_fgNormal);
+  dc.SetTextForeground(page.active  ? m_fgActive
+                       : page.hover ? m_fgHover
+                                    : m_fgNormal);
   // The width of the tab comes from GetTextExtent(). Ellipsize() adds up the
   // width of each character, which on Windows is a few pixels more, so it would
   // cut a label that has all the room it measured. Use it only when the label
@@ -433,17 +509,18 @@ int GlyphTabArt::DrawButtons(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
       const bool hot =
           pressed || (button.curState & wxAUI_BUTTON_STATE_HOVER) != 0;
       const wxColour &tabBg = page.active ? m_bgActive : m_bgHover;
+      // The text colour of the tab, for the X on it.
+      const wxColour &tabFg = page.active ? m_fgActive : m_fgHover;
       wxColour highlight;
       if (hot) {
-        highlight = Mix(tabBg, m_fgActive, 0.25);
+        highlight = Mix(tabBg, tabFg, 0.25);
         if (pressed) {
           highlight = Mix(highlight, *wxBLACK, 0.25);
         }
       }
-      DrawCloseButton(dc, button.rect, highlight,
-                      wnd->FromDIP(kCloseHighlightGrow),
-                      wnd->FromDIP(kCloseHighlightRadius),
-                      hot ? m_fgActive : m_fgDimmed, bmp);
+      DrawCloseButton(
+          dc, button.rect, highlight, wnd->FromDIP(kCloseHighlightGrow),
+          wnd->FromDIP(kCloseHighlightRadius), hot ? tabFg : m_fgDimmed, bmp);
     } else {
       dc.DrawBitmap(bmp, button.rect.GetPosition(), true);
     }
@@ -478,9 +555,9 @@ wxSize GlyphTabArt::GetPageTabSize(wxReadOnlyDC &dc, wxWindow *wnd,
   // Each padding converted on its own, not the conversion of the sum: the
   // drawing uses each padding once per side, and the two can differ by a pixel
   // with a scale like 105% or 150%. With buttons, the right one is smaller.
-  size.x += wnd->FromDIP(kPaddingX) +
-            wnd->FromDIP(GetButtonsWidth(wnd, page) ? kButtonPaddingX
-                                                    : kPaddingX);
+  size.x +=
+      wnd->FromDIP(kPaddingX) +
+      wnd->FromDIP(GetButtonsWidth(wnd, page) ? kButtonPaddingX : kPaddingX);
   size.y += 2 * wnd->FromDIP(kPaddingY);
   if (m_style == Style::Pills) {
     size.x += 2 * wnd->FromDIP(kPillGapX);
@@ -509,9 +586,9 @@ int GlyphTabArt::GetVerticalTabHeight(wxReadOnlyDC &dc, wxWindow *wnd,
 
 int GlyphTabArt::GetVerticalTabWidth(wxReadOnlyDC &dc, wxWindow *wnd,
                                      const wxAuiNotebookPage &page) {
-  int width = GetContentSize(dc, wnd, page).x + wnd->FromDIP(kPaddingX) +
-              wnd->FromDIP(GetButtonsWidth(wnd, page) ? kButtonPaddingX
-                                                      : kPaddingX);
+  int width =
+      GetContentSize(dc, wnd, page).x + wnd->FromDIP(kPaddingX) +
+      wnd->FromDIP(GetButtonsWidth(wnd, page) ? kButtonPaddingX : kPaddingX);
   if (m_style == Style::Pills) {
     width += 2 * wnd->FromDIP(kVPillGapX);
   } else {

@@ -17,9 +17,9 @@
  * background and dimmed text, a tab under the mouse is highlighted, and the
  * close button is shown on the current tab and on the tab under the mouse.
  *
- * - Browser: the tab bar is darker than the terminal. The current tab has the
- *   terminal background and rounded corners on the outer side, so it looks
- *   like a part of the terminal next to it.
+ * - Browser: the current tab has the terminal background, rounded corners and
+ *   an outline on the outer sides, so it looks like a part of the terminal
+ *   next to it and still stands out from the bar.
  * - Pills: each tab is a small rounded rectangle with a gap between them, and
  *   the current one is outlined (see SetOutlineColour()).
  *
@@ -47,10 +47,11 @@ public:
   // The colours come from the theme: these only change the text colours.
   void SetColour(const wxColour &colour) override;
   void SetActiveColour(const wxColour &colour) override;
-  // The outline of the current pill. The default is the magenta of the theme.
+  // The outline of the current tab: all around a pill, and on the outer sides
+  // of a Browser tab. The default is the magenta of the theme.
   void SetOutlineColour(const wxColour &colour) { m_outline = colour; }
-  // The colour behind the tabs. The hover colour is derived from it; the current
-  // tab stays the terminal background.
+  // The colour behind the tabs. The hover colour is derived from it; the
+  // current tab stays the terminal background.
   void SetBarColour(const wxColour &colour);
 
   void DrawBackground(wxDC &dc, wxWindow *wnd, const wxRect &rect) override;
@@ -76,10 +77,10 @@ public:
    */
   void DrawVerticalTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
                        const wxRect &rect, wxDirection inner);
-  // The line between a vertical tab bar (@p rect) and the terminal, on the
-  // side @p inner of the bar. Pills only: a browser bar has its own colour.
-  void DrawVerticalBarEdge(wxDC &dc, wxWindow *wnd, const wxRect &rect,
-                           wxDirection inner);
+  // The background of a vertical tab bar (@p rect), with the line along its
+  // side @p inner, next to the terminal. Use it instead of DrawBackground().
+  void DrawVerticalBackground(wxDC &dc, wxWindow *wnd, const wxRect &rect,
+                              wxDirection inner);
   // The height of a row of a vertical tab bar.
   int GetVerticalTabHeight(wxReadOnlyDC &dc, wxWindow *wnd,
                            const wxAuiNotebookPage &page);
@@ -125,6 +126,7 @@ private:
   wxColour m_fgActive; // Text of the current tab.
   wxColour m_fgNormal; // Text of the other tabs.
   wxColour m_fgDimmed; // Buttons of the other tabs.
+  wxColour m_fgHover;  // Text of a tab under the mouse.
 };
 
 #endif // wxCHECK_VERSION(3, 3, 0)
