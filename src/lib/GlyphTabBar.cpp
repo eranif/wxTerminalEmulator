@@ -5,6 +5,9 @@
 #include <algorithm>
 #include <wx/dcbuffer.h>
 #include <wx/dcclient.h>
+#include <wx/popupwin.h>
+#include <wx/settings.h>
+#include <wx/wupdlock.h>
 
 namespace {
 
@@ -58,7 +61,7 @@ void GlyphTabBar::SetSide(wxDirection side) {
   Refresh();
 }
 
-void GlyphTabBar::SetBarWidth(int width) {
+int GlyphTabBar::ClampWidth(int width) const {
   width = std::clamp(width, kMinWidth, kMaxWidth);
   // Keep half of the parent for the notebook.
   if (GetParent()) {
@@ -67,13 +70,51 @@ void GlyphTabBar::SetBarWidth(int width) {
       width = std::min(width, half);
     }
   }
+  return width;
+}
+
+void GlyphTabBar::MoveGuide() {
+  // In screen coordinates: the bar, and where its inner edge will be.
+  const wxPoint origin = ClientToScreen(wxPoint(0, 0));
+  const wxSize size = GetSize();
+  const int lineWidth = std::max(2, FromDIP(2));
+  const int edge = GetInnerSide() == wxRIGHT
+                       ? origin.x + FromDIP(m_dragWidth)
+                       : origin.x + size.x - FromDIP(m_dragWidth);
+  if (!m_guide) {
+    // A popup window is above all the windows of the frame, also above the
+    // native window of the terminal, and it does not take the focus.
+    m_guide = new wxPopupWindow(this, wxBORDER_NONE);
+    m_guide->SetBackgroundColour(
+        wxSystemSettings::GetColour(wxSYS_COLOUR_HIGHLIGHT));
+  }
+  m_guide->SetSize(edge - lineWidth / 2, origin.y, lineWidth, size.y);
+  if (!m_guide->IsShown()) {
+    m_guide->Show();
+  }
+}
+
+void GlyphTabBar::SetBarWidth(int width) {
+  width = ClampWidth(width);
   if (width == m_width && GetMinSize().x == FromDIP(width)) {
     return;
   }
   m_width = width;
   SetMinSize(wxSize(FromDIP(m_width), -1));
-  if (GetParent()) {
-    GetParent()->Layout();
+
+  // A drag sends many mouse events. A layout resizes the notebook, the pages
+  // and the terminals, which is slow and flickers when it runs for each event.
+  // So run one layout after the events that are waiting, with the parent
+  // frozen so the changes are shown together.
+  if (GetParent() && !m_layoutPending) {
+    m_layoutPending = true;
+    CallAfter([this] {
+      m_layoutPending = false;
+      if (wxWindow *parent = GetParent()) {
+        wxWindowUpdateLocker locker(parent);
+        parent->Layout();
+      }
+    });
   }
 }
 
@@ -310,7 +351,10 @@ void GlyphTabBar::OnMotion(wxMouseEvent &event) {
     const int dx = ClientToScreen(pt).x - m_resizeStartX;
     const int width =
         m_resizeStartWidth + (GetInnerSide() == wxRIGHT ? dx : -dx);
-    SetBarWidth(ToDIP(width));
+    // Only a guide line moves. The layout (which resizes the terminals) runs
+    // once, when the mouse is released.
+    m_dragWidth = ClampWidth(ToDIP(width));
+    MoveGuide();
     return;
   }
   if (m_dragged) {
@@ -356,6 +400,7 @@ void GlyphTabBar::OnLeftDown(wxMouseEvent &event) {
     m_resizing = true;
     m_resizeStartX = ClientToScreen(pt).x;
     m_resizeStartWidth = GetSize().x;
+    m_dragWidth = m_width;
     CaptureMouse();
     return;
   }
@@ -512,6 +557,13 @@ void GlyphTabBar::EndMouseAction() {
     ReleaseMouse();
   }
   m_resizing = false;
+  if (m_guide) {
+    m_guide->Destroy();
+    m_guide = nullptr;
+  }
+  if (resized) {
+    SetBarWidth(m_dragWidth);
+  }
   m_dragged = nullptr;
   m_closePressed = nullptr;
   Refresh();

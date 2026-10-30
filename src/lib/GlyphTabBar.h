@@ -12,6 +12,7 @@
 #include <vector>
 #include <wx/aui/auibook.h>
 #include <wx/weakref.h>
+#include <wx/popupwin.h>
 #include <wx/window.h>
 
 /**
@@ -111,6 +112,10 @@ private:
   void ClosePage(size_t index);
   void ScrollBy(int dy);
   void EndMouseAction();
+  // @p width (in DIPs) inside the limits of the bar.
+  int ClampWidth(int width) const;
+  // Show the guide line at the edge the bar will have with m_dragWidth.
+  void MoveGuide();
 
   wxWeakRef<wxAuiNotebook> m_notebook;
   std::unique_ptr<GlyphTabArt> m_art;
@@ -132,8 +137,13 @@ private:
   // Resizing: the mouse x on the screen and the width (in pixels) when it
   // started.
   bool m_resizing{false};
+  // A layout of the parent is waiting (see SetBarWidth()).
+  bool m_layoutPending{false};
   int m_resizeStartX{0};
   int m_resizeStartWidth{0};
+  // The width (in DIPs) the drag will set, and the line that shows it.
+  int m_dragWidth{0};
+  wxPopupWindow *m_guide{nullptr};
 };
 
 #endif // wxCHECK_VERSION(3, 3, 0)
