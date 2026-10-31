@@ -17,6 +17,23 @@ constexpr int kMinWidth = 80;
 constexpr int kMaxWidth = 600;
 constexpr int kResizeEdge = 5;
 
+// The icon of the page `index` as the bundle that the notebook has. The bundle
+// scales with the display; wxAuiNotebook::GetPageBitmap() gives a bitmap of the
+// default size, which does not. A page that is not in the main tab control of
+// the notebook (a split notebook) gets that bitmap.
+wxBitmapBundle IconOf(wxAuiNotebook *notebook, size_t index) {
+  wxWindow *window = notebook->GetPage(index);
+  if (wxAuiTabCtrl *ctrl = notebook->GetMainTabCtrl()) {
+    for (size_t i = 0; i < ctrl->GetPageCount(); ++i) {
+      if (ctrl->GetPage(i).window == window) {
+        return ctrl->GetPage(i).bitmap;
+      }
+    }
+  }
+  const wxBitmap bitmap = notebook->GetPageBitmap(index);
+  return bitmap.IsOk() ? wxBitmapBundle::FromBitmap(bitmap) : wxBitmapBundle{};
+}
+
 } // namespace
 
 GlyphTabBar::GlyphTabBar(wxWindow *parent, wxAuiNotebook *notebook, int width)
@@ -146,7 +163,7 @@ void GlyphTabBar::SyncWithNotebook() {
     tab.page.window = m_notebook->GetPage(index);
     tab.page.caption = m_notebook->GetPageText(index);
     tab.page.tooltip = m_notebook->GetPageToolTip(index);
-    const wxBitmap bitmap = m_notebook->GetPageBitmap(index);
+    const wxBitmapBundle bitmap = IconOf(m_notebook, index);
     if (bitmap.IsOk()) {
       tab.page.bitmap = bitmap;
     }
