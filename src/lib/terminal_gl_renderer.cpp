@@ -7,9 +7,12 @@
 #include "terminal_colour_glyph.h"
 #include <algorithm>
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <functional>
 #include <string>
+#include <string_view>
+#include <vector>
 #include <wx/bitmap.h>
 #include <wx/dcmemory.h>
 #include <wx/image.h>
@@ -108,6 +111,235 @@ bool HasColourPixels(const unsigned char *rgb, size_t pixelCount) {
     }
   }
   return false;
+}
+
+// Box-drawing (U+2500-U+257F) and block (U+2580-U+259F) characters are drawn
+// here and not by the font. The cell width is a whole number of pixels, but
+// the advance of a font is not, so the lines of a font glyph may stop short of
+// the tile edge or be shifted when the glyph is resized. A table then shows
+// gaps, or lines that do not meet, for some font sizes. Drawn to fill the
+// tile, the lines of two cells always meet.
+class TileMask {
+public:
+  TileMask(int w, int h) : m_w(w), m_h(h), m_px(size_t(w) * h, 0) {}
+
+  // Set the pixels of [x0, x1) x [y0, y1).
+  void Fill(int x0, int y0, int x1, int y1) {
+    x0 = std::max(x0, 0);
+    y0 = std::max(y0, 0);
+    x1 = std::min(x1, m_w);
+    y1 = std::min(y1, m_h);
+    for (int y = y0; y < y1; ++y) {
+      for (int x = x0; x < x1; ++x) {
+        m_px[size_t(y) * m_w + x] = 255;
+      }
+    }
+  }
+
+  // White on black, like the render of a font glyph.
+  wxImage ToImage() const {
+    wxImage img(m_w, m_h, false);
+    unsigned char *data = img.GetData();
+    for (size_t i = 0; i < m_px.size(); ++i) {
+      data[i * 3] = data[i * 3 + 1] = data[i * 3 + 2] = m_px[i];
+    }
+    return img;
+  }
+
+private:
+  int m_w;
+  int m_h;
+  std::vector<unsigned char> m_px;
+};
+
+// U+2500-U+257F: the style of the arms of each character, as "lrud" (left,
+// right, up, down): 0 none, 1 light, 2 heavy, 3 double. "0000" is a character
+// that is left to the font (dashed lines, arcs and diagonals).
+constexpr const char *kBoxLines[128] = {
+    // U+2500
+    "1100", "2200", "0011", "0022", "0000", "0000", "0000", "0000", "0000",
+    "0000", "0000", "0000", "0101", "0201", "0102", "0202",
+    // U+2510
+    "1001", "2001", "1002", "2002", "0110", "0210", "0120", "0220", "1010",
+    "2010", "1020", "2020", "0111", "0211", "0121", "0112",
+    // U+2520
+    "0122", "0221", "0212", "0222", "1011", "2011", "1021", "1012", "1022",
+    "2021", "2012", "2022", "1101", "2101", "1201", "2201",
+    // U+2530
+    "1102", "2102", "1202", "2202", "1110", "2110", "1210", "2210", "1120",
+    "2120", "1220", "2220", "1111", "2111", "1211", "2211",
+    // U+2540
+    "1121", "1112", "1122", "2121", "1221", "2112", "1212", "2221", "2212",
+    "2122", "1222", "2222", "0000", "0000", "0000", "0000",
+    // U+2550
+    "3300", "0033", "0301", "0103", "0303", "3001", "1003", "3003", "0310",
+    "0130", "0330", "3010", "1030", "3030", "0311", "0133",
+    // U+2560
+    "0333", "3011", "1033", "3033", "3301", "1103", "3303", "3310", "1130",
+    "3330", "3311", "1133", "3333", "0000", "0000", "0000",
+    // U+2570
+    "0000", "0000", "0000", "0000", "1000", "0010", "0100", "0001", "2000",
+    "0020", "0200", "0002", "1200", "0012", "2100", "0021"};
+
+void DrawBoxLines(TileMask &mask, const char *spec, int w, int h) {
+  enum { L, R, U, D };
+  const int style[4] = {spec[0] - '0', spec[1] - '0', spec[2] - '0',
+                        spec[3] - '0'};
+  const int light = std::max(1, (h + 10) / 20);
+
+  // The bars of an arm, across its direction: one for a light or heavy line,
+  // two for a double line. @p extent is the size of the tile across the arm.
+  struct Bars {
+    int n = 0;
+    int off[2] = {0, 0};
+    int len = 0;
+  };
+  auto barsOf = [&](int s, int extent) {
+    Bars b;
+    if (s == 3) {
+      b.n = 2;
+      b.len = light;
+      b.off[0] = (extent - 3 * light) / 2;
+      b.off[1] = b.off[0] + 2 * light;
+    } else if (s != 0) {
+      b.n = 1;
+      b.len = s == 2 ? 2 * light : light;
+      b.off[0] = (extent - b.len) / 2;
+    }
+    return b;
+  };
+  const Bars bars[4] = {barsOf(style[L], h), barsOf(style[R], h),
+                        barsOf(style[U], w), barsOf(style[D], w)};
+
+  // The junction in the middle: where the bars of the arms along one axis
+  // are, with nothing in the other axis it is a point in the centre.
+  auto junction = [](const Bars &a, const Bars &b, int centre, int &lo,
+                     int &hi) {
+    lo = INT_MAX;
+    hi = INT_MIN;
+    for (const Bars *p : {&a, &b}) {
+      for (int i = 0; i < p->n; ++i) {
+        lo = std::min(lo, p->off[i]);
+        hi = std::max(hi, p->off[i] + p->len);
+      }
+    }
+    if (lo > hi) {
+      lo = hi = centre;
+    }
+  };
+  int xLo, xHi, yLo, yHi;
+  junction(bars[U], bars[D], w / 2, xLo, xHi);
+  junction(bars[L], bars[R], h / 2, yLo, yHi);
+
+  for (int arm = 0; arm < 4; ++arm) {
+    if (!style[arm]) {
+      continue;
+    }
+    const bool horizontal = arm == L || arm == R;
+    // An arm from the right or the bottom runs from its inner end to the
+    // tile edge; the others from the edge to their inner end.
+    const bool fromHigh = arm == R || arm == D;
+    const int travelLo = horizontal ? xLo : yLo;
+    const int travelHi = horizontal ? xHi : yHi;
+    const int centre = horizontal ? w / 2 : h / 2;
+    const bool crossDouble = horizontal ? (style[U] == 3 || style[D] == 3)
+                                        : (style[L] == 3 || style[R] == 3);
+    const Bars &b = bars[arm];
+    for (int i = 0; i < b.n; ++i) {
+      int inner;
+      if (style[arm] == 3) {
+        // The bar on one side stops at the line that crosses there, so that
+        // the double lines keep the gap between them.
+        const int cross = horizontal ? (i == 0 ? U : D) : (i == 0 ? L : R);
+        if (style[cross]) {
+          const Bars &c = bars[cross];
+          inner = fromHigh ? c.off[c.n - 1] : c.off[0] + c.len;
+        } else {
+          inner = fromHigh ? travelLo : travelHi;
+        }
+      } else {
+        inner = crossDouble ? centre : (fromHigh ? travelLo : travelHi);
+      }
+      const int a = b.off[i];
+      const int z = a + b.len;
+      switch (arm) {
+      case L:
+        mask.Fill(0, a, inner, z);
+        break;
+      case R:
+        mask.Fill(inner, a, w, z);
+        break;
+      case U:
+        mask.Fill(a, 0, z, inner);
+        break;
+      default:
+        mask.Fill(a, inner, z, h);
+        break;
+      }
+    }
+  }
+}
+
+// U+2580-U+259F, except the shades (U+2591-U+2593). Returns false for a
+// character that is left to the font.
+bool DrawBlock(TileMask &mask, char32_t ch, int w, int h) {
+  // Positions in eighths of the tile.
+  auto x = [&](int e) { return (w * e + 4) / 8; };
+  auto y = [&](int e) { return (h * e + 4) / 8; };
+  auto fill = [&](int x0, int y0, int x1, int y1) {
+    mask.Fill(x(x0), y(y0), x(x1), y(y1));
+  };
+  if (ch == 0x2580) { // Upper half.
+    fill(0, 0, 8, 4);
+  } else if (ch >= 0x2581 && ch <= 0x2588) { // Lower 1/8 ... full.
+    fill(0, 8 - int(ch - 0x2580), 8, 8);
+  } else if (ch >= 0x2589 && ch <= 0x258F) { // Left 7/8 ... 1/8.
+    fill(0, 0, 8 - int(ch - 0x2588), 8);
+  } else if (ch == 0x2590) { // Right half.
+    fill(4, 0, 8, 8);
+  } else if (ch == 0x2594) { // Upper 1/8.
+    fill(0, 0, 8, 1);
+  } else if (ch == 0x2595) { // Right 1/8.
+    fill(7, 0, 8, 8);
+  } else if (ch >= 0x2596 && ch <= 0x259F) { // Quadrants.
+    // Bits: 1 upper left, 2 upper right, 4 lower left, 8 lower right.
+    constexpr int kQuadrants[10] = {4, 8, 1, 13, 9, 7, 11, 2, 6, 14};
+    const int q = kQuadrants[ch - 0x2596];
+    if (q & 1) {
+      fill(0, 0, 4, 4);
+    }
+    if (q & 2) {
+      fill(4, 0, 8, 4);
+    }
+    if (q & 4) {
+      fill(0, 4, 4, 8);
+    }
+    if (q & 8) {
+      fill(4, 4, 8, 8);
+    }
+  } else {
+    return false;
+  }
+  return true;
+}
+
+// The tile of a box-drawing or block character, white on black. An empty
+// image for any other character, and for those that the font draws.
+wxImage RenderBoxGlyph(char32_t ch, int w, int h) {
+  if (ch < 0x2500 || ch > 0x259F || w < 1 || h < 1) {
+    return wxImage();
+  }
+  TileMask mask(w, h);
+  if (ch <= 0x257F) {
+    const char *spec = kBoxLines[ch - 0x2500];
+    if (std::string_view(spec) == "0000") {
+      return wxImage();
+    }
+    DrawBoxLines(mask, spec, w, h);
+  } else if (!DrawBlock(mask, ch, w, h)) {
+    return wxImage();
+  }
+  return mask.ToImage();
 }
 
 } // namespace
@@ -581,10 +813,14 @@ TerminalGLRenderer::RasterizeAndPack(char32_t ch, const wxFont &font,
         // Never touch Latin-1 (U+0000-U+00FF): that is normal text, which
         // must stay on the cell grid exactly as the font draws it. The same
         // goes for any glyph that fits its tile: only emoji and glyphs that
-        // are too wide are resized and centred.
+        // are too wide are resized and centred. Box-drawing and block
+        // characters that the font still draws (dashed lines, arcs, shades)
+        // stay where the font puts them: centring their ink would move them
+        // off the lines of their neighbours.
         wxSize extent = dc.GetTextExtent(text);
         bool shrunk = false;
-        if (ch > 0xFF && extent.x > cellWPhys) {
+        const bool isBoxOrBlock = ch >= 0x2500 && ch <= 0x259F;
+        if (ch > 0xFF && !isBoxOrBlock && extent.x > cellWPhys) {
           shrunk = true;
           scaledFont = ScaleFont(scaledFont, double(cellWPhys) / extent.x);
           dc.SetFont(scaledFont);
@@ -641,7 +877,12 @@ TerminalGLRenderer::RasterizeAndPack(char32_t ch, const wxFont &font,
     return bmp.ConvertToImage();
   };
 
-  wxImage img = render(*wxBLACK);
+  // Box-drawing and block characters fill the tile exactly (see
+  // RenderBoxGlyph()), so they need no font.
+  wxImage img = RenderBoxGlyph(ch, cellWPhys, cellHPhys);
+  if (!img.IsOk()) {
+    img = render(*wxBLACK);
+  }
   if (!img.IsOk()) {
     return info;
   }
