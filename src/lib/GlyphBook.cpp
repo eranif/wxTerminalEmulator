@@ -562,12 +562,16 @@ void GlyphBook::SetGroupColour(int group, const wxColour &colour) {
   m_tabBar->SetGroupColour(group, colour);
 }
 
+bool GlyphBook::IsSelectedInGroup(int group) const {
+  return m_tabBar->IsSelectedInGroup(group);
+}
+
 bool GlyphBook::IsGroupCollapsed(int group) const {
   return m_tabBar->IsGroupCollapsed(group);
 }
 
-void GlyphBook::SetGroupCollapsed(int group, bool collapsed) {
-  m_tabBar->SetGroupCollapsed(group, collapsed);
+bool GlyphBook::SetGroupCollapsed(int group, bool collapsed) {
+  return m_tabBar->SetGroupCollapsed(group, collapsed);
 }
 
 const std::vector<GlyphBook::GroupColour> &GlyphBook::GetGroupColours() {

@@ -385,13 +385,22 @@ bool GlyphTabBar::IsGroupCollapsed(int group) const {
   return found && found->info.collapsed;
 }
 
-void GlyphTabBar::SetGroupCollapsed(int group, bool collapsed) {
-  if (Group *found = FindGroup(group);
-      found && found->info.collapsed != collapsed) {
-    found->info.collapsed = collapsed;
-    LayoutTabs();
-    Refresh();
+bool GlyphTabBar::SetGroupCollapsed(int group, bool collapsed) {
+  Group *found = FindGroup(group);
+  // A group with the current tab is never collapsed.
+  if (!found || found->info.collapsed == collapsed ||
+      (collapsed && IsSelectedInGroup(group))) {
+    return false;
   }
+  found->info.collapsed = collapsed;
+  LayoutTabs();
+  Refresh();
+  return true;
+}
+
+bool GlyphTabBar::IsSelectedInGroup(int group) const {
+  return m_selection >= 0 && m_selection < static_cast<int>(m_tabs.size()) &&
+         m_tabs[static_cast<size_t>(m_selection)].group == group;
 }
 
 int GlyphTabBar::AddTabToNewGroup(size_t index, const wxString &name,
@@ -502,10 +511,9 @@ bool GlyphTabBar::IsTabVisible(size_t index) const {
   if (tab.group == kNoGroup) {
     return true;
   }
-  // The selected tab of a collapsed group stays visible.
+  // A group with the selected tab is never collapsed (see LayoutTabs()).
   const Group *group = FindGroup(tab.group);
-  return !group || !group->info.collapsed ||
-         static_cast<int>(index) == m_selection;
+  return !group || !group->info.collapsed;
 }
 
 int GlyphTabBar::GroupAt(const wxPoint &pt) const {
@@ -603,6 +611,15 @@ int GlyphTabBar::HitTest(const wxPoint &pt) const { return TabIndexAt(pt); }
 // ------
 
 void GlyphTabBar::LayoutTabs() {
+  // A group with the selected tab is never collapsed. Every change that can
+  // break this (a new selection, a tab moved into a collapsed group) ends here,
+  // so the group is opened here.
+  if (m_selection >= 0 && m_selection < static_cast<int>(m_tabs.size())) {
+    if (Group *group =
+            FindGroup(m_tabs[static_cast<size_t>(m_selection)].group)) {
+      group->info.collapsed = false;
+    }
+  }
   if (!m_painter) {
     return;
   }
@@ -773,6 +790,7 @@ void GlyphTabBar::OnPaint(wxPaintEvent &WXUNUSED(event)) {
 
   for (auto &group : m_groups) {
     group.info.hover = group.id == m_hoverGroup;
+    group.info.locked = IsSelectedInGroup(group.id);
     const wxRect rect = group.info.rect;
     if (rect.Intersects(client)) {
       m_painter->DrawGroupHeader(dc, this, group.info, rect, inner);
@@ -1009,8 +1027,8 @@ void GlyphTabBar::OnLeftUp(wxMouseEvent &event) {
   }
   if (groupPressed != kNoGroup &&
       GroupAt(event.GetPosition()) == groupPressed) {
-    SetGroupCollapsed(groupPressed, !IsGroupCollapsed(groupPressed));
-    if (m_callbacks.groupChanged) {
+    if (SetGroupCollapsed(groupPressed, !IsGroupCollapsed(groupPressed)) &&
+        m_callbacks.groupChanged) {
       m_callbacks.groupChanged(groupPressed);
     }
   }

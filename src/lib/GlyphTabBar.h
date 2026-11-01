@@ -119,7 +119,8 @@ public:
   //
   // A group is a header (a chip with a name and a colour) and the tabs after
   // it. The tabs of a group are always next to each other. A group without tabs
-  // is removed. A collapsed group shows only its header, and its selected tab.
+  // is removed. A collapsed group shows only its header. A group with the
+  // selected tab is never collapsed: it is opened when it gets the selection.
 
   // Make a group with the tab @p index in it. Returns the id of the group.
   int AddTabToNewGroup(size_t index, const wxString &name,
@@ -143,7 +144,11 @@ public:
   const wxColour &GetGroupColour(int group) const;
   void SetGroupColour(int group, const wxColour &colour);
   bool IsGroupCollapsed(int group) const;
-  void SetGroupCollapsed(int group, bool collapsed);
+  // Returns true if the state changed. A group with the selected tab cannot be
+  // collapsed.
+  bool SetGroupCollapsed(int group, bool collapsed);
+  // True if the selected tab is in the group.
+  bool IsSelectedInGroup(int group) const;
 
   bool AcceptsFocus() const override { return false; }
   bool AcceptsFocusFromKeyboard() const override { return false; }
@@ -196,7 +201,7 @@ private:
   void RequestParentLayout();
   // Place the tabs, with the scroll offset.
   void LayoutTabs();
-  // A tab of a collapsed group is hidden, except the selected one.
+  // A tab of a collapsed group is hidden.
   bool IsTabVisible(size_t index) const;
   Group *FindGroup(int group);
   const Group *FindGroup(int group) const;

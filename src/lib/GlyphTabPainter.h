@@ -58,6 +58,9 @@ struct GlyphGroupInfo {
   wxString name;
   wxColour colour;
   bool collapsed{false};
+  // The group cannot be collapsed (it has the current tab): the arrow is dimmed
+  // and the header does not react to the mouse.
+  bool locked{false};
   // The header is under the mouse.
   bool hover{false};
   // Where the header was drawn.
@@ -175,10 +178,10 @@ private:
   // without buttons).
   wxSize ButtonSize(wxWindow *wnd, const GlyphTabButton &button) const;
   int GetButtonsWidth(wxWindow *wnd, const GlyphTabInfo &tab) const;
-  // The size of the triangle on the header of a group, for a chip that is
+  // The size of the arrow on the header of a group, for a chip that is
   // @p chipHeight high.
   int IndicatorSize(wxWindow *wnd, int chipHeight) const;
-  // The triangle as a bitmap of @p size pixels, drawn from an SVG that is made
+  // The arrow as a bitmap of @p size pixels, drawn from an SVG that is made
   // in memory. It is empty without SVG support.
   wxBitmap GetIndicatorBitmap(bool collapsed, const wxColour &colour, int size);
   // The size of the icon, the label and the buttons, without the padding.
@@ -197,6 +200,6 @@ private:
   wxColour m_fgNormal; // Text of the other tabs.
   wxColour m_fgDimmed; // Buttons of the other tabs.
   wxColour m_fgHover;  // Text of a tab under the mouse.
-  // The triangles that were made: by collapsed, colour and size.
+  // The arrows that were made: by collapsed, colour and size.
   std::map<std::tuple<bool, unsigned long, int>, wxBitmap> m_indicatorCache;
 };

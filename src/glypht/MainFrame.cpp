@@ -556,6 +556,9 @@ void MyFrame::ShowGroupMenu(int group, const wxPoint &pos) {
   wxMenuItem *collapse = menu.Append(
       wxID_ANY, m_notebook->IsGroupCollapsed(group) ? _("Expand Group")
                                                     : _("Collapse Group"));
+  // A group with the current tab cannot be collapsed.
+  collapse->Enable(m_notebook->IsGroupCollapsed(group) ||
+                   !m_notebook->IsSelectedInGroup(group));
   menu.Bind(
       wxEVT_MENU,
       [this, group](wxCommandEvent &) {

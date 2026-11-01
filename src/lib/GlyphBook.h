@@ -171,7 +171,8 @@ public:
   //
   // A group is a header with a name and a colour, and the tabs after it. The
   // tabs of a group are always next to each other. A collapsed group shows only
-  // its header and its selected tab. The book shows no menu for the groups: the
+  // its header. A group with the selected page is never collapsed: it is opened
+  // when it gets the selection. The book shows no menu for the groups: the
   // application handles the context menu events and calls these functions.
   // The user can collapse a group with a click on its header, and can drag a
   // tab into a group or out of it (wxEVT_GLYPHBOOK_GROUP_CHANGED).
@@ -196,7 +197,11 @@ public:
   wxColour GetGroupColour(int group) const;
   void SetGroupColour(int group, const wxColour &colour);
   bool IsGroupCollapsed(int group) const;
-  void SetGroupCollapsed(int group, bool collapsed);
+  // Returns true if the state changed. A group with the selected page cannot be
+  // collapsed.
+  bool SetGroupCollapsed(int group, bool collapsed);
+  // True if the selected page is in the group.
+  bool IsSelectedInGroup(int group) const;
 
   // Colours for a menu of group colours.
   struct GroupColour {

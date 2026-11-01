@@ -25,8 +25,8 @@ constexpr int kCloseHighlightRadius = 4;
 constexpr int kCloseSize = 16;
 // The least width of the header of a group in a horizontal bar, in DIPs.
 constexpr int kMinHeaderWidth = 36;
-// The triangle on the header of a group tells if the group is collapsed or not.
-// It is 50% of the height of the header, but not less than this, in DIPs. The
+// The arrow on the header of a group tells if the group is collapsed or not.
+// It is 40% of the height of the header, but not less than this, in DIPs. The
 // space between it and the name is also in DIPs.
 constexpr int kMinIndicatorSize = 8;
 constexpr int kIndicatorGap = 8;
@@ -335,6 +335,21 @@ static wxRect WithoutOuterGap(wxWindow *wnd, const wxRect &rect,
   return shape;
 }
 
+// The corners on the outer side (the side away from the terminal): the ones
+// that are rounded in the Browser look.
+static int OuterCorners(wxDirection inner) {
+  switch (inner) {
+  case wxBOTTOM:
+    return kTopLeft | kTopRight;
+  case wxTOP:
+    return kBottomLeft | kBottomRight;
+  case wxRIGHT:
+    return kTopLeft | kBottomLeft;
+  default:
+    return kTopRight | kBottomRight;
+  }
+}
+
 wxRect GlyphTabPainter::GetShapeRect(wxWindow *wnd, const wxRect &rect,
                                      wxDirection inner) const {
   wxRect shape = rect;
@@ -370,21 +385,7 @@ void GlyphTabPainter::DrawShape(wxDC &dc, wxWindow *wnd,
   if (tab.active || tab.hover) {
     // Rounded corners on the outer side only. The inner side touches the
     // terminal, so the tab looks like a part of it, also when it is hovered.
-    int corners = kAllCorners;
-    switch (inner) {
-    case wxBOTTOM:
-      corners = kTopLeft | kTopRight;
-      break;
-    case wxTOP:
-      corners = kBottomLeft | kBottomRight;
-      break;
-    case wxRIGHT:
-      corners = kTopLeft | kBottomLeft;
-      break;
-    default:
-      corners = kTopRight | kBottomRight;
-      break;
-    }
+    const int corners = OuterCorners(inner);
     const int radius = wnd->FromDIP(kTabRadius);
     const int width = std::max(1, wnd->FromDIP(1));
     if (!tab.active) {
@@ -608,7 +609,7 @@ GlyphTabInfo HeaderTab(const GlyphGroupInfo &group) {
 wxSize GlyphTabPainter::GetGroupHeaderSize(wxWindow *wnd,
                                            const GlyphGroupInfo &group) {
   wxSize size = GetTabSize(wnd, HeaderTab(group));
-  // The triangle, and the space after it when there is a name. The chip is as
+  // The arrow, and the space after it when there is a name. The chip is as
   // high as the tab.
   size.x += IndicatorSize(wnd, size.y) +
             (group.name.empty() ? 0 : wnd->FromDIP(kIndicatorGap));
@@ -622,7 +623,7 @@ int GlyphTabPainter::GetVerticalGroupHeaderHeight(wxWindow *wnd,
 }
 
 int GlyphTabPainter::IndicatorSize(wxWindow *wnd, int chipHeight) const {
-  return std::max(wnd->FromDIP(kMinIndicatorSize), chipHeight / 2);
+  return std::max(wnd->FromDIP(kMinIndicatorSize), chipHeight * 2 / 5);
 }
 
 wxBitmap GlyphTabPainter::GetIndicatorBitmap(bool collapsed,
@@ -632,16 +633,19 @@ wxBitmap GlyphTabPainter::GetIndicatorBitmap(bool collapsed,
       found != m_indicatorCache.end()) {
     return found->second;
   }
-  // The SVG is made here, in memory: no file is needed. The triangle has the
-  // colour of the text of the chip. One that points to the right is a collapsed
-  // group, one that points down is a group that is shown.
-  const wxString path =
-      collapsed ? wxS("M4 2 L14 8 L4 14 Z") : wxS("M2 4 L14 4 L8 14 Z");
+  // The SVG is made here, in memory: no file is needed. The arrow is a chevron
+  // like the one of a tree button, with the colour of the text of the chip. One
+  // that points to the right (>) is a collapsed group, one that points down is
+  // a group that is shown.
+  const wxString path = collapsed ? wxS("M5.5 2.5 L11 8 L5.5 13.5")
+                                  : wxS("M2.5 5.5 L8 11 L13.5 5.5");
   const wxString svg =
       wxString::Format(wxS("<svg xmlns=\"http://www.w3.org/2000/svg\" "
                            "width=\"16\" height=\"16\" "
-                           "viewBox=\"0 0 16 16\"><path d=\"%s\" "
-                           "fill=\"#%02x%02x%02x\"/></svg>"),
+                           "viewBox=\"0 0 16 16\"><path d=\"%s\" fill=\"none\" "
+                           "stroke=\"#%02x%02x%02x\" stroke-width=\"2\" "
+                           "stroke-linecap=\"round\" "
+                           "stroke-linejoin=\"round\"/></svg>"),
                        path, colour.Red(), colour.Green(), colour.Blue());
   const wxScopedCharBuffer data = svg.utf8_str();
   const wxBitmapBundle bundle =
@@ -656,21 +660,23 @@ wxBitmap GlyphTabPainter::GetIndicatorBitmap(bool collapsed,
   return bitmap;
 }
 
-// A triangle in @p rect: it points to the right for a collapsed group, and down
+// A chevron in @p rect: it points to the right for a collapsed group, and down
 // for a group that is shown. Used when the SVG one cannot be made. It is
 // anti-aliased when a graphics context is available.
 static void DrawGroupIndicator(wxDC &dc, const wxRect &rect, bool collapsed,
                                const wxColour &colour) {
-  // The corners of the triangle as fractions of the square.
-  static const double kRight[3][2] = {{0.25, 0.1}, {0.25, 0.9}, {0.85, 0.5}};
-  static const double kDown[3][2] = {{0.1, 0.25}, {0.9, 0.25}, {0.5, 0.85}};
+  // The points of the chevron as fractions of the square.
+  static const double kRight[3][2] = {{0.34, 0.16}, {0.69, 0.5}, {0.34, 0.84}};
+  static const double kDown[3][2] = {{0.16, 0.34}, {0.5, 0.69}, {0.84, 0.34}};
   const double (*corners)[2] = collapsed ? kRight : kDown;
 
   std::unique_ptr<wxGraphicsContext> gc{
       wxGraphicsContext::CreateFromUnknownDC(dc)};
   if (gc) {
-    gc->SetBrush(wxBrush(colour));
-    gc->SetPen(*wxTRANSPARENT_PEN);
+    gc->SetPen(gc->CreatePen(wxGraphicsPenInfo(colour)
+                                 .Width(std::max(1.0, rect.width / 8.0))
+                                 .Cap(wxCAP_ROUND)
+                                 .Join(wxJOIN_ROUND)));
     wxGraphicsPath path = gc->CreatePath();
     path.MoveToPoint(rect.x + rect.width * corners[0][0],
                      rect.y + rect.height * corners[0][1]);
@@ -678,8 +684,7 @@ static void DrawGroupIndicator(wxDC &dc, const wxRect &rect, bool collapsed,
       path.AddLineToPoint(rect.x + rect.width * corners[k][0],
                           rect.y + rect.height * corners[k][1]);
     }
-    path.CloseSubpath();
-    gc->FillPath(path);
+    gc->StrokePath(path);
     return;
   }
   wxPoint points[3];
@@ -687,9 +692,9 @@ static void DrawGroupIndicator(wxDC &dc, const wxRect &rect, bool collapsed,
     points[k] = wxPoint(rect.x + static_cast<int>(rect.width * corners[k][0]),
                         rect.y + static_cast<int>(rect.height * corners[k][1]));
   }
-  dc.SetBrush(colour);
-  dc.SetPen(*wxTRANSPARENT_PEN);
-  dc.DrawPolygon(3, points);
+  dc.SetPen(wxPen(colour, std::max(1, rect.width / 8)));
+  dc.DrawLine(points[0], points[1]);
+  dc.DrawLine(points[1], points[2]);
 }
 
 void GlyphTabPainter::DrawGroupHeader(wxDC &dc, wxWindow *wnd,
@@ -700,14 +705,20 @@ void GlyphTabPainter::DrawGroupHeader(wxDC &dc, wxWindow *wnd,
   const wxColour colour =
       group.colour.IsOk() ? group.colour : DefaultGroupColour();
 
-  // The same in both styles: a plain rectangle with no rounded corner, and as
-  // big as the whole row, with no margin.
+  // The same in both styles, always the Browser look: rounded on the outer
+  // side only (the inner side touches the group line), and as big as the whole
+  // row, with no margin.
   const wxRect chip = rect;
-  const int corners = 0;
+  const int corners = OuterCorners(inner);
   const wxColour textColour = TextOn(colour, 0.92);
-  const wxColour fill =
-      group.hover ? Mix(colour, TextOn(colour, 1.0), 0.15) : colour;
+  const wxColour fill = group.hover && !group.locked
+                            ? Mix(colour, TextOn(colour, 1.0), 0.15)
+                            : colour;
   DrawRoundedRect(dc, chip, wnd->FromDIP(kTabRadius), corners, fill);
+  // The arrow of a group that cannot be collapsed is dimmed: a mix of the
+  // colour of the text and the colour of the chip.
+  const wxColour arrowColour =
+      group.locked ? Mix(fill, textColour, 0.5) : textColour;
 
   dc.SetFont(m_font);
   dc.SetTextForeground(textColour);
@@ -720,20 +731,20 @@ void GlyphTabPainter::DrawGroupHeader(wxDC &dc, wxWindow *wnd,
     text = wxControl::Ellipsize(text, dc, wxELLIPSIZE_END, room);
   }
   const int textWidth = text.empty() ? 0 : dc.GetTextExtent(text).x;
-  // The triangle and the name together: centred in a horizontal bar, from the
+  // The arrow and the name together: centred in a horizontal bar, from the
   // start in a vertical one.
   const int content = indicator + gap + textWidth;
   const int x = IsHorizontal(inner) ? chip.x + (chip.width - content) / 2
                                     : chip.x + padding;
   const wxRect indicatorRect(x, chip.y + (chip.height - indicator) / 2,
                              indicator, indicator);
-  const wxBitmap triangle =
-      GetIndicatorBitmap(group.collapsed, textColour, indicator);
-  if (triangle.IsOk()) {
-    dc.DrawBitmap(triangle, indicatorRect.GetPosition(), true);
+  const wxBitmap arrow =
+      GetIndicatorBitmap(group.collapsed, arrowColour, indicator);
+  if (arrow.IsOk()) {
+    dc.DrawBitmap(arrow, indicatorRect.GetPosition(), true);
   } else {
-    // No SVG support: draw the triangle.
-    DrawGroupIndicator(dc, indicatorRect, group.collapsed, textColour);
+    // No SVG support: draw the arrow.
+    DrawGroupIndicator(dc, indicatorRect, group.collapsed, arrowColour);
   }
   if (!text.empty()) {
     dc.DrawText(text, x + indicator + gap,
