@@ -1,12 +1,7 @@
 #pragma once
 
-// A tab bar, painted with GlyphTabArt. It needs wxWidgets 3.3 (see
-// GlyphTabArt).
-#include <wx/version.h>
-
-#if wxCHECK_VERSION(3, 3, 0)
-
-#include "GlyphTabArt.h"
+// A tab bar, painted with GlyphTabPainter.
+#include "GlyphTabPainter.h"
 #include <functional>
 #include <memory>
 #include <vector>
@@ -27,7 +22,8 @@
  * - Tabs on the left or the right are rows, from top to bottom. The bar scrolls
  *   with the mouse wheel, and its inner edge can be dragged to change its
  * width.
- * - A tab is selected by a click, and moved by dragging it.
+ * - A tab is selected by a click. Dragging it shows a line where it will go,
+ *   and it moves when the mouse is released.
  */
 class GlyphTabBar : public wxWindow {
 public:
@@ -45,7 +41,7 @@ public:
   GlyphTabBar(wxWindow *parent, int width);
   ~GlyphTabBar() override = default;
 
-  void SetArt(std::unique_ptr<GlyphTabArt> art);
+  void SetPainter(std::unique_ptr<GlyphTabPainter> painter);
   void SetCallbacks(Callbacks callbacks) { m_callbacks = std::move(callbacks); }
 
   // The side of the pages the bar is on: wxTOP, wxBOTTOM, wxLEFT or wxRIGHT.
@@ -147,8 +143,10 @@ private:
   bool IsOnResizeEdge(const wxPoint &pt) const;
   // Update the tab under the mouse. Returns true if something changed.
   bool UpdateHover(const wxPoint &pt);
-  // Move the dragged tab to the place of the mouse.
+  // While a tab is dragged: show where it would go. The tab moves on release.
   void DragTo(const wxPoint &pt);
+  // The line that shows where the dragged tab will go.
+  void DrawDropLine(wxDC &dc) const;
   // Show the list of all the tabs, and call the select callback.
   void ShowTabList();
   void ScrollBy(int delta);
@@ -158,7 +156,7 @@ private:
   // Show the guide line at the edge the bar will have with m_dragWidth.
   void MoveGuide();
 
-  std::unique_ptr<GlyphTabArt> m_art;
+  std::unique_ptr<GlyphTabPainter> m_painter;
   Callbacks m_callbacks;
   std::vector<Tab> m_tabs;
   int m_selection{-1};
@@ -190,6 +188,10 @@ private:
   wxWindow *m_dragged{nullptr};
   wxPoint m_pressPoint;
   bool m_dragStarted{false};
+  // While a tab is dragged: where it would go if it were dropped now. It is
+  // the number of the gap before the tab with this index (the count is the gap
+  // after the last tab), or -1 when the drop would not move the tab.
+  int m_dropIndex{-1};
   // Resizing: the mouse x on the screen and the width (in pixels) when it
   // started.
   bool m_resizing{false};
@@ -201,5 +203,3 @@ private:
   int m_dragWidth{0};
   wxPopupWindow *m_guide{nullptr};
 };
-
-#endif // wxCHECK_VERSION(3, 3, 0)

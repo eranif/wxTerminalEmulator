@@ -44,7 +44,7 @@ All you need is **wxWidgets** and **CMake** — no third-party libraries are req
 
 #### **Display & Theming**
 - **Dark and light themes** via `terminal_theme.h`
-- **Native appearance support** with CLI option `--appearance=<light|dark|auto>` (platform-native look)
+- **Native appearance support** with CLI option `--appearance=<light|dark|auto>` (platform-native look). It needs wxWidgets 3.3 or newer: with wxWidgets 3.2, which `build.sh` uses by default on Windows, the option is accepted but has no effect, and the app uses the look of the system.
 - **Custom font selection** in the demo application
 - **Mouse selection, copy/paste, and programmatic selection**
 - **Clickable text/links** with Ctrl+click to detect tokens and emit link events
@@ -140,31 +140,35 @@ Color scheme management:
 - Link/clicked text color for visual feedback
 - Pre-defined dark and light themes
 
-#### Tab Art (`GlyphTabArt.h`)
-Tabs for a `wxAuiNotebook` (wxWidgets 3.3 or newer), painted with the colours of a `wxTerminalTheme`:
-- `GlyphTabArt::Style::Pills` (the default): the tab bar has the colour of the terminal, each tab is a small rounded rectangle, and the current one is filled
-- `GlyphTabArt::Style::Browser`: a darker bar, and a current tab with rounded corners on the outer side that looks joined with the terminal
-- Use it with `notebook->SetArtProvider(new GlyphTabArt(theme))`. After a theme change, give the notebook a new art
+#### Tab Painter (`GlyphTabPainter.h`)
+Draws tabs with the colours of a `wxTerminalTheme`. It uses only plain wxWidgets (wxWidgets 3.2 or newer), and it is used by `GlyphTabBar` and `GlyphBook`:
+- `GlyphTabPainter::Style::Pills` (the default): the tab bar has the colour of the terminal, each tab is a small rounded rectangle, and the current one is filled
+- `GlyphTabPainter::Style::Browser`: a darker bar, and a current tab with rounded corners on the outer side that looks joined with the terminal
 - The close button is shown on the current tab and on the tab under the mouse
 - The shapes are anti-aliased when a `wxGraphicsContext` is available
+
+#### Tab Art For `wxAuiNotebook` (`GlyphTabArt.h`)
+The same tabs for a `wxAuiNotebook` (wxWidgets 3.3 or newer; it needs `wxAuiTabArtBase`). It is a thin adapter around `GlyphTabPainter`:
+- Use it with `notebook->SetArtProvider(new GlyphTabArt(theme))`. After a theme change, give the notebook a new art
 - The class is empty with an older wxWidgets, so check `wxCHECK_VERSION(3, 3, 0)` before you use it
 
 #### Tabbed Book With Tabs On Any Side (`GlyphBook.h`)
-`GlyphBook` is a `wxBookCtrlBase` with the API and the events of a `wxAuiNotebook` (wxWidgets 3.3 or newer), and tabs at the top, at the bottom, on the left or on the right. wxAUI has no vertical tabs (`wxAUI_NB_LEFT` and `wxAUI_NB_RIGHT` are not implemented), so inside it is a `wxAuiNotebook` for the pages and a `GlyphTabBar` for the left and right sides:
+`GlyphBook` is a `wxBookCtrlBase` with tabs at the top, at the bottom, on the left or on the right. It works with wxWidgets 3.2 and newer and does not use `wxAuiNotebook`: inside it is a `GlyphTabBar` (the tabs) and a `wxSimplebook` (the pages):
 ```cpp
 auto *book = new GlyphBook(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
                            wxAUI_NB_DEFAULT_STYLE | wxAUI_NB_LEFT);
 book->SetTheme(theme);                      // colours of a wxTerminalTheme
 book->AddPage(new wxTextCtrl(book->GetPagesParent(), wxID_ANY), "One", true);
-book->Bind(wxEVT_AUINOTEBOOK_PAGE_CHANGED, &MyFrame::OnPage, this);
+book->Bind(wxEVT_BOOKCTRL_PAGE_CHANGED, &MyFrame::OnPage, this);
 book->SetTabPosition(wxRIGHT);              // or change the flags at any time
 ```
-- The tab side is the window style: `wxAUI_NB_TOP`, `wxAUI_NB_BOTTOM`, `wxAUI_NB_LEFT` or `wxAUI_NB_RIGHT`. `SetTabPosition()` changes it
-- The `wxEVT_AUINOTEBOOK_*` events of the notebook are sent again with the book as the event object, and go to the parents of the book. `Veto()` works (a vetoed `wxEVT_AUINOTEBOOK_PAGE_CLOSE` keeps the page)
+- The tab side is the window style: `wxAUI_NB_TOP`, `wxAUI_NB_BOTTOM`, `wxAUI_NB_LEFT` or `wxAUI_NB_RIGHT`. `SetTabPosition()` changes it. The close button flags and `wxAUI_NB_MIDDLE_CLICK_CLOSE` work too; the other `wxAUI_NB_*` flags are ignored
+- The book sends the standard `wxEVT_BOOKCTRL_PAGE_CHANGING` (it can be vetoed) and `wxEVT_BOOKCTRL_PAGE_CHANGED`. The close of a page and the clicks on a tab are `wxEVT_GLYPHBOOK_PAGE_CLOSE` (it can be vetoed), `wxEVT_GLYPHBOOK_PAGE_CLOSED`, `wxEVT_GLYPHBOOK_TAB_RIGHT_UP` and `wxEVT_GLYPHBOOK_TAB_MIDDLE_UP`; all are `wxBookCtrlEvent`
 - Create the pages with `GetPagesParent()` as their parent. Another parent works too, but the page is moved when it is added
-- With tabs on the left or right the book cannot be split: `wxAUI_NB_TAB_SPLIT`, `wxAUI_NB_TAB_MOVE` and `wxAUI_NB_TAB_EXTERNAL_MOVE` are ignored
-- Vertical tabs: a click selects a page, the close button or a middle click closes it, a right click sends `wxEVT_AUINOTEBOOK_TAB_RIGHT_UP`, and dragging a tab moves it. Drag the edge next to the pages to change the width (`SetTabBarWidth()`); the mouse wheel scrolls many tabs
-- `GlyphTabBar` (`GlyphTabBar.h`) is the vertical bar. Use `GlyphBook` instead of using the bar directly
+- A click selects a page, the close button or a middle click closes it, and dragging a tab moves it. Tabs on the top or bottom get narrower when they do not fit, then the bar scrolls (mouse wheel) and a button shows the list of all tabs. Tabs on the left or right are rows: drag the edge next to the pages to change the width (`SetTabBarWidth()`)
+- The pages cannot be split, and a tab cannot be dragged to another book
+- `book->SaveLayout()` returns a `BookLayout` (`BookLayout.h`: label, group and selected for each tab), and `book->RestoreLayout(layout)` applies it. The application stores it
+- `GlyphTabBar` (`GlyphTabBar.h`) is the bar. Use `GlyphBook` instead of using the bar directly
 - In GlyphT, pick "Tab Position" (Top, Bottom, Left or Right) in the settings. It is saved as `tabposition=` in `config.ini`, and the width of the bar as `tabbarwidth=`
 
 #### Terminal Logger (`terminal_logger.h/cpp`)
@@ -196,7 +200,7 @@ GPU-accelerated rendering path (all platforms; enabled by default on Windows and
 #### Using `build.sh`
 
 The script builds everything on all platforms (macOS, Linux, FreeBSD and
-Windows with MSYS2): it first downloads and builds wxWidgets (v3.3.4 by default, with OpenGL
+Windows with MSYS2): it first downloads and builds wxWidgets (v3.2.12 on Windows and v3.3.4 on the other systems by default, with OpenGL
 support) and then builds `glypht`. Everything goes into `.build-release/`. On
 Linux, `configure` is run with `--with-opengl`, so the OpenGL development
 packages must be installed (for example `libgl-dev`); the build stops with an
@@ -283,7 +287,7 @@ Result:
 - Windows: `.build-release/install/bin/glypht.exe`
 
 Environment variables:
-- `WX_VERSION`: wxWidgets tag to build (default: `v3.3.4`)
+- `WX_VERSION`: wxWidgets tag to build (default: `v3.2.12` on Windows, `v3.3.4` on the other systems)
 - `WX_CONFIG`: path to an existing `wx-config`; skips the wxWidgets build (macOS, Linux, FreeBSD)
 - `USE_OPENGL=0|1`: choose the renderer (default: ON on macOS and Windows, OFF on Linux and FreeBSD). On Linux and FreeBSD the option `--opengl` is the same as `USE_OPENGL=1`
 - `MACOS_DEPLOYMENT_TARGET`: macOS deployment target (default: `13.0`)
@@ -546,7 +550,7 @@ This is an open-source project. Contributions are welcome via pull requests.
 - Uses glyph-atlas renderer (GPU-accelerated) for high performance
 - Falls back to wxDC rendering if OpenGL unavailable
 - Default font: Consolas
-- Native appearance option integrates with Windows 11+ dark/light theme
+- Native appearance option integrates with Windows 11+ dark/light theme (wxWidgets 3.3 or newer; build with `WX_VERSION=v3.3.4 ./build.sh` to get it)
 
 ### macOS
 - Uses BSD-style PTY functions from `util.h`

@@ -1,7 +1,5 @@
 #include "GlyphBook.h"
 
-#if wxCHECK_VERSION(3, 3, 0)
-
 #include <algorithm>
 #include <memory>
 #include <vector>
@@ -82,25 +80,26 @@ bool GlyphBook::Create(wxWindow *parent, wxWindowID id, const wxPoint &pos,
 // ----------
 
 void GlyphBook::SetTheme(const wxTerminalTheme &theme, const wxColour &outline,
-                         GlyphTabArt::Style style, const wxColour &barColour) {
+                         GlyphTabPainter::Style style,
+                         const wxColour &barColour) {
   m_theme = theme;
   m_outline = outline;
-  m_artStyle = style;
+  m_tabStyle = style;
   m_barColour = barColour;
   m_themed = true;
-  RebuildArt();
+  RebuildPainter();
 }
 
-void GlyphBook::RebuildArt() {
-  auto art = std::make_unique<GlyphTabArt>(m_theme, m_artStyle);
+void GlyphBook::RebuildPainter() {
+  auto painter = std::make_unique<GlyphTabPainter>(m_theme, m_tabStyle);
   if (m_outline.IsOk()) {
-    art->SetOutlineColour(m_outline);
+    painter->SetOutlineColour(m_outline);
   }
   // Both styles: the bar is the button face, unless a colour is given.
-  art->SetBarColour(m_barColour.IsOk()
-                        ? m_barColour
-                        : wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE));
-  ApplyArt(std::move(art));
+  painter->SetBarColour(
+      m_barColour.IsOk() ? m_barColour
+                         : wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE));
+  ApplyPainter(std::move(painter));
 }
 
 void GlyphBook::OnSysColourChanged(wxSysColourChangedEvent &event) {
@@ -108,19 +107,19 @@ void GlyphBook::OnSysColourChanged(wxSysColourChangedEvent &event) {
   // The button face changes with the appearance of the app, so the bar of the
   // tabs must be made again.
   if (m_themed && !m_barColour.IsOk()) {
-    RebuildArt();
+    RebuildPainter();
   }
 }
 
-void GlyphBook::SetArtProvider(GlyphTabArt *art) {
-  wxCHECK_RET(art, wxS("the tab art must not be null"));
-  // The art is the one of the application now: it is not made again.
+void GlyphBook::SetPainter(GlyphTabPainter *painter) {
+  wxCHECK_RET(painter, wxS("the tab painter must not be null"));
+  // The painter is the one of the application now: it is not made again.
   m_themed = false;
-  ApplyArt(std::unique_ptr<GlyphTabArt>(art));
+  ApplyPainter(std::unique_ptr<GlyphTabPainter>(painter));
 }
 
-void GlyphBook::ApplyArt(std::unique_ptr<GlyphTabArt> art) {
-  m_tabBar->SetArt(std::move(art));
+void GlyphBook::ApplyPainter(std::unique_ptr<GlyphTabPainter> painter) {
+  m_tabBar->SetPainter(std::move(painter));
   DoInvalidateBestSize();
   Layout();
 }
@@ -515,5 +514,3 @@ void GlyphBook::RestoreLayout(const BookLayout &layout) {
     SetSelection(static_cast<size_t>(selected));
   }
 }
-
-#endif // wxCHECK_VERSION(3, 3, 0)

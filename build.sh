@@ -12,8 +12,13 @@ DO_PACKAGE=0
 # Version used by the "package" target. Empty: use the default of each package.
 GLYPHT_VERSION=${GLYPHT_VERSION:-}
 
-# The wxWidgets tag to build. Override with WX_VERSION.
-WX_VERSION=${WX_VERSION:-v3.3.4}
+# The wxWidgets tag to build. Override with WX_VERSION. Windows uses wxWidgets
+# 3.2, the other systems 3.3.
+if [[ "${OS_NAME}" == *MINGW* ]]; then
+  WX_VERSION=${WX_VERSION:-v3.2.12}
+else
+  WX_VERSION=${WX_VERSION:-v3.3.4}
+fi
 
 # Set USE_OPENGL=0 or USE_OPENGL=1 to override the CMake default (ON on
 # macOS and Windows, OFF on Linux and FreeBSD).
@@ -141,9 +146,18 @@ function build_wx_widgets_macOS() {
 }
 
 function build_wx_widgets_MSW() {
+  # The version that was built is saved next to the install, so another
+  # WX_VERSION builds again instead of using the old DLLs.
+  local stamp="${WX_INSTALL_DIR}/.wx-version"
   if ls "${WX_INSTALL_DIR}"/lib/clang*/wxmsw*.dll >/dev/null 2>&1; then
-    INFO "wxWidgets DLLs already found in ${WX_INSTALL_DIR}; skipping build"
-    return 0
+    if [ "$(cat "${stamp}" 2>/dev/null)" = "${WX_VERSION}" ]; then
+      INFO "wxWidgets ${WX_VERSION} already found in ${WX_INSTALL_DIR}; skipping build"
+      return 0
+    fi
+    INFO "wxWidgets in ${WX_INSTALL_DIR} is not ${WX_VERSION}; building it again"
+    rm -rf "${WX_INSTALL_DIR:?}"
+    # GlyphT was configured with the old wxWidgets.
+    rm -f "${BUILD_DIR}/CMakeCache.txt"
   fi
 
   fetch_wx_widgets
@@ -153,6 +167,7 @@ function build_wx_widgets_MSW() {
     -DwxBUILD_MONOLITHIC=1 -DwxBUILD_SAMPLES=OFF -DwxUSE_STL=ON \
     -DCMAKE_INSTALL_PREFIX="${WX_INSTALL_DIR}"
   make -j"$(jobs)" install
+  echo "${WX_VERSION}" >"${WX_INSTALL_DIR}/.wx-version"
   cd "${ROOT_DIR}"
 }
 

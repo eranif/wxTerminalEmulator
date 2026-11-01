@@ -35,28 +35,8 @@
 
 using EnvironmentList = terminal::PtyBackend::EnvironmentList;
 
-// The tabbed book of the window. With wxWidgets 3.3 it can have tabs on any
-// side; before that it is a wxAuiNotebook (tabs at the top or at the bottom).
-#if wxCHECK_VERSION(3, 3, 0)
+// The tabbed book of the window: it can have tabs on any side.
 using TabBook = GlyphBook;
-using TabBookEvent = wxBookCtrlEvent;
-#define TAB_BOOK_PAGE_CHANGED wxEVT_BOOKCTRL_PAGE_CHANGED
-#define TAB_BOOK_TAB_RIGHT_UP wxEVT_GLYPHBOOK_TAB_RIGHT_UP
-#else
-using TabBook = wxAuiNotebook;
-using TabBookEvent = wxAuiNotebookEvent;
-#define TAB_BOOK_PAGE_CHANGED wxEVT_AUINOTEBOOK_PAGE_CHANGED
-#define TAB_BOOK_TAB_RIGHT_UP wxEVT_AUINOTEBOOK_TAB_RIGHT_UP
-#endif
-
-// The parent for the pages of @p book.
-inline wxWindow *PagesParentOf(TabBook *book) {
-#if wxCHECK_VERSION(3, 3, 0)
-  return book->GetPagesParent();
-#else
-  return book;
-#endif
-}
 
 #ifndef WXTERMINAL_SVG_SOURCE_PATH
 #define WXTERMINAL_SVG_SOURCE_PATH ""
@@ -106,8 +86,7 @@ class MyTerminal : public wxTerminalViewCtrl {
 public:
   // @p parent is the panel of the tab (see TerminalPanel), which is the page of
   // @p notebook.
-  MyTerminal(wxWindow *parent, TabBook *notebook,
-             const wxString &shellCommand,
+  MyTerminal(wxWindow *parent, TabBook *notebook, const wxString &shellCommand,
              const std::optional<EnvironmentList> &environment,
              std::optional<wxString> workingDirectory = std::nullopt,
              bool showScrollBar = true)
@@ -175,7 +154,7 @@ public:
   TerminalPanel(TabBook *notebook, const wxString &shellCommand,
                 const std::optional<EnvironmentList> &environment,
                 std::optional<wxString> workingDirectory)
-      : wxPanel(PagesParentOf(notebook)) {
+      : wxPanel(notebook->GetPagesParent()) {
     m_terminal = new MyTerminal(this, notebook, shellCommand, environment,
                                 workingDirectory);
     auto *sizer = new wxBoxSizer(wxVERTICAL);

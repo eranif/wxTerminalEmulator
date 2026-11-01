@@ -1,16 +1,12 @@
 #pragma once
 
-// A tabbed book with tabs on any side. It needs wxWidgets 3.3 (see
-// GlyphTabArt); with an older wxWidgets use wxAuiNotebook.
-#include <wx/version.h>
-
-#if wxCHECK_VERSION(3, 3, 0)
-
+// A tabbed book with tabs on any side.
 #include "BookLayout.h"
-#include "GlyphTabArt.h"
 #include "GlyphTabBar.h"
+#include "GlyphTabPainter.h"
 #include "terminal_theme.h"
 #include <functional>
+#include <wx/aui/auibook.h>
 #include <wx/bookctrl.h>
 #include <wx/simplebook.h>
 
@@ -92,10 +88,10 @@ public:
   // Until the first call the tabs use the dark theme.
   void SetTheme(const wxTerminalTheme &theme,
                 const wxColour &outline = wxNullColour,
-                GlyphTabArt::Style style = GlyphTabArt::Style::Pills,
+                GlyphTabPainter::Style style = GlyphTabPainter::Style::Pills,
                 const wxColour &barColour = wxNullColour);
-  // Paint the tabs with @p art. The book takes it.
-  void SetArtProvider(GlyphTabArt *art);
+  // Paint the tabs with @p painter. The book takes it.
+  void SetPainter(GlyphTabPainter *painter);
 
   // The side of the tabs: wxTOP, wxBOTTOM, wxLEFT or wxRIGHT. This is the same
   // as the wxAUI_NB_TOP, wxAUI_NB_BOTTOM, wxAUI_NB_LEFT and wxAUI_NB_RIGHT
@@ -181,13 +177,13 @@ private:
   // Put the bar on its side, and set what it shows.
   void UpdateLayout();
   void OnSize(wxSizeEvent &event);
-  // Make the art again from the stored theme (see SetTheme()).
-  void RebuildArt();
-  // Make the art again when the system colours change (the default bar colour
-  // is the button face).
+  // Make the painter again from the stored theme (see SetTheme()).
+  void RebuildPainter();
+  // Make the painter again when the system colours change (the default bar
+  // colour is the button face).
   void OnSysColourChanged(wxSysColourChangedEvent &event);
-  // Give the art to the bar.
-  void ApplyArt(std::unique_ptr<GlyphTabArt> art);
+  // Give the painter to the bar.
+  void ApplyPainter(std::unique_ptr<GlyphTabPainter> painter);
 
   // Send an event with @p selection (and the old one). Returns false if a
   // handler vetoed it. @p handled tells if a handler processed it.
@@ -207,13 +203,11 @@ private:
   // The window style, with the flags that the base class does not know.
   long m_style{wxAUI_NB_DEFAULT_STYLE};
   int m_tabBarWidth{200};
-  // The last SetTheme() call. The art is made again from it when the system
-  // colours change. Not used after SetArtProvider().
+  // The last SetTheme() call. The painter is made again from it when the system
+  // colours change. Not used after SetPainter().
   wxTerminalTheme m_theme;
   wxColour m_outline;
-  GlyphTabArt::Style m_artStyle{GlyphTabArt::Style::Pills};
+  GlyphTabPainter::Style m_tabStyle{GlyphTabPainter::Style::Pills};
   wxColour m_barColour;
   bool m_themed{false};
 };
-
-#endif // wxCHECK_VERSION(3, 3, 0)

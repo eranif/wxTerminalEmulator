@@ -13,11 +13,10 @@ struct TabOutlineColour {
   wxColour wxTerminalTheme::*member;
 };
 
-/// Where the tabs are. Left and Right need wxWidgets 3.3 (see GlyphTabBar);
-/// with an older wxWidgets they are shown at the top.
+/// Where the tabs are (see GlyphBook).
 enum class TabPosition { Top, Bottom, Left, Right };
 
-/// The look of the tabs (see GlyphTabArt::Style).
+/// The look of the tabs (see GlyphTabPainter::Style).
 enum class TabStyle { Browser, Pills };
 
 struct AppConfig {

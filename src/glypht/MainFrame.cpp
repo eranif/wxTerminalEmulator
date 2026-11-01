@@ -76,18 +76,15 @@ bool TryOpenPath(const wxString &text, const wxString &wd) {
   return true;
 }
 
-// The window style flag of the book for the tab position of the settings. The
-// sides need wxWidgets 3.3 (GlyphBook); before that the tabs are at the top.
+// The window style flag of the book for the tab position of the settings.
 long TabPositionFlag(TabPosition position) {
   switch (position) {
   case TabPosition::Bottom:
     return wxAUI_NB_BOTTOM;
-#if wxCHECK_VERSION(3, 3, 0)
   case TabPosition::Left:
     return wxAUI_NB_LEFT;
   case TabPosition::Right:
     return wxAUI_NB_RIGHT;
-#endif
   default:
     return wxAUI_NB_TOP;
   }
@@ -96,46 +93,12 @@ long TabPositionFlag(TabPosition position) {
 constexpr long kTabPositionFlags =
     wxAUI_NB_TOP | wxAUI_NB_BOTTOM | wxAUI_NB_LEFT | wxAUI_NB_RIGHT;
 
-#if wxCHECK_VERSION(3, 3, 0)
 // The look of the tabs of the settings, as the art of GlyphBook.
-GlyphTabArt::Style TabArtStyle(TabStyle style) {
-  return style == TabStyle::Pills ? GlyphTabArt::Style::Pills
-                                  : GlyphTabArt::Style::Browser;
-}
-#endif
-
-// The layout of the tabs of @p book (see BookLayout). A wxAuiNotebook before
-// wxWidgets 3.3 only has the current tab.
-BookLayout SaveBookLayout(TabBook *book) {
-#if wxCHECK_VERSION(3, 3, 0)
-  return book->SaveLayout();
-#else
-  BookLayout layout;
-  for (size_t i = 0; i < book->GetPageCount(); ++i) {
-    BookLayout::Tab tab;
-    tab.selected = static_cast<int>(i) == book->GetSelection();
-    layout.tabs.push_back(std::move(tab));
-  }
-  return layout;
-#endif
+GlyphTabPainter::Style TabArtStyle(TabStyle style) {
+  return style == TabStyle::Pills ? GlyphTabPainter::Style::Pills
+                                  : GlyphTabPainter::Style::Browser;
 }
 
-void RestoreBookLayout(TabBook *book, const BookLayout &layout) {
-#if wxCHECK_VERSION(3, 3, 0)
-  book->RestoreLayout(layout);
-#else
-  size_t selected = 0;
-  for (size_t i = 0; i < layout.tabs.size(); ++i) {
-    if (layout.tabs[i].selected) {
-      selected = i;
-      break;
-    }
-  }
-  if (selected < book->GetPageCount()) {
-    book->SetSelection(selected);
-  }
-#endif
-}
 } // namespace
 
 MyFrame::MyFrame(const wxCmdLineParser &parser,
@@ -197,7 +160,6 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
 
   m_notebook =
       new TabBook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, nbStyle);
-#if wxCHECK_VERSION(3, 3, 0)
   m_notebook->SetTheme(
       m_config.GetActiveTheme(),
       AppConfig::GetTabOutlineColourOf(m_config.GetActiveTheme(),
@@ -206,7 +168,6 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   m_notebook->SetTabBarWidth(m_config.GetTabBarWidth());
   m_notebook->SetTabBarWidthChangedCallback(
       [this](int width) { m_config.SetTabBarWidth(width); });
-#endif
   m_cliShellCommand = shellCommand;
   m_defaultShellCommand = ResolveDefaultShell();
   m_defaultEnvironment = environment;
@@ -214,7 +175,7 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
 
   // Bound before the tabs are created or restored, so the tab that is selected
   // by RestoreLayout() is handled like any other change of the current tab.
-  m_notebook->Bind(TAB_BOOK_PAGE_CHANGED, [this](TabBookEvent &event) {
+  m_notebook->Bind(wxEVT_BOOKCTRL_PAGE_CHANGED, [this](wxBookCtrlEvent &event) {
     event.Skip();
     if (m_notebook->GetPageCount() == 0) {
       return;
@@ -228,9 +189,10 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
     UpdateProgressStatus();
     UpdateAppSelectionStatus();
   });
-  m_notebook->Bind(TAB_BOOK_TAB_RIGHT_UP, [this](TabBookEvent &event) {
-    CallAfter(&MyFrame::ShowTabMenu, event.GetSelection());
-  });
+  m_notebook->Bind(wxEVT_GLYPHBOOK_TAB_RIGHT_UP,
+                   [this](wxBookCtrlEvent &event) {
+                     CallAfter(&MyFrame::ShowTabMenu, event.GetSelection());
+                   });
 
   // When the user launches with a command or a working directory, honour those
   // and start a single fresh terminal. Otherwise try to restore the previously
@@ -270,7 +232,7 @@ void MyFrame::SaveLayout() {
   // What the book remembers about its tabs: the current one (and the groups,
   // when the book has them).
   // The tabs are in the same order as the pages.
-  const BookLayout book = SaveBookLayout(m_notebook);
+  const BookLayout book = m_notebook->SaveLayout();
 
   // Collect per-tab metadata in page order.
   std::vector<LayoutPersistence::TabInfo> tabs;
@@ -371,7 +333,7 @@ bool MyFrame::RestoreLayout() {
     }
   }
 
-  RestoreBookLayout(m_notebook, book);
+  m_notebook->RestoreLayout(book);
   return m_notebook->GetPageCount() > 0;
 }
 
@@ -693,14 +655,10 @@ void MyFrame::ApplyThemeToAllTabs(const wxTerminalTheme &theme,
       view->Refresh();
     }
   }
-#if wxCHECK_VERSION(3, 3, 0)
   // The tabs use the colours of the theme.
   m_notebook->SetTheme(theme,
                        AppConfig::GetTabOutlineColourOf(theme, outlineColour),
                        TabArtStyle(m_config.GetTabStyle()));
-#else
-  wxUnusedVar(outlineColour);
-#endif
 }
 
 wxTerminalViewCtrl *MyFrame::GetActiveTerminalView() const {
