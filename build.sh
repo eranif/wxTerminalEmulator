@@ -15,7 +15,8 @@ GLYPHT_VERSION=${GLYPHT_VERSION:-}
 # The wxWidgets tag to build. Override with WX_VERSION. Windows uses wxWidgets
 # 3.2, the other systems 3.3.
 if [[ "${OS_NAME}" == *MINGW* ]]; then
-  WX_VERSION=${WX_VERSION:-v3.2.12}
+#  WX_VERSION=${WX_VERSION:-v3.2.12}
+   WX_VERSION=${WX_VERSION:-v3.3.4}
 else
   WX_VERSION=${WX_VERSION:-v3.3.4}
 fi
