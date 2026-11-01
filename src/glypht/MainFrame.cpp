@@ -6,8 +6,6 @@
 #include <wx/image.h>
 #include <wx/msgdlg.h>
 #include <wx/xrc/xmlres.h>
-// The wxAUI layout serializer header (wx/aui/serializer.h) is pulled in
-// conditionally by layout_persistence.h on wxWidgets 3.3.0+.
 
 namespace {
 bool IsDark(const wxColour &c) {
@@ -105,6 +103,39 @@ GlyphTabArt::Style TabArtStyle(TabStyle style) {
                                   : GlyphTabArt::Style::Browser;
 }
 #endif
+
+// The layout of the tabs of @p book (see BookLayout). A wxAuiNotebook before
+// wxWidgets 3.3 only has the current tab.
+BookLayout SaveBookLayout(TabBook *book) {
+#if wxCHECK_VERSION(3, 3, 0)
+  return book->SaveLayout();
+#else
+  BookLayout layout;
+  for (size_t i = 0; i < book->GetPageCount(); ++i) {
+    BookLayout::Tab tab;
+    tab.selected = static_cast<int>(i) == book->GetSelection();
+    layout.tabs.push_back(std::move(tab));
+  }
+  return layout;
+#endif
+}
+
+void RestoreBookLayout(TabBook *book, const BookLayout &layout) {
+#if wxCHECK_VERSION(3, 3, 0)
+  book->RestoreLayout(layout);
+#else
+  size_t selected = 0;
+  for (size_t i = 0; i < layout.tabs.size(); ++i) {
+    if (layout.tabs[i].selected) {
+      selected = i;
+      break;
+    }
+  }
+  if (selected < book->GetPageCount()) {
+    book->SetSelection(selected);
+  }
+#endif
+}
 } // namespace
 
 MyFrame::MyFrame(const wxCmdLineParser &parser,
@@ -164,14 +195,14 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
     nbStyle |= wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS;
   }
 
-  m_notebook = new TabBook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-                           nbStyle);
+  m_notebook =
+      new TabBook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, nbStyle);
 #if wxCHECK_VERSION(3, 3, 0)
-  m_notebook->SetTheme(m_config.GetActiveTheme(),
-                       AppConfig::GetTabOutlineColourOf(
-                           m_config.GetActiveTheme(),
-                           m_config.GetTabOutlineColour()),
-                       TabArtStyle(m_config.GetTabStyle()));
+  m_notebook->SetTheme(
+      m_config.GetActiveTheme(),
+      AppConfig::GetTabOutlineColourOf(m_config.GetActiveTheme(),
+                                       m_config.GetTabOutlineColour()),
+      TabArtStyle(m_config.GetTabStyle()));
   m_notebook->SetTabBarWidth(m_config.GetTabBarWidth());
   m_notebook->SetTabBarWidthChangedCallback(
       [this](int width) { m_config.SetTabBarWidth(width); });
@@ -180,6 +211,26 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   m_defaultShellCommand = ResolveDefaultShell();
   m_defaultEnvironment = environment;
   m_defaultWorkingDirectory = std::move(workingDirectory);
+
+  // Bound before the tabs are created or restored, so the tab that is selected
+  // by RestoreLayout() is handled like any other change of the current tab.
+  m_notebook->Bind(TAB_BOOK_PAGE_CHANGED, [this](TabBookEvent &event) {
+    event.Skip();
+    if (m_notebook->GetPageCount() == 0) {
+      return;
+    }
+    auto page = m_notebook->GetPage(m_notebook->GetSelection());
+    if (page) {
+      m_tabMru.Touch(page);
+      page->SetFocus();
+    }
+    UpdateDirectoryStatus();
+    UpdateProgressStatus();
+    UpdateAppSelectionStatus();
+  });
+  m_notebook->Bind(TAB_BOOK_TAB_RIGHT_UP, [this](TabBookEvent &event) {
+    CallAfter(&MyFrame::ShowTabMenu, event.GetSelection());
+  });
 
   // When the user launches with a command or a working directory, honour those
   // and start a single fresh terminal. Otherwise try to restore the previously
@@ -198,25 +249,6 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   }
 
   Bind(wxEVT_CLOSE_WINDOW, &MyFrame::OnClose, this);
-  m_notebook->Bind(
-      wxEVT_AUINOTEBOOK_PAGE_CHANGED, [this](wxAuiNotebookEvent &event) {
-        event.Skip();
-        if (m_notebook->GetPageCount() == 0) {
-          return;
-        }
-        auto page = m_notebook->GetPage(m_notebook->GetSelection());
-        if (page) {
-          m_tabMru.Touch(page);
-          page->SetFocus();
-        }
-        UpdateDirectoryStatus();
-        UpdateProgressStatus();
-        UpdateAppSelectionStatus();
-      });
-  m_notebook->Bind(wxEVT_AUINOTEBOOK_TAB_RIGHT_UP,
-                   [this](wxAuiNotebookEvent &event) {
-                     CallAfter(&MyFrame::ShowTabMenu, event.GetSelection());
-                   });
   if (GetActiveTerminalView() && !command.empty()) {
     GetActiveTerminalView()->SendCommand(command);
   }
@@ -235,8 +267,12 @@ void MyFrame::SaveLayout() {
     return;
   }
 
-  // Collect per-tab metadata in page order. wxAuiNotebook page indices used by
-  // the AUI serializer below match this same order.
+  // What the book remembers about its tabs: the current one (and the groups,
+  // when the book has them).
+  // The tabs are in the same order as the pages.
+  const BookLayout book = SaveBookLayout(m_notebook);
+
+  // Collect per-tab metadata in page order.
   std::vector<LayoutPersistence::TabInfo> tabs;
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
     auto *terminal = TerminalOf(m_notebook->GetPage(i));
@@ -256,6 +292,10 @@ void MyFrame::SaveLayout() {
       }
     }
     info.customLabel = terminal->GetCustomLabel();
+    if (i < book.tabs.size()) {
+      info.group = book.tabs[i].group;
+      info.selected = book.tabs[i].selected;
+    }
     tabs.push_back(std::move(info));
   }
 
@@ -264,29 +304,7 @@ void MyFrame::SaveLayout() {
     return;
   }
 
-  // Capture the AUI tab-control arrangement (split tab controls, ordering and
-  // active page) on top of the metadata. This requires the wxWidgets 3.3.0
-  // layout serialization API; on older versions only the tab metadata is saved.
-  std::vector<wxString> tabControlLines;
-#if WXTERMINAL_HAS_AUI_SERIALIZATION
-  LayoutSerializer serializer;
-  try {
-    m_notebook->SaveLayout(wxString{}, serializer);
-    tabControlLines = serializer.GetLines();
-  } catch (...) {
-    // SaveLayout() propagates serializer exceptions; ours never throw, but be
-    // defensive and still persist the tab metadata.
-  }
-#endif
-
-  // Remember the active tab by its title so it can be reselected on restore.
-  wxString activeTitle;
-  const int sel = m_notebook->GetSelection();
-  if (sel != wxNOT_FOUND) {
-    activeTitle = m_notebook->GetPageText(static_cast<size_t>(sel));
-  }
-
-  SaveLayoutFile(tabs, tabControlLines, activeTitle, GetSize());
+  SaveLayoutFile(tabs, GetSize());
 }
 
 bool MyFrame::RestoreLayout() {
@@ -304,6 +322,8 @@ bool MyFrame::RestoreLayout() {
     CentreOnScreen();
   }
 
+  // The layout of the book: one entry for each tab that was created, in order.
+  BookLayout book;
   for (const auto &tab : layout->tabs) {
     std::optional<wxString> cwd;
     if (!tab.workingDirectory.empty() && wxDirExists(tab.workingDirectory)) {
@@ -320,45 +340,38 @@ bool MyFrame::RestoreLayout() {
     }
     MyTerminal *page =
         CreateTerminalPage({shell, m_defaultEnvironment, cwd}, false);
-    if (page && !tab.customLabel.empty()) {
+    if (!page) {
+      continue;
+    }
+    if (!tab.customLabel.empty()) {
       page->SetTabLabel(tab.customLabel);
     }
+    BookLayout::Tab entry;
+    entry.group = tab.group;
+    entry.selected = tab.selected;
+    book.tabs.push_back(std::move(entry));
   }
 
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
     m_notebook->GetPage(i)->SetFocus();
   }
 
-  // Reselect the previously active tab by title. When several tabs share the
-  // same title the first match wins.
-  wxTerminalViewCtrl *activeTab{nullptr};
-  if (!layout->activeTitle.empty()) {
-    for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
-      auto page = m_notebook->GetPage(i);
+  // A file of an older version has the title of the current tab and no mark.
+  // The first tab with that title is the current one.
+  const bool marked =
+      std::any_of(book.tabs.begin(), book.tabs.end(),
+                  [](const BookLayout::Tab &tab) { return tab.selected; });
+  if (!marked && !layout->activeTitle.empty()) {
+    for (size_t i = 0; i < book.tabs.size() && i < m_notebook->GetPageCount();
+         ++i) {
       if (m_notebook->GetPageText(i) == layout->activeTitle) {
-        page->CallAfter(&wxWindow::SetFocus);
-        activeTab = TerminalOf(page);
+        book.tabs[i].selected = true;
         break;
       }
     }
   }
 
-  // Re-apply the saved tab-control arrangement now that all pages exist. Only
-  // available with the wxWidgets 3.3.0 layout serialization API.
-#if WXTERMINAL_HAS_AUI_SERIALIZATION
-  if (!layout->tabControlLines.empty()) {
-    LayoutDeserializer deserializer(layout->tabControlLines);
-    try {
-      m_notebook->LoadLayout(wxString{}, deserializer);
-    } catch (...) {
-      // Keep the freshly created tabs even if the arrangement can't be applied.
-    }
-  }
-#endif
-
-  if (m_notebook->GetPageCount()) {
-    m_notebook->SetSelection(0);
-  }
+  RestoreBookLayout(m_notebook, book);
   return m_notebook->GetPageCount() > 0;
 }
 

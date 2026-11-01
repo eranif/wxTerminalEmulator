@@ -7,8 +7,29 @@
 #if wxCHECK_VERSION(3, 3, 0)
 
 #include "terminal_theme.h"
+#include <vector>
 #include <wx/aui/auibook.h>
 #include <wx/aui/tabart.h>
+
+/**
+ * @brief What GlyphTabArt needs to draw and measure one tab.
+ *
+ * It is a plain struct, so tabs can be drawn without a wxAuiNotebook (see
+ * GlyphTabBar). The art gives back the rectangles after it draws the tab.
+ */
+struct GlyphTabInfo {
+  wxString caption;
+  wxString tooltip;
+  wxBitmapBundle bitmap;
+  bool active{false};
+  // The tab is under the mouse.
+  bool hover{false};
+  // The buttons at the end of the tab (the close button). Set curState to
+  // show a hovered or pressed button.
+  std::vector<wxAuiTabContainerButton> buttons;
+  // Where the tab was drawn.
+  wxRect rect;
+};
 
 /**
  * @brief Tabs painted with the colours of the terminal theme.
@@ -27,7 +48,7 @@
  * hovered tab (see SetBarColour()). Only the shape and the outline differ.
  *
  * The art draws the tabs of a wxAuiNotebook (at the top or at the bottom), and
- * the tabs of a vertical GlyphTabBar (see DrawVerticalTab()). The shapes are
+ * the tabs of a GlyphTabBar (see DrawTab()). The shapes are
  * anti-aliased when a wxGraphicsContext is available.
  *
  * The art does not follow the system colours. To change the colours, for
@@ -68,31 +89,39 @@ public:
   // again.
   void UpdateColoursFromSystem() override { InitBitmaps(); }
 
+  // The functions below draw and measure tabs without a wxAuiNotebook (see
+  // GlyphTabBar). The ones above are for a wxAuiNotebook, and use these.
+
   /**
-   * Draw a tab of a vertical tab bar. @p rect is the whole row of the tab, as
-   * wide as the bar. @p inner is the side of the bar next to the terminal:
-   * wxRIGHT for a bar on the left of the terminal, wxLEFT for a bar on the
-   * right. Sets page.rect and the rectangles of the buttons of @p page (an
-   * empty rectangle for a button that is not shown).
+   * Draw a tab in @p rect. @p inner is the side of the tab next to the
+   * terminal: wxBOTTOM for tabs above the terminal, wxTOP for tabs below it,
+   * wxRIGHT for a bar on the left, wxLEFT for a bar on the right. Sets
+   * tab.rect and the rectangles of the buttons of @p tab (an empty rectangle
+   * for a button that is not shown).
    */
-  void DrawVerticalTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
-                       const wxRect &rect, wxDirection inner);
-  // The background of a vertical tab bar (@p rect), with the line along its
-  // side @p inner, next to the terminal. Use it instead of DrawBackground().
-  void DrawVerticalBackground(wxDC &dc, wxWindow *wnd, const wxRect &rect,
-                              wxDirection inner);
+  void DrawTab(wxDC &dc, wxWindow *wnd, GlyphTabInfo &tab, const wxRect &rect,
+               wxDirection inner);
+  // The background of a tab bar (@p rect), with the line along its side
+  // @p inner, next to the terminal.
+  void DrawBarBackground(wxDC &dc, wxWindow *wnd, const wxRect &rect,
+                         wxDirection inner);
+  // The button that opens the list of the tabs, in @p rect. @p hot is true
+  // while the mouse is on it.
+  void DrawDropDownButton(wxDC &dc, wxWindow *wnd, const wxRect &rect,
+                          bool hot);
+  // The size of a tab in a horizontal bar.
+  wxSize GetTabSize(wxReadOnlyDC &dc, wxWindow *wnd, const GlyphTabInfo &tab);
   // The height of a row of a vertical tab bar.
   int GetVerticalTabHeight(wxReadOnlyDC &dc, wxWindow *wnd,
-                           const wxAuiNotebookPage &page);
-  // The width a vertical tab needs to show all of its label.
-  int GetVerticalTabWidth(wxReadOnlyDC &dc, wxWindow *wnd,
-                          const wxAuiNotebookPage &page);
+                           const GlyphTabInfo &tab);
 
 private:
   GlyphTabArt(const GlyphTabArt &other) = default;
 
   wxColour GetButtonColour(wxAuiButtonId button,
                            wxAuiPaneButtonState state) const override;
+  // The data of a page of a wxAuiNotebook.
+  static GlyphTabInfo InfoOf(const wxAuiNotebookPage &page);
 
   // The part of the row @p rect that is painted. @p inner is the side next to
   // the terminal.
@@ -100,20 +129,20 @@ private:
                       wxDirection inner) const;
   // The background of a tab: a pill, or a browser tab that goes into the
   // terminal on the side @p inner.
-  void DrawShape(wxDC &dc, wxWindow *wnd, const wxAuiNotebookPage &page,
+  void DrawShape(wxDC &dc, wxWindow *wnd, const GlyphTabInfo &tab,
                  const wxRect &shape, wxDirection inner) const;
   // The icon, the label and the buttons of a tab inside @p shape.
-  void DrawContent(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
+  void DrawContent(wxDC &dc, wxWindow *wnd, GlyphTabInfo &tab,
                    const wxRect &shape);
   // The buttons at the end of @p shape. Returns the x where they start (the
   // end of the room of the label), or the end of @p shape without buttons.
-  int DrawButtons(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
+  int DrawButtons(wxDC &dc, wxWindow *wnd, GlyphTabInfo &tab,
                   const wxRect &shape);
-  // The width of the buttons of @p page, or 0 without buttons.
-  int GetButtonsWidth(wxWindow *wnd, const wxAuiNotebookPage &page) const;
+  // The width of the buttons of @p tab, or 0 without buttons.
+  int GetButtonsWidth(wxWindow *wnd, const GlyphTabInfo &tab) const;
   // The size of the icon, the label and the buttons, without the padding.
   wxSize GetContentSize(wxReadOnlyDC &dc, wxWindow *wnd,
-                        const wxAuiNotebookPage &page) const;
+                        const GlyphTabInfo &tab) const;
 
   Style m_style;
   wxColour m_bgBar;      // Behind the tabs.

@@ -6,20 +6,35 @@
 
 #if wxCHECK_VERSION(3, 3, 0)
 
+#include "BookLayout.h"
 #include "GlyphTabArt.h"
 #include "GlyphTabBar.h"
 #include "terminal_theme.h"
 #include <functional>
-#include <wx/aui/auibook.h>
 #include <wx/bookctrl.h>
+#include <wx/simplebook.h>
+
+// Events of GlyphBook that the standard book events do not have. They are
+// wxBookCtrlEvent, with GetSelection() the index of the tab.
+//
+// - PAGE_CLOSE: the user asks to close a page (close button, or a middle click
+//   with wxAUI_NB_MIDDLE_CLICK_CLOSE). Veto() keeps the page.
+// - PAGE_CLOSED: the page was closed.
+//   Like with wxAuiNotebook, these two are sent only for a close by the user.
+//   DeletePage() and RemovePage() send neither of them.
+// - TAB_RIGHT_UP, TAB_MIDDLE_UP: a click on a tab. A handler of TAB_MIDDLE_UP
+//   that does not Skip() stops the close of the middle click.
+wxDECLARE_EVENT(wxEVT_GLYPHBOOK_PAGE_CLOSE, wxBookCtrlEvent);
+wxDECLARE_EVENT(wxEVT_GLYPHBOOK_PAGE_CLOSED, wxBookCtrlEvent);
+wxDECLARE_EVENT(wxEVT_GLYPHBOOK_TAB_RIGHT_UP, wxBookCtrlEvent);
+wxDECLARE_EVENT(wxEVT_GLYPHBOOK_TAB_MIDDLE_UP, wxBookCtrlEvent);
 
 /**
  * @brief A book control with tabs at the top, at the bottom, on the left or on
  *        the right, painted with the colours of a terminal theme.
  *
- * It has the API and the events of a wxAuiNotebook. Inside, it is a
- * wxAuiNotebook (the pages) and, for the left and right sides, a GlyphTabBar
- * (wxAUI has no vertical tabs). Use it like the notebook:
+ * Inside, it is a GlyphTabBar (the tabs) and a wxSimplebook (the pages). It
+ * does not use wxAuiNotebook. Use it like a book control:
  *
  * @code
  * auto *book = new GlyphBook(parent, wxID_ANY, wxDefaultPosition,
@@ -27,22 +42,23 @@
  *                            wxAUI_NB_DEFAULT_STYLE | wxAUI_NB_LEFT);
  * book->SetTheme(theme);
  * book->AddPage(new wxTextCtrl(book->GetPagesParent(), wxID_ANY), "One", true);
- * book->Bind(wxEVT_AUINOTEBOOK_PAGE_CHANGED, &MyFrame::OnPage, this);
+ * book->Bind(wxEVT_BOOKCTRL_PAGE_CHANGED, &MyFrame::OnPage, this);
  * @endcode
  *
- * **Tab position.** The window style tells where the tabs are: wxAUI_NB_TOP,
- * wxAUI_NB_BOTTOM, wxAUI_NB_LEFT or wxAUI_NB_RIGHT (the last two are not
- * implemented by wxAuiNotebook). SetTabPosition() changes it at any time. With
- * tabs on the left or right the book cannot be split: wxAUI_NB_TAB_SPLIT,
- * wxAUI_NB_TAB_MOVE and wxAUI_NB_TAB_EXTERNAL_MOVE are ignored, and the pages
- * are put in one tab control. The other flags (the close buttons, the middle
- * click) work on all sides.
+ * **Tab position and style.** The window style tells where the tabs are:
+ * wxAUI_NB_TOP, wxAUI_NB_BOTTOM, wxAUI_NB_LEFT or wxAUI_NB_RIGHT.
+ * SetTabPosition() changes it at any time. The close buttons
+ * (wxAUI_NB_CLOSE_ON_ACTIVE_TAB, wxAUI_NB_CLOSE_ON_ALL_TABS) and
+ * wxAUI_NB_MIDDLE_CLICK_CLOSE work on all sides. The other wxAUI_NB_* flags
+ * are ignored: the pages cannot be split, and a tab cannot be dragged to
+ * another book, only to another place of the same bar.
  *
- * **Events.** The wxEVT_AUINOTEBOOK_* events of the inner notebook are sent
- * again with the book as the event object and the id of the book, and then go
- * to the parents of the book, as with a wxAuiNotebook. Veto() and Allow() of
- * the handlers reach the notebook (a vetoed wxEVT_AUINOTEBOOK_PAGE_CLOSE keeps
- * the page). The events from the tab bar are the same.
+ * **Events.** The book sends the standard wxEVT_BOOKCTRL_PAGE_CHANGING (it can
+ * be vetoed) and wxEVT_BOOKCTRL_PAGE_CHANGED when the user or SetSelection()
+ * changes the page; ChangeSelection() sends none. When the current page is
+ * deleted, the next tab is selected and only PAGE_CHANGED is sent (the old tab
+ * is gone, so there is nothing to veto). The events for closing a page
+ * and for the clicks on the tabs are the wxEVT_GLYPHBOOK_* events above.
  *
  * **Pages.** Create a page with GetPagesParent() as its parent. A page with
  * another parent (for example the book) is moved to GetPagesParent() when it
@@ -57,7 +73,7 @@ public:
             const wxSize &size = wxDefaultSize,
             long style = wxAUI_NB_DEFAULT_STYLE,
             const wxString &name = wxS("GlyphBook"));
-  ~GlyphBook() override;
+  ~GlyphBook() override = default;
 
   bool Create(wxWindow *parent, wxWindowID id = wxID_ANY,
               const wxPoint &pos = wxDefaultPosition,
@@ -78,7 +94,7 @@ public:
                 const wxColour &outline = wxNullColour,
                 GlyphTabArt::Style style = GlyphTabArt::Style::Pills,
                 const wxColour &barColour = wxNullColour);
-  // Paint the tabs with @p art. The book takes it, like wxAuiNotebook does.
+  // Paint the tabs with @p art. The book takes it.
   void SetArtProvider(GlyphTabArt *art);
 
   // The side of the tabs: wxTOP, wxBOTTOM, wxLEFT or wxRIGHT. This is the same
@@ -98,14 +114,14 @@ public:
   void SetTabBarWidthChangedCallback(std::function<void(int)> callback);
 
   // The parent for the pages (see above).
-  wxWindow *GetPagesParent() const { return m_notebook; }
-  // The notebook inside. Use it to read things that the book does not forward;
-  // do not change its window style, its tab height or its tab art.
-  wxAuiNotebook *GetNotebook() const { return m_notebook; }
+  wxWindow *GetPagesParent() const { return m_pages; }
+  // The bar of the tabs.
+  GlyphTabBar *GetTabBar() const { return m_tabBar; }
 
   // Pages
   // -----
 
+  // The pages are in the order of their tabs.
   bool AddPage(wxWindow *page, const wxString &caption, bool select = false,
                const wxBitmapBundle &bitmap = wxBitmapBundle());
   bool InsertPage(size_t pageIdx, wxWindow *page, const wxString &caption,
@@ -140,6 +156,7 @@ public:
   void SetPageSize(const wxSize &size) override;
 
   int GetSelection() const override;
+  // Both return the old selection. SetSelection() sends the events.
   int SetSelection(size_t page) override;
   int ChangeSelection(size_t page) override;
 
@@ -147,42 +164,47 @@ public:
   // book), or wxNOT_FOUND.
   int HitTest(const wxPoint &pt, long *flags = nullptr) const override;
 
-  // Move the page to a new tab control on the side @p direction (wxLEFT,
-  // wxRIGHT, wxTOP or wxBOTTOM). Does nothing with tabs on the left or right.
-  void Split(size_t page, int direction);
-  void UnsplitAll();
-
-  // Save and load the order and the split of the tabs (see wxAuiNotebook).
-  void SaveLayout(const wxString &name, wxAuiBookSerializer &serializer) const;
-  void LoadLayout(const wxString &name, wxAuiBookDeserializer &deserializer);
+  // The layout of the tabs, in their order (see BookLayout).
+  BookLayout SaveLayout() const;
+  // Apply @p layout to the tabs that are in the book. The i-th entry is for
+  // the i-th tab, so add the pages in the saved order first. Extra entries or
+  // extra tabs are ignored. The selected entry becomes the current tab (with
+  // the page events).
+  void RestoreLayout(const BookLayout &layout);
 
 protected:
   wxWindow *DoRemovePage(size_t page) override;
   wxSize DoGetBestSize() const override;
-  void OnChildFocus(wxChildFocusEvent& event);
 
 private:
   void Init();
-  // The window style of the notebook inside.
-  long GetNotebookStyle() const;
-  // Show the tab bar or the tabs of the notebook, and put the bar on its side.
+  // Put the bar on its side, and set what it shows.
   void UpdateLayout();
-  // Update the tab bar after a change that sends no notebook event.
-  void SyncTabBar();
-  // Send an event of the notebook again as an event of the book.
-  void ForwardEvent(wxAuiNotebookEvent &event);
   void OnSize(wxSizeEvent &event);
   // Make the art again from the stored theme (see SetTheme()).
   void RebuildArt();
   // Make the art again when the system colours change (the default bar colour
   // is the button face).
   void OnSysColourChanged(wxSysColourChangedEvent &event);
-  // Give the art to the bar and the notebook.
-  void ApplyArt(GlyphTabArt *art);
+  // Give the art to the bar.
+  void ApplyArt(std::unique_ptr<GlyphTabArt> art);
 
-  wxAuiNotebook *m_notebook{nullptr};
+  // Send an event with @p selection (and the old one). Returns false if a
+  // handler vetoed it. @p handled tells if a handler processed it.
+  bool SendEvent(wxEventType type, int selection,
+                 int oldSelection = wxNOT_FOUND, bool *handled = nullptr);
+  int DoSetSelection(size_t page, bool sendEvents);
+  // Show the page window of the tab @p index in the pages.
+  void ShowPage(int index);
+  // Remove the tab and the page. A page that is not destroyed is not a child of
+  // the pages any more. Selects the tab next to the removed one.
+  wxWindow *RemoveTab(size_t index, bool destroy);
+  // Ask the application, then close the page.
+  void ClosePage(size_t index);
+
+  wxSimplebook *m_pages{nullptr};
   GlyphTabBar *m_tabBar{nullptr};
-  // The window style, with the flags the notebook does not know.
+  // The window style, with the flags that the base class does not know.
   long m_style{wxAUI_NB_DEFAULT_STYLE};
   int m_tabBarWidth{200};
   // The last SetTheme() call. The art is made again from it when the system

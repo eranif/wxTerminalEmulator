@@ -4,26 +4,14 @@
 #include <vector>
 #include <wx/gdicmn.h>
 #include <wx/string.h>
-#include <wx/version.h>
 
-// wxAuiNotebook layout serialization (SaveLayout/LoadLayout and the
-// wxAuiBookSerializer / wxAuiBookDeserializer interfaces) is only available in
-// wxWidgets 3.3.0 and later.
-#define WXTERMINAL_HAS_AUI_SERIALIZATION wxCHECK_VERSION(3, 3, 0)
-
-#if WXTERMINAL_HAS_AUI_SERIALIZATION
-#include <wx/aui/serializer.h>
-#endif
-
-// Persists the terminal notebook layout across application runs.
+// Persists the terminal tabs across application runs.
 //
-// Two kinds of state are stored:
-//   1. Per-tab metadata (shell command, working directory, custom label) which
-//      is required to recreate the terminals themselves. The wxAUI serializer
-//      does not capture this - it only knows about page indices.
-//   2. The wxAuiNotebook tab-control arrangement (split tab controls, page
-//      order within each control and the active page), captured through the
-//      standard wxAuiBookSerializer / wxAuiBookDeserializer interfaces.
+// For each tab it stores what is needed to recreate the terminal (shell,
+// working directory, custom label) and what the book remembers about the tab
+// (whether it is the current one, and its group, see BookLayout; groups are
+// not implemented yet, so the group is always empty). The tabs are
+// in the order of the book.
 //
 // The layout is written to ~/.wxterminal/layout.conf as a small line-based
 // text file so it stays human-readable and easy to evolve.
@@ -34,6 +22,11 @@ public:
     wxString shellCommand;
     wxString workingDirectory;
     wxString customLabel;
+    // The group of the tab, empty for none. Reserved: the book has no groups
+    // yet, so this is always empty.
+    wxString group;
+    // True for the current tab.
+    bool selected{false};
   };
 
   static wxString GetLayoutPath();
@@ -42,46 +35,12 @@ public:
   static void Clear();
 };
 
-#if WXTERMINAL_HAS_AUI_SERIALIZATION
-// Serializer that captures the wxAuiNotebook tab-control layout into the
-// line-based format understood by LayoutDeserializer.
-//
-// Only the notebook (book) portion of the wxAuiSerializer interface is used;
-// the application does not employ floating/docked panes.
-class LayoutSerializer : public wxAuiBookSerializer {
-public:
-  void BeforeSaveNotebook(const wxString &name) override;
-  void SaveNotebookTabControl(const wxAuiTabLayoutInfo &tab) override;
-
-  // The accumulated, ready-to-write layout lines.
-  const std::vector<wxString> &GetLines() const { return m_lines; }
-
-private:
-  std::vector<wxString> m_lines;
-};
-
-// Deserializer that reads the tab-control layout produced by LayoutSerializer
-// and feeds it back to wxAuiNotebook::LoadLayout().
-class LayoutDeserializer : public wxAuiBookDeserializer {
-public:
-  explicit LayoutDeserializer(std::vector<wxString> tabControlLines)
-      : m_lines(std::move(tabControlLines)) {}
-
-  std::vector<wxAuiTabLayoutInfo>
-  LoadNotebookTabs(const wxString &name) override;
-
-private:
-  std::vector<wxString> m_lines;
-};
-#endif // WXTERMINAL_HAS_AUI_SERIALIZATION
-
 // Parsed contents of a layout file.
 struct LayoutFile {
   std::vector<LayoutPersistence::TabInfo> tabs;
-  // Raw "tabcontrol=" lines, passed through to LayoutDeserializer.
-  std::vector<wxString> tabControlLines;
-  // Title of the tab that was active on save. When several tabs share this
-  // title the first one is selected on restore. Empty if unknown.
+  // Title of the current tab, from a file of an older version that did not mark
+  // the tab. When several tabs share this title the first one is selected on
+  // restore. Empty if unknown.
   wxString activeTitle;
   // Size of the main frame on save, if it was stored.
   std::optional<wxSize> frameSize;
@@ -92,6 +51,5 @@ struct LayoutFile {
 // Free functions doing the actual file IO. Kept separate from the frame so the
 // serialization logic can be unit tested in isolation.
 bool SaveLayoutFile(const std::vector<LayoutPersistence::TabInfo> &tabs,
-                    const std::vector<wxString> &tabControlLines,
-                    const wxString &activeTitle, const wxSize &frameSize);
+                    const wxSize &frameSize);
 std::optional<LayoutFile> LoadLayoutFile();

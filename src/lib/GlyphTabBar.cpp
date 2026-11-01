@@ -3,45 +3,68 @@
 #if wxCHECK_VERSION(3, 3, 0)
 
 #include <algorithm>
+#include <cstdlib>
 #include <wx/dcbuffer.h>
 #include <wx/dcclient.h>
+#include <wx/menu.h>
 #include <wx/popupwin.h>
 #include <wx/settings.h>
+#include <wx/utils.h>
 #include <wx/wupdlock.h>
 
 namespace {
 
-// In DIPs: the limits of the width of the bar, and the width of the edge that
-// resizes it.
+// In DIPs: the limits of the width of a vertical bar, and the width of the edge
+// that resizes it.
 constexpr int kMinWidth = 80;
 constexpr int kMaxWidth = 600;
 constexpr int kResizeEdge = 5;
+// The narrowest a tab of a horizontal bar gets before the bar scrolls.
+constexpr int kMinTabWidth = 72;
+// The width of the button with the list of tabs.
+constexpr int kListWidth = 28;
+// How far the mouse must go, in DIPs, before a tab is dragged.
+constexpr int kDragDistance = 5;
+// How far one turn of the wheel scrolls a horizontal bar, in DIPs.
+constexpr int kWheelStep = 60;
 
-// The icon of the page `index` as the bundle that the notebook has. The bundle
-// scales with the display; wxAuiNotebook::GetPageBitmap() gives a bitmap of the
-// default size, which does not. A page that is not in the main tab control of
-// the notebook (a split notebook) gets that bitmap.
-wxBitmapBundle IconOf(wxAuiNotebook *notebook, size_t index) {
-  wxWindow *window = notebook->GetPage(index);
-  if (wxAuiTabCtrl *ctrl = notebook->GetMainTabCtrl()) {
-    for (size_t i = 0; i < ctrl->GetPageCount(); ++i) {
-      if (ctrl->GetPage(i).window == window) {
-        return ctrl->GetPage(i).bitmap;
+// Make the widths fit in @p room: a tab narrower than its fair share keeps its
+// width, the others share the rest, but none gets narrower than @p minWidth
+// (or than it was).
+void ShrinkWidths(std::vector<int> &widths, int room, int minWidth) {
+  std::vector<bool> fixed(widths.size(), false);
+  size_t flexible = widths.size();
+  int remaining = room;
+  for (bool changed = true; changed && flexible;) {
+    changed = false;
+    const int share = remaining / static_cast<int>(flexible);
+    for (size_t i = 0; i < widths.size(); ++i) {
+      if (!fixed[i] && widths[i] <= share) {
+        fixed[i] = true;
+        remaining -= widths[i];
+        --flexible;
+        changed = true;
       }
     }
   }
-  const wxBitmap bitmap = notebook->GetPageBitmap(index);
-  return bitmap.IsOk() ? wxBitmapBundle::FromBitmap(bitmap) : wxBitmapBundle{};
+  if (!flexible) {
+    return;
+  }
+  const int share = remaining / static_cast<int>(flexible);
+  for (size_t i = 0; i < widths.size(); ++i) {
+    if (!fixed[i]) {
+      widths[i] = std::max(share, std::min(widths[i], minWidth));
+    }
+  }
 }
 
 } // namespace
 
-GlyphTabBar::GlyphTabBar(wxWindow *parent, wxAuiNotebook *notebook, int width)
+GlyphTabBar::GlyphTabBar(wxWindow *parent, int width)
     : wxWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
                wxFULL_REPAINT_ON_RESIZE | wxBORDER_NONE),
-      m_notebook{notebook}, m_width{std::clamp(width, kMinWidth, kMaxWidth)} {
+      m_width{std::clamp(width, kMinWidth, kMaxWidth)} {
   SetBackgroundStyle(wxBG_STYLE_PAINT);
-  SetMinSize(wxSize(FromDIP(m_width), -1));
 
   Bind(wxEVT_PAINT, &GlyphTabBar::OnPaint, this);
   Bind(wxEVT_SIZE, &GlyphTabBar::OnSize, this);
@@ -54,14 +77,7 @@ GlyphTabBar::GlyphTabBar(wxWindow *parent, wxAuiNotebook *notebook, int width)
   Bind(wxEVT_RIGHT_UP, &GlyphTabBar::OnRightUp, this);
   Bind(wxEVT_MOUSEWHEEL, &GlyphTabBar::OnWheel, this);
   Bind(wxEVT_MOUSE_CAPTURE_LOST, &GlyphTabBar::OnCaptureLost, this);
-  Bind(wxEVT_IDLE, &GlyphTabBar::OnIdle, this);
   Bind(wxEVT_DPI_CHANGED, &GlyphTabBar::OnDpiChanged, this);
-
-  // These are unbound when the bar is destroyed.
-  notebook->Bind(wxEVT_AUINOTEBOOK_PAGE_CHANGED,
-                 &GlyphTabBar::OnNotebookChanged, this);
-  notebook->Bind(wxEVT_AUINOTEBOOK_PAGE_CLOSED, &GlyphTabBar::OnNotebookChanged,
-                 this);
 }
 
 void GlyphTabBar::SetArt(std::unique_ptr<GlyphTabArt> art) {
@@ -69,18 +85,45 @@ void GlyphTabBar::SetArt(std::unique_ptr<GlyphTabArt> art) {
   if (m_art) {
     m_art->SetNormalFont(GetFont());
   }
+  UpdateMinSize();
   LayoutTabs();
   Refresh();
 }
 
 void GlyphTabBar::SetSide(wxDirection side) {
-  m_side = side == wxRIGHT ? wxRIGHT : wxLEFT;
+  m_side =
+      (side == wxLEFT || side == wxRIGHT || side == wxBOTTOM) ? side : wxTOP;
+  m_scroll = 0;
+  SetCursor(wxNullCursor);
+  UpdateMinSize();
+  LayoutTabs();
+  Refresh();
+}
+
+wxDirection GlyphTabBar::GetInnerSide() const {
+  switch (m_side) {
+  case wxLEFT:
+    return wxRIGHT;
+  case wxRIGHT:
+    return wxLEFT;
+  case wxBOTTOM:
+    return wxTOP;
+  default:
+    return wxBOTTOM;
+  }
+}
+
+void GlyphTabBar::SetCloseButtons(bool onAllTabs, bool onActiveTab) {
+  m_closeOnAll = onAllTabs;
+  m_closeOnActive = onActiveTab;
+  UpdateButtons();
+  LayoutTabs();
   Refresh();
 }
 
 int GlyphTabBar::ClampWidth(int width) const {
   width = std::clamp(width, kMinWidth, kMaxWidth);
-  // Keep half of the parent for the notebook.
+  // Keep half of the parent for the pages.
   if (GetParent()) {
     const int half = ToDIP(GetParent()->GetClientSize().x / 2);
     if (half >= kMinWidth) {
@@ -111,18 +154,11 @@ void GlyphTabBar::MoveGuide() {
   }
 }
 
-void GlyphTabBar::SetBarWidth(int width) {
-  width = ClampWidth(width);
-  if (width == m_width && GetMinSize().x == FromDIP(width)) {
-    return;
-  }
-  m_width = width;
-  SetMinSize(wxSize(FromDIP(m_width), -1));
-
-  // A drag sends many mouse events. A layout resizes the notebook, the pages
-  // and the terminals, which is slow and flickers when it runs for each event.
-  // So run one layout after the events that are waiting, with the parent
-  // frozen so the changes are shown together.
+void GlyphTabBar::RequestParentLayout() {
+  // A layout resizes the pages and the terminals, which is slow and flickers
+  // when it runs for each mouse event of a drag. So run one layout after the
+  // events that are waiting, with the parent frozen so the changes are shown
+  // together.
   if (GetParent() && !m_layoutPending) {
     m_layoutPending = true;
     CallAfter([this] {
@@ -135,107 +171,170 @@ void GlyphTabBar::SetBarWidth(int width) {
   }
 }
 
-void GlyphTabBar::SyncWithNotebook() {
-  if (!m_notebook) {
+void GlyphTabBar::SetBarWidth(int width) {
+  width = ClampWidth(width);
+  if (width == m_width && GetMinSize().x == FromDIP(width)) {
     return;
   }
-
-  const long style = m_notebook->GetWindowStyleFlag();
-  const int selection = m_notebook->GetSelection();
-  // The order of the main tab control, unless some pages are in another tab
-  // control (a split notebook): then the order of the notebook.
-  std::vector<size_t> order;
-  if (wxAuiTabCtrl *ctrl = m_notebook->GetMainTabCtrl()) {
-    order = m_notebook->GetPagesInDisplayOrder(ctrl);
+  m_width = width;
+  if (IsVertical()) {
+    SetMinSize(wxSize(FromDIP(m_width), -1));
+    RequestParentLayout();
   }
-  if (order.size() != m_notebook->GetPageCount()) {
-    order.resize(m_notebook->GetPageCount());
-    for (size_t i = 0; i < order.size(); ++i) {
-      order[i] = i;
-    }
-  }
+}
 
-  std::vector<Tab> tabs;
-  tabs.reserve(order.size());
-  for (const size_t index : order) {
-    Tab tab;
-    tab.index = index;
-    tab.page.window = m_notebook->GetPage(index);
-    tab.page.caption = m_notebook->GetPageText(index);
-    tab.page.tooltip = m_notebook->GetPageToolTip(index);
-    const wxBitmapBundle bitmap = IconOf(m_notebook, index);
-    if (bitmap.IsOk()) {
-      tab.page.bitmap = bitmap;
-    }
-    tab.page.active = static_cast<int>(index) == selection;
-    if ((style & wxAUI_NB_CLOSE_ON_ALL_TABS) ||
-        (tab.page.active && (style & wxAUI_NB_CLOSE_ON_ACTIVE_TAB))) {
-      tab.page.buttons.emplace_back(wxAUI_BUTTON_CLOSE, wxRIGHT);
-    }
-    tabs.push_back(std::move(tab));
-  }
-
-  const auto same = [](const Tab &a, const Tab &b) {
-    return a.index == b.index && a.page.window == b.page.window &&
-           a.page.caption == b.page.caption &&
-           a.page.tooltip == b.page.tooltip && a.page.active == b.page.active &&
-           a.page.bitmap.IsOk() == b.page.bitmap.IsOk() &&
-           a.page.buttons.size() == b.page.buttons.size();
-  };
-
-  if (std::equal(tabs.begin(), tabs.end(), m_tabs.begin(), m_tabs.end(),
-                 same)) {
-    // Same tabs, but an icon can be another bitmap (a spinner).
-    for (size_t i = 0; i < tabs.size(); ++i) {
-      m_tabs[i].page.bitmap = tabs[i].page.bitmap;
-    }
-    Refresh();
+void GlyphTabBar::UpdateMinSize() {
+  if (IsVertical()) {
+    SetMinSize(wxSize(FromDIP(m_width), -1));
     return;
   }
-
-  const auto findActive = [](const std::vector<Tab> &list) -> wxWindow * {
-    for (const auto &tab : list) {
-      if (tab.page.active) {
-        return tab.page.window;
-      }
-    }
-    return nullptr;
-  };
-  const bool activeChanged = findActive(tabs) != findActive(m_tabs);
-  m_tabs = std::move(tabs);
-
-  // Forget the pages that are gone.
-  const auto exists = [this](wxWindow *window) {
-    return std::any_of(m_tabs.begin(), m_tabs.end(), [window](const Tab &tab) {
-      return tab.page.window == window;
-    });
-  };
-  for (wxWindow **window :
-       {&m_hover, &m_closeHover, &m_closePressed, &m_dragged}) {
-    if (*window && !exists(*window)) {
-      *window = nullptr;
-    }
-  }
-
-  LayoutTabs();
-  if (activeChanged) {
-    // Show the current tab.
+  // The height of the tallest tab (the icons can differ). Without tabs, the
+  // height of a tab with a label.
+  int height = 0;
+  if (m_art) {
+    wxInfoDC dc(this);
+    GlyphTabInfo probe;
+    probe.caption = wxS("Xg");
+    height = m_art->GetTabSize(dc, this, probe).y;
     for (const auto &tab : m_tabs) {
-      if (!tab.page.active) {
-        continue;
-      }
-      const wxRect &rect = tab.page.rect;
-      const int height = GetClientSize().y;
-      if (rect.y < 0) {
-        ScrollBy(rect.y);
-      } else if (rect.GetBottom() >= height && rect.height <= height) {
-        ScrollBy(rect.GetBottom() - height + 1);
-      }
-      break;
+      height = std::max(height, m_art->GetTabSize(dc, this, tab.info).y);
     }
+  }
+  const wxSize minSize(-1, height);
+  if (GetMinSize() != minSize) {
+    SetMinSize(minSize);
+    RequestParentLayout();
+  }
+}
+
+// Tabs
+// ----
+
+int GlyphTabBar::Find(const wxWindow *window) const {
+  for (size_t i = 0; i < m_tabs.size(); ++i) {
+    if (m_tabs[i].window == window) {
+      return static_cast<int>(i);
+    }
+  }
+  return wxNOT_FOUND;
+}
+
+void GlyphTabBar::UpdateButtons() {
+  for (size_t i = 0; i < m_tabs.size(); ++i) {
+    GlyphTabInfo &info = m_tabs[i].info;
+    info.active = static_cast<int>(i) == m_selection;
+    info.buttons.clear();
+    if (m_closeOnAll || (m_closeOnActive && info.active)) {
+      info.buttons.emplace_back(wxAUI_BUTTON_CLOSE, wxRIGHT);
+    }
+  }
+}
+
+void GlyphTabBar::Insert(size_t index, wxWindow *window,
+                         const wxString &caption,
+                         const wxBitmapBundle &bitmap) {
+  Tab tab;
+  tab.window = window;
+  tab.info.caption = caption;
+  tab.info.bitmap = bitmap;
+  index = std::min(index, m_tabs.size());
+  m_tabs.insert(m_tabs.begin() + index, std::move(tab));
+  if (m_selection >= 0 && static_cast<int>(index) <= m_selection) {
+    ++m_selection;
+  }
+  UpdateButtons();
+  UpdateMinSize();
+  LayoutTabs();
+  Refresh();
+}
+
+void GlyphTabBar::Remove(size_t index) {
+  if (index >= m_tabs.size()) {
+    return;
+  }
+  wxWindow *const window = m_tabs[index].window;
+  for (wxWindow **state :
+       {&m_hover, &m_closeHover, &m_closePressed, &m_dragged}) {
+    if (*state == window) {
+      *state = nullptr;
+    }
+  }
+  m_tabs.erase(m_tabs.begin() + index);
+  if (static_cast<int>(index) < m_selection) {
+    --m_selection;
+  } else if (static_cast<int>(index) == m_selection) {
+    m_selection = -1;
+  }
+  UpdateButtons();
+  UpdateMinSize();
+  LayoutTabs();
+  Refresh();
+}
+
+void GlyphTabBar::Clear() {
+  m_tabs.clear();
+  m_selection = -1;
+  m_hover = m_closeHover = m_closePressed = m_dragged = nullptr;
+  m_scroll = 0;
+  UpdateMinSize();
+  LayoutTabs();
+  Refresh();
+}
+
+void GlyphTabBar::Move(size_t from, size_t to) {
+  if (from >= m_tabs.size() || to >= m_tabs.size() || from == to) {
+    return;
+  }
+  wxWindow *const selected =
+      m_selection >= 0 ? m_tabs[m_selection].window : nullptr;
+  Tab tab = std::move(m_tabs[from]);
+  m_tabs.erase(m_tabs.begin() + from);
+  m_tabs.insert(m_tabs.begin() + to, std::move(tab));
+  m_selection = selected ? Find(selected) : -1;
+  LayoutTabs();
+  Refresh();
+}
+
+void GlyphTabBar::SetCaption(size_t index, const wxString &caption) {
+  if (index < m_tabs.size() && m_tabs[index].info.caption != caption) {
+    m_tabs[index].info.caption = caption;
+    LayoutTabs();
+    Refresh();
+  }
+}
+
+void GlyphTabBar::SetTooltip(size_t index, const wxString &tooltip) {
+  if (index < m_tabs.size()) {
+    m_tabs[index].info.tooltip = tooltip;
+  }
+}
+
+void GlyphTabBar::SetBitmap(size_t index, const wxBitmapBundle &bitmap) {
+  if (index < m_tabs.size()) {
+    m_tabs[index].info.bitmap = bitmap;
+    UpdateMinSize();
+    LayoutTabs();
+    Refresh();
+  }
+}
+
+void GlyphTabBar::SetSelection(int index) {
+  if (index < -1 || index >= static_cast<int>(m_tabs.size())) {
+    return;
+  }
+  m_selection = index;
+  UpdateButtons();
+  LayoutTabs();
+  if (index >= 0) {
+    EnsureVisible(static_cast<size_t>(index));
   }
   Refresh();
 }
+
+int GlyphTabBar::HitTest(const wxPoint &pt) const { return TabIndexAt(pt); }
+
+// Layout
+// ------
 
 void GlyphTabBar::LayoutTabs() {
   if (!m_art) {
@@ -243,22 +342,86 @@ void GlyphTabBar::LayoutTabs() {
   }
   wxInfoDC dc(this);
   const wxSize client = GetClientSize();
+  m_listRect = wxRect();
 
-  m_contentHeight = 0;
-  std::vector<int> heights;
-  heights.reserve(m_tabs.size());
-  for (const auto &tab : m_tabs) {
-    heights.push_back(m_art->GetVerticalTabHeight(dc, this, tab.page));
-    m_contentHeight += heights.back();
+  if (IsVertical()) {
+    // Rows from the top.
+    m_tabsRoom = client.y;
+    std::vector<int> heights;
+    heights.reserve(m_tabs.size());
+    m_contentSize = 0;
+    for (const auto &tab : m_tabs) {
+      heights.push_back(m_art->GetVerticalTabHeight(dc, this, tab.info));
+      m_contentSize += heights.back();
+    }
+    m_scroll = std::clamp(m_scroll, 0, std::max(0, m_contentSize - client.y));
+    int y = -m_scroll;
+    for (size_t i = 0; i < m_tabs.size(); ++i) {
+      m_tabs[i].info.rect = wxRect(0, y, client.x, heights[i]);
+      y += heights[i];
+    }
+    return;
   }
-  m_scroll = std::clamp(m_scroll, 0, std::max(0, m_contentHeight - client.y));
 
-  int y = -m_scroll;
+  // Tabs from the left. They get narrower when they do not fit; when they are
+  // as narrow as they can be and still do not fit, the bar scrolls and has the
+  // list button.
+  std::vector<int> widths;
+  widths.reserve(m_tabs.size());
+  int total = 0;
+  for (const auto &tab : m_tabs) {
+    widths.push_back(m_art->GetTabSize(dc, this, tab.info).x);
+    total += widths.back();
+  }
+  if (total > client.x && !m_tabs.empty()) {
+    ShrinkWidths(widths, client.x, FromDIP(kMinTabWidth));
+    total = 0;
+    for (const int width : widths) {
+      total += width;
+    }
+  }
+  m_tabsRoom = client.x;
+  if (total > client.x) {
+    const int listWidth = FromDIP(kListWidth);
+    m_tabsRoom = std::max(0, client.x - listWidth);
+    m_listRect = wxRect(m_tabsRoom, 0, client.x - m_tabsRoom, client.y);
+  }
+  m_contentSize = total;
+  m_scroll = std::clamp(m_scroll, 0, std::max(0, total - m_tabsRoom));
+  int x = -m_scroll;
   for (size_t i = 0; i < m_tabs.size(); ++i) {
-    m_tabs[i].page.rect = wxRect(0, y, client.x, heights[i]);
-    y += heights[i];
+    m_tabs[i].info.rect = wxRect(x, 0, widths[i], client.y);
+    x += widths[i];
   }
 }
+
+void GlyphTabBar::ScrollBy(int delta) {
+  const int old = m_scroll;
+  m_scroll += delta;
+  LayoutTabs();
+  if (m_scroll != old) {
+    Refresh();
+  }
+}
+
+void GlyphTabBar::EnsureVisible(size_t index) {
+  // The bar has no size yet: OnSize() shows the tab when it has one.
+  if (index >= m_tabs.size() || m_tabsRoom <= 0) {
+    return;
+  }
+  const wxRect &rect = m_tabs[index].info.rect;
+  const int start = IsVertical() ? rect.y : rect.x;
+  const int length = IsVertical() ? rect.height : rect.width;
+  if (start < 0) {
+    ScrollBy(start);
+  } else if (start + length > m_tabsRoom) {
+    // A tab longer than the room is shown from its start.
+    ScrollBy(length <= m_tabsRoom ? start + length - m_tabsRoom : start);
+  }
+}
+
+// Painting
+// --------
 
 void GlyphTabBar::OnPaint(wxPaintEvent &WXUNUSED(event)) {
   wxAutoBufferedPaintDC dc(this);
@@ -269,56 +432,76 @@ void GlyphTabBar::OnPaint(wxPaintEvent &WXUNUSED(event)) {
     return;
   }
 
-  m_art->DrawVerticalBackground(dc, this, client, GetInnerSide());
+  const wxDirection inner = GetInnerSide();
+  m_art->DrawBarBackground(dc, this, client, inner);
   for (auto &tab : m_tabs) {
-    wxWindow *const window = tab.page.window;
-    tab.page.hover = window == m_hover;
-    for (auto &button : tab.page.buttons) {
+    GlyphTabInfo &info = tab.info;
+    info.hover = tab.window == m_hover;
+    for (auto &button : info.buttons) {
       button.curState = wxAUI_BUTTON_STATE_NORMAL;
-      if (window == m_closeHover) {
+      if (tab.window == m_closeHover) {
         button.curState |= wxAUI_BUTTON_STATE_HOVER;
-        if (window == m_closePressed) {
+        if (tab.window == m_closePressed) {
           button.curState |= wxAUI_BUTTON_STATE_PRESSED;
         }
       }
     }
-    if (!tab.page.rect.Intersects(client)) {
-      // Not painted, so the buttons cannot be clicked.
-      for (auto &button : tab.page.buttons) {
+    // The tabs that are not in the window are not painted, so their buttons
+    // cannot be clicked.
+    const wxRect rect = info.rect;
+    if (!rect.Intersects(client) ||
+        (!m_listRect.IsEmpty() && rect.x >= m_tabsRoom)) {
+      for (auto &button : info.buttons) {
         button.rect = wxRect();
       }
       continue;
     }
-    m_art->DrawVerticalTab(dc, this, tab.page, tab.page.rect, GetInnerSide());
+    m_art->DrawTab(dc, this, info, rect, inner);
+  }
+
+  if (!m_listRect.IsEmpty()) {
+    // The list button covers the end of the tabs that go under it.
+    m_art->DrawBarBackground(dc, this, m_listRect, inner);
+    m_art->DrawDropDownButton(dc, this, m_listRect, m_listHover);
   }
 }
 
 void GlyphTabBar::OnSize(wxSizeEvent &event) {
   event.Skip();
   LayoutTabs();
+  // The selected tab can be off the bar after a resize, and was not shown at
+  // all if it was selected before the bar had a size (a restored layout). Not
+  // while the mouse is held: the user is dragging.
+  if (m_selection >= 0 && !HasCapture()) {
+    EnsureVisible(static_cast<size_t>(m_selection));
+  }
   Refresh();
 }
 
-GlyphTabBar::Tab *GlyphTabBar::TabAt(const wxPoint &pt) {
-  for (auto &tab : m_tabs) {
-    if (tab.page.rect.Contains(pt)) {
-      return &tab;
-    }
-  }
-  return nullptr;
+void GlyphTabBar::OnDpiChanged(wxDPIChangedEvent &event) {
+  event.Skip();
+  UpdateMinSize();
+  LayoutTabs();
+  Refresh();
 }
 
-int GlyphTabBar::PageIndexAt(const wxPoint &pt) const {
-  for (const auto &tab : m_tabs) {
-    if (tab.page.rect.Contains(pt)) {
-      return static_cast<int>(tab.index);
+// Mouse
+// -----
+
+int GlyphTabBar::TabIndexAt(const wxPoint &pt) const {
+  if (!m_listRect.IsEmpty() && pt.x >= m_tabsRoom) {
+    return wxNOT_FOUND;
+  }
+  for (size_t i = 0; i < m_tabs.size(); ++i) {
+    if (m_tabs[i].info.rect.Contains(pt)) {
+      return static_cast<int>(i);
     }
   }
   return wxNOT_FOUND;
 }
 
 bool GlyphTabBar::IsOnCloseButton(const Tab &tab, const wxPoint &pt) const {
-  return std::any_of(tab.page.buttons.begin(), tab.page.buttons.end(),
+  return std::any_of(tab.info.buttons.begin(), tab.info.buttons.end(),
                      [&pt](const wxAuiTabContainerButton &button) {
                        return button.id == wxAUI_BUTTON_CLOSE &&
                               button.rect.Contains(pt);
@@ -326,6 +509,9 @@ bool GlyphTabBar::IsOnCloseButton(const Tab &tab, const wxPoint &pt) const {
 }
 
 bool GlyphTabBar::IsOnResizeEdge(const wxPoint &pt) const {
+  if (!IsVertical()) {
+    return false;
+  }
   const int edge = FromDIP(kResizeEdge);
   return GetInnerSide() == wxRIGHT ? pt.x >= GetClientSize().x - edge
                                    : pt.x < edge;
@@ -335,28 +521,31 @@ bool GlyphTabBar::UpdateHover(const wxPoint &pt) {
   wxWindow *hover = nullptr;
   wxWindow *closeHover = nullptr;
   const bool inside = GetClientRect().Contains(pt);
-  if (Tab *tab = inside ? TabAt(pt) : nullptr) {
-    hover = tab->page.window;
-    if (IsOnCloseButton(*tab, pt)) {
+  const int index = inside ? TabIndexAt(pt) : wxNOT_FOUND;
+  if (index != wxNOT_FOUND) {
+    hover = m_tabs[index].window;
+    if (IsOnCloseButton(m_tabs[index], pt)) {
       closeHover = hover;
     }
   }
-  if (hover == m_hover && closeHover == m_closeHover) {
+  const bool listHover = inside && m_listRect.Contains(pt);
+  if (hover == m_hover && closeHover == m_closeHover &&
+      listHover == m_listHover) {
     return false;
   }
   if (hover != m_hover) {
     // The tooltip of the page, or the whole label, for a label that does not
     // fit.
-    Tab *tab = hover ? TabAt(pt) : nullptr;
-    if (tab) {
-      SetToolTip(tab->page.tooltip.empty() ? tab->page.caption
-                                           : tab->page.tooltip);
+    if (index != wxNOT_FOUND) {
+      const GlyphTabInfo &info = m_tabs[index].info;
+      SetToolTip(info.tooltip.empty() ? info.caption : info.tooltip);
     } else {
       UnsetToolTip();
     }
   }
   m_hover = hover;
   m_closeHover = closeHover;
+  m_listHover = listHover;
   return true;
 }
 
@@ -373,16 +562,24 @@ void GlyphTabBar::OnMotion(wxMouseEvent &event) {
     return;
   }
   if (m_dragged) {
-    DragTo(pt);
+    if (!m_dragStarted) {
+      const wxPoint delta = pt - m_pressPoint;
+      m_dragStarted =
+          std::abs(delta.x) + std::abs(delta.y) >= FromDIP(kDragDistance);
+    }
+    if (m_dragStarted) {
+      DragTo(pt);
+    }
     return;
   }
   if (m_closePressed) {
     // The button looks pressed only while the mouse is on it.
-    Tab *tab = TabAt(pt);
-    wxWindow *closeHover =
-        tab && tab->page.window == m_closePressed && IsOnCloseButton(*tab, pt)
-            ? m_closePressed
-            : nullptr;
+    const int index = TabIndexAt(pt);
+    wxWindow *closeHover = index != wxNOT_FOUND &&
+                                   m_tabs[index].window == m_closePressed &&
+                                   IsOnCloseButton(m_tabs[index], pt)
+                               ? m_closePressed
+                               : nullptr;
     if (closeHover != m_closeHover) {
       m_closeHover = closeHover;
       Refresh();
@@ -407,7 +604,7 @@ void GlyphTabBar::OnLeave(wxMouseEvent &WXUNUSED(event)) {
 
 void GlyphTabBar::OnLeftDown(wxMouseEvent &event) {
   // A double click is a second press: the first one may still hold the mouse.
-  if (!m_notebook || HasCapture()) {
+  if (HasCapture()) {
     return;
   }
   const wxPoint pt = event.GetPosition();
@@ -419,27 +616,29 @@ void GlyphTabBar::OnLeftDown(wxMouseEvent &event) {
     CaptureMouse();
     return;
   }
-
-  Tab *tab = TabAt(pt);
-  if (!tab) {
+  if (!m_listRect.IsEmpty() && m_listRect.Contains(pt)) {
+    // The menu runs its own loop: show it after this event.
+    CallAfter(&GlyphTabBar::ShowTabList);
     return;
   }
-  if (IsOnCloseButton(*tab, pt)) {
-    m_closePressed = m_closeHover = tab->page.window;
+
+  const int index = TabIndexAt(pt);
+  if (index == wxNOT_FOUND) {
+    return;
+  }
+  if (IsOnCloseButton(m_tabs[index], pt)) {
+    m_closePressed = m_closeHover = m_tabs[index].window;
     CaptureMouse();
     Refresh();
     return;
   }
 
-  // Copies: selecting the page reads the pages again, which replaces the tab.
-  wxWindow *const window = tab->page.window;
-  const size_t index = tab->index;
-  m_dragged = window;
+  m_dragged = m_tabs[index].window;
+  m_pressPoint = pt;
+  m_dragStarted = false;
   CaptureMouse();
-  if (static_cast<int>(index) != m_notebook->GetSelection()) {
-    m_notebook->SetSelection(index);
-  } else {
-    window->SetFocus();
+  if (m_callbacks.select) {
+    m_callbacks.select(static_cast<size_t>(index));
   }
 }
 
@@ -448,11 +647,9 @@ void GlyphTabBar::OnLeftUp(wxMouseEvent &event) {
   const bool onButton = closed && m_closeHover == closed;
   EndMouseAction();
   if (onButton) {
-    for (const auto &tab : m_tabs) {
-      if (tab.page.window == closed) {
-        ClosePage(tab.index);
-        break;
-      }
+    const int index = Find(closed);
+    if (index != wxNOT_FOUND && m_callbacks.close) {
+      m_callbacks.close(static_cast<size_t>(index));
     }
   }
   if (UpdateHover(event.GetPosition())) {
@@ -461,110 +658,82 @@ void GlyphTabBar::OnLeftUp(wxMouseEvent &event) {
 }
 
 void GlyphTabBar::OnMiddleUp(wxMouseEvent &event) {
-  Tab *tab = TabAt(event.GetPosition());
-  if (!m_notebook || !tab) {
-    return;
-  }
-  const size_t index = tab->index;
-  // Like the notebook: the application can handle the click itself.
-  wxAuiNotebookEvent e(wxEVT_AUINOTEBOOK_TAB_MIDDLE_UP, m_notebook->GetId());
-  e.SetSelection(static_cast<int>(index));
-  e.SetEventObject(m_notebook);
-  if (m_notebook->ProcessWindowEvent(e)) {
-    return;
-  }
-  if (m_notebook->GetWindowStyleFlag() & wxAUI_NB_MIDDLE_CLICK_CLOSE) {
-    ClosePage(index);
+  const int index = TabIndexAt(event.GetPosition());
+  if (index != wxNOT_FOUND && m_callbacks.middleUp) {
+    m_callbacks.middleUp(static_cast<size_t>(index));
   }
 }
 
 void GlyphTabBar::OnRightUp(wxMouseEvent &event) {
-  Tab *tab = TabAt(event.GetPosition());
-  if (!m_notebook || !tab) {
-    return;
+  const int index = TabIndexAt(event.GetPosition());
+  if (index != wxNOT_FOUND && m_callbacks.rightUp) {
+    m_callbacks.rightUp(static_cast<size_t>(index));
   }
-  wxAuiNotebookEvent e(wxEVT_AUINOTEBOOK_TAB_RIGHT_UP, m_notebook->GetId());
-  e.SetSelection(static_cast<int>(tab->index));
-  e.SetEventObject(m_notebook);
-  m_notebook->ProcessWindowEvent(e);
 }
 
 void GlyphTabBar::OnWheel(wxMouseEvent &event) {
-  const int rows =
-      event.GetWheelRotation() / std::max(1, event.GetWheelDelta());
-  const int rowHeight =
-      m_tabs.empty() ? FromDIP(24) : m_tabs.front().page.rect.height;
-  ScrollBy(-rows * rowHeight);
+  // A small rotation (a touchpad) adds up until it makes a row.
+  const int rotation = event.GetWheelRotation();
+  if ((rotation > 0) != (m_wheelRemainder > 0)) {
+    m_wheelRemainder = 0;
+  }
+  m_wheelRemainder += rotation;
+  const int delta = std::max(1, event.GetWheelDelta());
+  const int rows = m_wheelRemainder / delta;
+  m_wheelRemainder -= rows * delta;
+  int step = FromDIP(kWheelStep);
+  if (IsVertical()) {
+    step = m_tabs.empty() ? FromDIP(24) : m_tabs.front().info.rect.height;
+  }
+  ScrollBy(-rows * step);
   if (UpdateHover(event.GetPosition())) {
     Refresh();
   }
 }
 
-void GlyphTabBar::ScrollBy(int dy) {
-  const int old = m_scroll;
-  m_scroll += dy;
-  LayoutTabs();
-  if (m_scroll != old) {
-    Refresh();
-  }
-}
-
 void GlyphTabBar::DragTo(const wxPoint &pt) {
-  if (!m_notebook || m_tabs.empty()) {
+  const int current = Find(m_dragged);
+  if (current == wxNOT_FOUND) {
     return;
   }
-  // The row under the mouse; above the first row or below the last one, the
-  // first or the last row.
-  size_t target = m_tabs.size() - 1;
-  if (pt.y < m_tabs.front().page.rect.y) {
-    target = 0;
-  } else {
-    for (size_t i = 0; i < m_tabs.size(); ++i) {
-      if (pt.y < m_tabs[i].page.rect.GetBottom() + 1) {
-        target = i;
-        break;
-      }
+  // The new place is the number of other tabs whose middle is before the mouse.
+  // It does not depend on the tab that is dragged, so the tab does not jump
+  // between two places.
+  const int position = IsVertical() ? pt.y : pt.x;
+  size_t target = 0;
+  for (size_t i = 0; i < m_tabs.size(); ++i) {
+    if (static_cast<int>(i) == current) {
+      continue;
+    }
+    const wxRect &rect = m_tabs[i].info.rect;
+    const int middle =
+        IsVertical() ? rect.y + rect.height / 2 : rect.x + rect.width / 2;
+    if (middle < position) {
+      ++target;
     }
   }
-  const auto current =
-      std::find_if(m_tabs.begin(), m_tabs.end(), [this](const Tab &tab) {
-        return tab.page.window == m_dragged;
-      });
-  if (current == m_tabs.end() ||
-      static_cast<size_t>(current - m_tabs.begin()) == target) {
+  if (target == static_cast<size_t>(current)) {
     return;
   }
-
-  // Only the order of the main tab control can be changed, and only when it
-  // has all the pages (see SyncWithNotebook()).
-  wxAuiTabCtrl *ctrl = m_notebook->GetMainTabCtrl();
-  if (!ctrl || ctrl->GetPageCount() != m_tabs.size() ||
-      !ctrl->MovePage(m_dragged, target)) {
-    return;
-  }
-  ctrl->Refresh();
-  SyncWithNotebook();
+  Move(static_cast<size_t>(current), target);
 }
 
-void GlyphTabBar::ClosePage(size_t index) {
-  if (!m_notebook || index >= m_notebook->GetPageCount()) {
-    return;
+void GlyphTabBar::ShowTabList() {
+  wxMenu menu;
+  for (size_t i = 0; i < m_tabs.size(); ++i) {
+    wxString label = m_tabs[i].info.caption;
+    label.Replace(wxS("&"), wxS("&&"));
+    wxMenuItem *item = menu.AppendCheckItem(wxID_HIGHEST + 1 + int(i), label);
+    item->Check(static_cast<int>(i) == m_selection);
   }
-  // The same events as the close button of the notebook.
-  wxAuiNotebookEvent e(wxEVT_AUINOTEBOOK_PAGE_CLOSE, m_notebook->GetId());
-  e.SetSelection(static_cast<int>(index));
-  e.SetEventObject(m_notebook);
-  m_notebook->ProcessWindowEvent(e);
-  if (!e.IsAllowed()) {
-    return;
+  const int id = GetPopupMenuSelectionFromUser(
+      menu, wxPoint(m_listRect.x, m_listRect.GetBottom() + 1));
+  if (id >= wxID_HIGHEST + 1 && m_callbacks.select) {
+    const size_t index = static_cast<size_t>(id - wxID_HIGHEST - 1);
+    if (index < m_tabs.size()) {
+      m_callbacks.select(index);
+    }
   }
-  m_notebook->DeletePage(index);
-
-  wxAuiNotebookEvent closed(wxEVT_AUINOTEBOOK_PAGE_CLOSED, m_notebook->GetId());
-  closed.SetSelection(static_cast<int>(index));
-  closed.SetEventObject(m_notebook);
-  m_notebook->ProcessWindowEvent(closed);
-  SyncWithNotebook();
 }
 
 void GlyphTabBar::EndMouseAction() {
@@ -581,6 +750,7 @@ void GlyphTabBar::EndMouseAction() {
     SetBarWidth(m_dragWidth);
   }
   m_dragged = nullptr;
+  m_dragStarted = false;
   m_closePressed = nullptr;
   Refresh();
   if (resized && m_onWidthChanged) {
@@ -590,27 +760,10 @@ void GlyphTabBar::EndMouseAction() {
 
 void GlyphTabBar::OnCaptureLost(wxMouseCaptureLostEvent &WXUNUSED(event)) {
   EndMouseAction();
-}
-
-void GlyphTabBar::OnIdle(wxIdleEvent &event) {
-  event.Skip();
-  if (IsShownOnScreen()) {
-    SyncWithNotebook();
-  }
-}
-
-void GlyphTabBar::OnDpiChanged(wxDPIChangedEvent &event) {
-  event.Skip();
-  SetMinSize(wxSize(FromDIP(m_width), -1));
-  LayoutTabs();
+  // The mouse button was not released on the bar, so the hover state may be
+  // old.
+  UpdateHover(ScreenToClient(::wxGetMousePosition()));
   Refresh();
-}
-
-void GlyphTabBar::OnNotebookChanged(wxAuiNotebookEvent &event) {
-  event.Skip();
-  if (IsShown()) {
-    SyncWithNotebook();
-  }
 }
 
 #endif // wxCHECK_VERSION(3, 3, 0)

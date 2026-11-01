@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BookLayout.h"
 #include "GlyphBook.h"
 #include "TabMRU.h"
 #include "TabSwitcherDlg.h"
@@ -38,8 +39,14 @@ using EnvironmentList = terminal::PtyBackend::EnvironmentList;
 // side; before that it is a wxAuiNotebook (tabs at the top or at the bottom).
 #if wxCHECK_VERSION(3, 3, 0)
 using TabBook = GlyphBook;
+using TabBookEvent = wxBookCtrlEvent;
+#define TAB_BOOK_PAGE_CHANGED wxEVT_BOOKCTRL_PAGE_CHANGED
+#define TAB_BOOK_TAB_RIGHT_UP wxEVT_GLYPHBOOK_TAB_RIGHT_UP
 #else
 using TabBook = wxAuiNotebook;
+using TabBookEvent = wxAuiNotebookEvent;
+#define TAB_BOOK_PAGE_CHANGED wxEVT_AUINOTEBOOK_PAGE_CHANGED
+#define TAB_BOOK_TAB_RIGHT_UP wxEVT_AUINOTEBOOK_TAB_RIGHT_UP
 #endif
 
 // The parent for the pages of @p book.

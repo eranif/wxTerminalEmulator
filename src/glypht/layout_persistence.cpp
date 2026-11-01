@@ -5,7 +5,6 @@
 #include <wx/filefn.h>
 #include <wx/filename.h>
 #include <wx/textfile.h>
-#include <wx/tokenzr.h>
 
 namespace {
 
@@ -56,32 +55,6 @@ wxString Decode(const wxString &value) {
   return out;
 }
 
-#if WXTERMINAL_HAS_AUI_SERIALIZATION
-// Render an int vector as a comma separated list ("" for an empty vector).
-wxString JoinInts(const std::vector<int> &values) {
-  wxString out;
-  for (size_t i = 0; i < values.size(); ++i) {
-    if (i) {
-      out += ',';
-    }
-    out << values[i];
-  }
-  return out;
-}
-
-std::vector<int> SplitInts(const wxString &s) {
-  std::vector<int> result;
-  wxStringTokenizer tok(s, ",");
-  while (tok.HasMoreTokens()) {
-    long v = 0;
-    if (tok.GetNextToken().ToLong(&v)) {
-      result.push_back(static_cast<int>(v));
-    }
-  }
-  return result;
-}
-#endif // WXTERMINAL_HAS_AUI_SERIALIZATION
-
 } // namespace
 
 wxString LayoutPersistence::GetLayoutPath() {
@@ -97,77 +70,12 @@ void LayoutPersistence::Clear() {
   }
 }
 
-#if WXTERMINAL_HAS_AUI_SERIALIZATION
-// ---------------------------------------------------------------------------
-// LayoutSerializer
-// ---------------------------------------------------------------------------
-
-void LayoutSerializer::BeforeSaveNotebook(const wxString &name) {
-  wxUnusedVar(name);
-}
-
-void LayoutSerializer::SaveNotebookTabControl(const wxAuiTabLayoutInfo &tab) {
-  // Compact, single-line encoding of one tab control. Fields are separated by
-  // ';' and the page/pinned lists use ',' internally.
-  wxString line;
-  line << "tabcontrol=" << tab.dock_direction << ';' << tab.dock_layer << ';'
-       << tab.dock_row << ';' << tab.dock_pos << ';' << tab.dock_proportion
-       << ';' << tab.dock_size << ';' << tab.active << ';'
-       << "pages:" << JoinInts(tab.pages) << ';'
-       << "pinned:" << JoinInts(tab.pinned);
-  m_lines.push_back(line);
-}
-
-// ---------------------------------------------------------------------------
-// LayoutDeserializer
-// ---------------------------------------------------------------------------
-
-std::vector<wxAuiTabLayoutInfo>
-LayoutDeserializer::LoadNotebookTabs(const wxString &name) {
-  wxUnusedVar(name);
-  std::vector<wxAuiTabLayoutInfo> tabs;
-  for (const wxString &raw : m_lines) {
-    wxString value = raw.AfterFirst('=');
-    wxArrayString fields = wxStringTokenize(value, ";", wxTOKEN_RET_EMPTY_ALL);
-    if (fields.size() < 7) {
-      continue;
-    }
-    wxAuiTabLayoutInfo tab;
-    long v = 0;
-    if (fields[0].ToLong(&v))
-      tab.dock_direction = static_cast<int>(v);
-    if (fields[1].ToLong(&v))
-      tab.dock_layer = static_cast<int>(v);
-    if (fields[2].ToLong(&v))
-      tab.dock_row = static_cast<int>(v);
-    if (fields[3].ToLong(&v))
-      tab.dock_pos = static_cast<int>(v);
-    if (fields[4].ToLong(&v))
-      tab.dock_proportion = static_cast<int>(v);
-    if (fields[5].ToLong(&v))
-      tab.dock_size = static_cast<int>(v);
-    if (fields[6].ToLong(&v))
-      tab.active = static_cast<int>(v);
-    for (size_t i = 7; i < fields.size(); ++i) {
-      if (fields[i].StartsWith("pages:")) {
-        tab.pages = SplitInts(fields[i].Mid(6));
-      } else if (fields[i].StartsWith("pinned:")) {
-        tab.pinned = SplitInts(fields[i].Mid(7));
-      }
-    }
-    tabs.push_back(std::move(tab));
-  }
-  return tabs;
-}
-#endif // WXTERMINAL_HAS_AUI_SERIALIZATION
-
 // ---------------------------------------------------------------------------
 // File IO
 // ---------------------------------------------------------------------------
 
 bool SaveLayoutFile(const std::vector<LayoutPersistence::TabInfo> &tabs,
-                    const std::vector<wxString> &tabControlLines,
-                    const wxString &activeTitle, const wxSize &frameSize) {
+                    const wxSize &frameSize) {
   const wxString path = LayoutPersistence::GetLayoutPath();
   wxFileName fn(path);
   if (!fn.DirExists()) {
@@ -185,9 +93,6 @@ bool SaveLayoutFile(const std::vector<LayoutPersistence::TabInfo> &tabs,
   }
 
   file.AddLine("# GlyphT window layout - generated file");
-  if (!activeTitle.empty()) {
-    file.AddLine("active=" + Encode(activeTitle));
-  }
   if (frameSize.x > 0 && frameSize.y > 0) {
     file.AddLine(wxString::Format("size=%dx%d", frameSize.x, frameSize.y));
   }
@@ -196,11 +101,11 @@ bool SaveLayoutFile(const std::vector<LayoutPersistence::TabInfo> &tabs,
     file.AddLine("shell=" + Encode(tab.shellCommand));
     file.AddLine("cwd=" + Encode(tab.workingDirectory));
     file.AddLine("label=" + Encode(tab.customLabel));
-  }
-  if (!tabControlLines.empty()) {
-    file.AddLine("[layout]");
-    for (const wxString &line : tabControlLines) {
-      file.AddLine(line);
+    if (!tab.group.empty()) {
+      file.AddLine("group=" + Encode(tab.group));
+    }
+    if (tab.selected) {
+      file.AddLine("selected=1");
     }
   }
   return file.Write();
@@ -242,12 +147,8 @@ std::optional<LayoutFile> LoadLayoutFile() {
       continue;
     }
     if (trimmed == "[layout]") {
+      // The tab controls of older versions: not used.
       flushTab();
-      continue;
-    }
-
-    if (trimmed.StartsWith("tabcontrol=")) {
-      result.tabControlLines.push_back(trimmed);
       continue;
     }
 
@@ -278,6 +179,10 @@ std::optional<LayoutFile> LoadLayoutFile() {
       current.workingDirectory = value;
     } else if (key == "label") {
       current.customLabel = value;
+    } else if (key == "group") {
+      current.group = value;
+    } else if (key == "selected") {
+      current.selected = value == "1";
     }
   }
   flushTab();

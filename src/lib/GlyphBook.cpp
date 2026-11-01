@@ -2,32 +2,22 @@
 
 #if wxCHECK_VERSION(3, 3, 0)
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 #include <wx/settings.h>
 #include <wx/sizer.h>
+#include <wx/wupdlock.h>
+
+wxDEFINE_EVENT(wxEVT_GLYPHBOOK_PAGE_CLOSE, wxBookCtrlEvent);
+wxDEFINE_EVENT(wxEVT_GLYPHBOOK_PAGE_CLOSED, wxBookCtrlEvent);
+wxDEFINE_EVENT(wxEVT_GLYPHBOOK_TAB_RIGHT_UP, wxBookCtrlEvent);
+wxDEFINE_EVENT(wxEVT_GLYPHBOOK_TAB_MIDDLE_UP, wxBookCtrlEvent);
 
 namespace {
 
-// The events of the notebook that the book sends again.
-const std::vector<wxEventTypeTag<wxAuiNotebookEvent>> &ForwardedEvents() {
-  static const std::vector<wxEventTypeTag<wxAuiNotebookEvent>> events = {
-      wxEVT_AUINOTEBOOK_PAGE_CLOSE,    wxEVT_AUINOTEBOOK_PAGE_CHANGED,
-      wxEVT_AUINOTEBOOK_PAGE_CHANGING, wxEVT_AUINOTEBOOK_PAGE_CLOSED,
-      wxEVT_AUINOTEBOOK_BUTTON,        wxEVT_AUINOTEBOOK_BEGIN_DRAG,
-      wxEVT_AUINOTEBOOK_END_DRAG,      wxEVT_AUINOTEBOOK_DRAG_MOTION,
-      wxEVT_AUINOTEBOOK_ALLOW_DND,     wxEVT_AUINOTEBOOK_TAB_MIDDLE_DOWN,
-      wxEVT_AUINOTEBOOK_TAB_MIDDLE_UP, wxEVT_AUINOTEBOOK_TAB_RIGHT_DOWN,
-      wxEVT_AUINOTEBOOK_TAB_RIGHT_UP,  wxEVT_AUINOTEBOOK_DRAG_DONE,
-      wxEVT_AUINOTEBOOK_BG_DCLICK};
-  return events;
-}
-
 constexpr long kSideFlags =
     wxAUI_NB_TOP | wxAUI_NB_BOTTOM | wxAUI_NB_LEFT | wxAUI_NB_RIGHT;
-// The flags that need tabs that can be split or moved.
-constexpr long kSplitFlags =
-    wxAUI_NB_TAB_SPLIT | wxAUI_NB_TAB_MOVE | wxAUI_NB_TAB_EXTERNAL_MOVE;
 
 } // namespace
 
@@ -37,23 +27,10 @@ GlyphBook::GlyphBook(wxWindow *parent, wxWindowID id, const wxPoint &pos,
                      const wxSize &size, long style, const wxString &name) {
   Init();
   Create(parent, id, pos, size, style, name);
-  // Disable AUI's behavior: when a non active child accepts the focus, AUI
-  // changes the selection.
-  m_notebook->Bind(wxEVT_CHILD_FOCUS, &GlyphBook::OnChildFocus, this);
-}
-
-GlyphBook::~GlyphBook() {
-  // The notebook is destroyed after this destructor: it must not call us.
-  m_notebook->Unbind(wxEVT_CHILD_FOCUS, &GlyphBook::OnChildFocus, this);
-  if (m_notebook) {
-    for (const auto &type : ForwardedEvents()) {
-      m_notebook->Unbind(type, &GlyphBook::ForwardEvent, this);
-    }
-  }
 }
 
 void GlyphBook::Init() {
-  m_notebook = nullptr;
+  m_pages = nullptr;
   m_tabBar = nullptr;
 }
 
@@ -65,30 +42,41 @@ bool GlyphBook::Create(wxWindow *parent, wxWindowID id, const wxPoint &pos,
   }
   m_style = style;
 
-  m_notebook = new wxAuiNotebook(this, wxID_ANY, wxDefaultPosition,
-                                 wxDefaultSize, GetNotebookStyle());
-  // The bar binds the events of the notebook before the book does, so it is
-  // up to date when a handler of the application runs.
-  m_tabBar = new GlyphTabBar(this, m_notebook, m_tabBarWidth);
-  m_tabBar->Hide();
+  m_tabBar = new GlyphTabBar(this, m_tabBarWidth);
+  m_pages = new wxSimplebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+                             wxBORDER_NONE);
 
-  for (const auto &type : ForwardedEvents()) {
-    m_notebook->Bind(type, &GlyphBook::ForwardEvent, this);
-  }
+  GlyphTabBar::Callbacks callbacks;
+  callbacks.select = [this](size_t index) {
+    if (static_cast<int>(index) == GetSelection()) {
+      // A click on the current tab gives the focus to its page.
+      GetPage(index)->SetFocus();
+    } else {
+      SetSelection(index);
+    }
+  };
+  callbacks.close = [this](size_t index) { ClosePage(index); };
+  callbacks.middleUp = [this](size_t index) {
+    // Like wxAuiNotebook: the application can handle the click itself.
+    bool handled = false;
+    SendEvent(wxEVT_GLYPHBOOK_TAB_MIDDLE_UP, static_cast<int>(index),
+              wxNOT_FOUND, &handled);
+    if (!handled && (m_style & wxAUI_NB_MIDDLE_CLICK_CLOSE)) {
+      ClosePage(index);
+    }
+  };
+  callbacks.rightUp = [this](size_t index) {
+    SendEvent(wxEVT_GLYPHBOOK_TAB_RIGHT_UP, static_cast<int>(index));
+  };
+  m_tabBar->SetCallbacks(std::move(callbacks));
+
   Bind(wxEVT_SIZE, &GlyphBook::OnSize, this);
   Bind(wxEVT_SYS_COLOUR_CHANGED, &GlyphBook::OnSysColourChanged, this);
-
-  auto *sizer = new wxBoxSizer(wxHORIZONTAL);
-  sizer->Add(m_tabBar, wxSizerFlags().Expand());
-  sizer->Add(m_notebook, wxSizerFlags(1).Expand());
-  SetSizer(sizer);
 
   SetTheme(wxTerminalTheme::MakeDarkTheme());
   UpdateLayout();
   return true;
 }
-
-void GlyphBook::OnChildFocus(wxChildFocusEvent &event) { wxUnusedVar(event); }
 
 // Appearance
 // ----------
@@ -112,7 +100,7 @@ void GlyphBook::RebuildArt() {
   art->SetBarColour(m_barColour.IsOk()
                         ? m_barColour
                         : wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE));
-  ApplyArt(art.release());
+  ApplyArt(std::move(art));
 }
 
 void GlyphBook::OnSysColourChanged(wxSysColourChangedEvent &event) {
@@ -125,17 +113,16 @@ void GlyphBook::OnSysColourChanged(wxSysColourChangedEvent &event) {
 }
 
 void GlyphBook::SetArtProvider(GlyphTabArt *art) {
+  wxCHECK_RET(art, wxS("the tab art must not be null"));
   // The art is the one of the application now: it is not made again.
   m_themed = false;
-  ApplyArt(art);
+  ApplyArt(std::unique_ptr<GlyphTabArt>(art));
 }
 
-void GlyphBook::ApplyArt(GlyphTabArt *art) {
-  wxCHECK_RET(art, wxS("the tab art must not be null"));
-  m_tabBar->SetArt(
-      std::unique_ptr<GlyphTabArt>(static_cast<GlyphTabArt *>(art->Clone())));
-  m_notebook->SetArtProvider(art);
-  m_notebook->Refresh();
+void GlyphBook::ApplyArt(std::unique_ptr<GlyphTabArt> art) {
+  m_tabBar->SetArt(std::move(art));
+  DoInvalidateBestSize();
+  Layout();
 }
 
 void GlyphBook::SetTabPosition(wxDirection position) {
@@ -173,10 +160,12 @@ bool GlyphBook::HasVerticalTabs() const {
 }
 
 void GlyphBook::SetWindowStyleFlag(long style) {
-  // Called by Create() before the notebook exists.
+  // Called by Create() before the bar exists.
   m_style = style;
   wxBookCtrlBase::SetWindowStyleFlag(style);
-  UpdateLayout();
+  if (m_tabBar) {
+    UpdateLayout();
+  }
 }
 
 void GlyphBook::SetTabBarWidth(int width) {
@@ -196,47 +185,26 @@ void GlyphBook::SetTabBarWidthChangedCallback(
   m_tabBar->SetWidthChangedCallback(std::move(callback));
 }
 
-long GlyphBook::GetNotebookStyle() const {
-  long style = m_style & ~kSideFlags;
-  style |= GetTabPosition() == wxBOTTOM ? wxAUI_NB_BOTTOM : wxAUI_NB_TOP;
-  if (HasVerticalTabs()) {
-    style &= ~kSplitFlags;
-  }
-  return style;
-}
-
 void GlyphBook::UpdateLayout() {
-  if (!m_notebook) {
-    return;
-  }
-  const bool vertical = HasVerticalTabs();
-  if (vertical && m_notebook->GetPageCount() > 0) {
-    // The bar shows the pages of one tab control.
-    m_notebook->UnsplitAll();
-  }
-  m_notebook->SetWindowStyleFlag(GetNotebookStyle());
-  // With the bar, the notebook hides its own tabs.
-  m_notebook->SetTabCtrlHeight(vertical ? 0 : -1);
+  const wxDirection position = GetTabPosition();
+  m_tabBar->SetCloseButtons((m_style & wxAUI_NB_CLOSE_ON_ALL_TABS) != 0,
+                            (m_style & wxAUI_NB_CLOSE_ON_ACTIVE_TAB) != 0);
+  m_tabBar->SetSide(position);
 
-  if (wxSizer *sizer = GetSizer()) {
-    // The bar is first for the left side and last for the right side.
-    sizer->Detach(m_tabBar);
-    sizer->Insert(GetTabPosition() == wxRIGHT ? 1 : 0, m_tabBar,
-                  wxSizerFlags().Expand());
-    m_tabBar->SetSide(GetTabPosition() == wxRIGHT ? wxRIGHT : wxLEFT);
-    m_tabBar->Show(vertical);
-    Layout();
+  // The bar is before the pages for the left and top sides, after them for the
+  // others.
+  auto *sizer = new wxBoxSizer(HasVerticalTabs() ? wxHORIZONTAL : wxVERTICAL);
+  if (position == wxLEFT || position == wxTOP) {
+    sizer->Add(m_tabBar, wxSizerFlags().Expand());
+    sizer->Add(m_pages, wxSizerFlags(1).Expand());
+  } else {
+    sizer->Add(m_pages, wxSizerFlags(1).Expand());
+    sizer->Add(m_tabBar, wxSizerFlags().Expand());
   }
-  if (vertical) {
-    m_tabBar->SyncWithNotebook();
-  }
-  m_notebook->Refresh();
-}
-
-void GlyphBook::SyncTabBar() {
-  if (m_tabBar && m_tabBar->IsShown()) {
-    m_tabBar->SyncWithNotebook();
-  }
+  SetSizer(sizer);
+  DoInvalidateBestSize();
+  Layout();
+  Refresh();
 }
 
 void GlyphBook::OnSize(wxSizeEvent &event) {
@@ -247,9 +215,14 @@ void GlyphBook::OnSize(wxSizeEvent &event) {
 }
 
 wxSize GlyphBook::DoGetBestSize() const {
-  wxSize size = m_notebook ? m_notebook->GetBestSize() : wxSize();
-  if (m_tabBar && m_tabBar->IsShown()) {
-    size.x += m_tabBar->GetEffectiveMinSize().x;
+  wxSize size = m_pages ? m_pages->GetBestSize() : wxSize();
+  if (m_tabBar) {
+    const wxSize bar = m_tabBar->GetEffectiveMinSize();
+    if (HasVerticalTabs()) {
+      size.x += bar.x;
+    } else {
+      size.y += bar.y;
+    }
   }
   return size;
 }
@@ -257,27 +230,15 @@ wxSize GlyphBook::DoGetBestSize() const {
 // Events
 // ------
 
-void GlyphBook::ForwardEvent(wxAuiNotebookEvent &event) {
-  // The event goes to the parents of the book from here, with the book as the
-  // source. Without this, the original would go to them too, from the
-  // notebook.
-  event.StopPropagation();
-
-  std::unique_ptr<wxAuiNotebookEvent> copy{
-      static_cast<wxAuiNotebookEvent *>(event.Clone())};
-  copy->SetEventObject(this);
-  copy->SetId(GetId());
-  const bool handled = ProcessWindowEvent(*copy);
-
-  // What the handlers of the application decided goes back to the notebook,
-  // which reads it after sending the event (for example to keep a page open).
-  if (copy->IsAllowed()) {
-    event.Allow();
-  } else {
-    event.Veto();
+bool GlyphBook::SendEvent(wxEventType type, int selection, int oldSelection,
+                          bool *handled) {
+  wxBookCtrlEvent event(type, GetId(), selection, oldSelection);
+  event.SetEventObject(this);
+  const bool processed = ProcessWindowEvent(event);
+  if (handled) {
+    *handled = processed;
   }
-  // Like a handler that did not process the event, it is still unprocessed.
-  event.Skip(!handled);
+  return event.IsAllowed();
 }
 
 // Pages
@@ -292,14 +253,31 @@ bool GlyphBook::InsertPage(size_t pageIdx, wxWindow *page,
                            const wxString &caption, bool select,
                            const wxBitmapBundle &bitmap) {
   wxCHECK_MSG(page, false, wxS("the page must not be null"));
-  if (page->GetParent() != m_notebook) {
-    page->Reparent(m_notebook);
+  wxCHECK_MSG(FindPage(page) == wxNOT_FOUND, false,
+              wxS("the page is already in the book"));
+  pageIdx = std::min(pageIdx, GetPageCount());
+  if (page->GetParent() != m_pages) {
+    page->Reparent(m_pages);
   }
+  // The pages of the simplebook are in the order they were added; the tabs
+  // are in the order of the user.
+  if (!m_pages->AddPage(page, caption, false)) {
+    return false;
+  }
+  const bool first = GetPageCount() == 0;
+  m_tabBar->Insert(pageIdx, page, caption, bitmap);
   DoInvalidateBestSize();
-  const bool ok =
-      m_notebook->InsertPage(pageIdx, page, caption, select, bitmap);
-  SyncTabBar();
-  return ok;
+
+  if (first) {
+    // The first page is shown, without events.
+    DoSetSelection(pageIdx, false);
+  } else if (select) {
+    SetSelection(pageIdx);
+  } else {
+    page->Hide();
+    ShowPage(GetSelection());
+  }
+  return true;
 }
 
 bool GlyphBook::AddPage(wxWindow *page, const wxString &text, bool select,
@@ -312,74 +290,126 @@ bool GlyphBook::InsertPage(size_t index, wxWindow *page, const wxString &text,
   return InsertPage(index, page, text, select, GetBitmapBundle(imageId));
 }
 
-bool GlyphBook::DeletePage(size_t page) {
-  const bool ok = m_notebook->DeletePage(page);
-  DoInvalidateBestSize();
-  SyncTabBar();
-  return ok;
-}
+wxWindow *GlyphBook::RemoveTab(size_t index, bool destroy) {
+  if (index >= GetPageCount()) {
+    return nullptr;
+  }
+  // One update for the whole change: the tab bar, the page that goes away and
+  // the page that takes its place.
+  wxWindowUpdateLocker locker(this);
+  wxWindow *const window = m_tabBar->GetWindow(index);
+  const bool wasSelected = static_cast<int>(index) == GetSelection();
+  m_tabBar->Remove(index);
 
-wxWindow *GlyphBook::DoRemovePage(size_t page) {
-  if (page >= m_notebook->GetPageCount()) {
-    return nullptr;
+  // The tab that took its place, or the last one. It is selected before the
+  // simplebook loses the page: otherwise the simplebook would choose a page by
+  // its own order (the order the pages were added, not the order of the tabs)
+  // and give it the focus. This change cannot be vetoed, because the old tab
+  // is gone; only the page changed event is sent, after the removal.
+  int newSelection = wxNOT_FOUND;
+  if (wasSelected && GetPageCount() > 0) {
+    newSelection = static_cast<int>(std::min(index, GetPageCount() - 1));
+    DoSetSelection(static_cast<size_t>(newSelection), false);
   }
-  wxWindow *const window = m_notebook->GetPage(page);
-  if (!m_notebook->RemovePage(page)) {
-    return nullptr;
+
+  const int pageIndex = m_pages->FindPage(window);
+  if (destroy) {
+    m_pages->DeletePage(pageIndex);
+  } else {
+    m_pages->RemovePage(pageIndex);
+    // The caller owns the page now, so it is not a child of the pages.
+    window->Reparent(this);
   }
-  // The caller owns the page now, so it is not a child of the notebook.
-  window->Reparent(this);
-  SyncTabBar();
+  DoInvalidateBestSize();
+
+  if (newSelection != wxNOT_FOUND) {
+    // The application is told, like with wxAuiNotebook.
+    SendEvent(wxEVT_BOOKCTRL_PAGE_CHANGED, newSelection);
+  }
   return window;
 }
 
+bool GlyphBook::DeletePage(size_t page) {
+  return RemoveTab(page, true) != nullptr;
+}
+
+wxWindow *GlyphBook::DoRemovePage(size_t page) {
+  return RemoveTab(page, false);
+}
+
 bool GlyphBook::DeleteAllPages() {
-  const bool ok = m_notebook->DeleteAllPages();
+  m_tabBar->Clear();
+  const bool ok = m_pages->DeleteAllPages();
   DoInvalidateBestSize();
-  SyncTabBar();
   return ok;
+}
+
+void GlyphBook::ClosePage(size_t index) {
+  if (index >= GetPageCount()) {
+    return;
+  }
+  // The same events as the close button of wxAuiNotebook.
+  if (!SendEvent(wxEVT_GLYPHBOOK_PAGE_CLOSE, static_cast<int>(index))) {
+    return;
+  }
+  // A handler can close pages itself.
+  if (index >= GetPageCount()) {
+    return;
+  }
+  DeletePage(index);
+  SendEvent(wxEVT_GLYPHBOOK_PAGE_CLOSED, static_cast<int>(index));
 }
 
 size_t GlyphBook::GetPageCount() const {
-  return m_notebook ? m_notebook->GetPageCount() : 0;
+  return m_tabBar ? m_tabBar->GetCount() : 0;
 }
 
 wxWindow *GlyphBook::GetPage(size_t pageIdx) const {
-  return m_notebook->GetPage(pageIdx);
+  return pageIdx < GetPageCount() ? m_tabBar->GetWindow(pageIdx) : nullptr;
 }
 
 int GlyphBook::FindPage(const wxWindow *page) const {
-  return m_notebook ? m_notebook->FindPage(page) : wxNOT_FOUND;
+  return m_tabBar ? m_tabBar->Find(page) : wxNOT_FOUND;
 }
 
 bool GlyphBook::SetPageText(size_t page, const wxString &text) {
-  const bool ok = m_notebook->SetPageText(page, text);
-  SyncTabBar();
-  return ok;
+  if (page >= GetPageCount()) {
+    return false;
+  }
+  m_tabBar->SetCaption(page, text);
+  return true;
 }
 
 wxString GlyphBook::GetPageText(size_t pageIdx) const {
-  return m_notebook->GetPageText(pageIdx);
+  return pageIdx < GetPageCount() ? m_tabBar->GetCaption(pageIdx) : wxString();
 }
 
 bool GlyphBook::SetPageToolTip(size_t page, const wxString &text) {
-  const bool ok = m_notebook->SetPageToolTip(page, text);
-  SyncTabBar();
-  return ok;
+  if (page >= GetPageCount()) {
+    return false;
+  }
+  m_tabBar->SetTooltip(page, text);
+  return true;
 }
 
 wxString GlyphBook::GetPageToolTip(size_t pageIdx) const {
-  return m_notebook->GetPageToolTip(pageIdx);
+  return pageIdx < GetPageCount() ? m_tabBar->GetTooltip(pageIdx) : wxString();
 }
 
 bool GlyphBook::SetPageBitmap(size_t page, const wxBitmapBundle &bitmap) {
-  const bool ok = m_notebook->SetPageBitmap(page, bitmap);
-  SyncTabBar();
-  return ok;
+  if (page >= GetPageCount()) {
+    return false;
+  }
+  m_tabBar->SetBitmap(page, bitmap);
+  return true;
 }
 
 wxBitmap GlyphBook::GetPageBitmap(size_t pageIdx) const {
-  return m_notebook->GetPageBitmap(pageIdx);
+  if (pageIdx >= GetPageCount()) {
+    return wxBitmap();
+  }
+  const wxBitmapBundle &bundle = m_tabBar->GetBitmap(pageIdx);
+  return bundle.IsOk() ? bundle.GetBitmapFor(this) : wxBitmap();
 }
 
 bool GlyphBook::SetPageImage(size_t page, int imageId) {
@@ -390,57 +420,100 @@ int GlyphBook::GetPageImage(size_t WXUNUSED(page)) const { return wxNOT_FOUND; }
 
 void GlyphBook::SetPageSize(const wxSize &WXUNUSED(size)) {}
 
+// Selection
+// ---------
+
 int GlyphBook::GetSelection() const {
-  return m_notebook ? m_notebook->GetSelection() : wxNOT_FOUND;
+  return m_tabBar ? m_tabBar->GetSelection() : wxNOT_FOUND;
 }
 
-int GlyphBook::SetSelection(size_t page) {
-  const int old = m_notebook->SetSelection(page);
-  SyncTabBar();
+void GlyphBook::ShowPage(int index) {
+  if (index < 0 || index >= static_cast<int>(GetPageCount())) {
+    return;
+  }
+  wxWindow *const window = m_tabBar->GetWindow(static_cast<size_t>(index));
+  const int pageIndex = m_pages->FindPage(window);
+  if (pageIndex != wxNOT_FOUND) {
+    m_pages->ChangeSelection(static_cast<size_t>(pageIndex));
+  }
+  // A page that was added while the book was hidden may have an old size.
+  window->SetSize(m_pages->GetClientRect());
+}
+
+int GlyphBook::DoSetSelection(size_t page, bool sendEvents) {
+  const int old = GetSelection();
+  if (page >= GetPageCount() || static_cast<int>(page) == old) {
+    return old;
+  }
+  const int selection = static_cast<int>(page);
+  if (sendEvents && !SendEvent(wxEVT_BOOKCTRL_PAGE_CHANGING, selection, old)) {
+    return old;
+  }
+  // The tab bar and the pages change together, and are painted once, when the
+  // handler of the event is done.
+  wxWindowUpdateLocker locker(this);
+  m_tabBar->SetSelection(selection);
+  ShowPage(selection);
+  if (sendEvents) {
+    SendEvent(wxEVT_BOOKCTRL_PAGE_CHANGED, selection, old);
+  }
   return old;
 }
+
+int GlyphBook::SetSelection(size_t page) { return DoSetSelection(page, true); }
 
 int GlyphBook::ChangeSelection(size_t page) {
-  const int old = m_notebook->ChangeSelection(page);
-  SyncTabBar();
-  return old;
+  return DoSetSelection(page, false);
 }
 
 int GlyphBook::HitTest(const wxPoint &pt, long *flags) const {
   if (flags) {
     *flags = wxBK_HITTEST_NOWHERE;
   }
-  if (m_tabBar->IsShown() && m_tabBar->GetRect().Contains(pt)) {
-    const int index = m_tabBar->PageIndexAt(pt - m_tabBar->GetPosition());
+  if (m_tabBar->GetRect().Contains(pt)) {
+    const int index = m_tabBar->HitTest(pt - m_tabBar->GetPosition());
     if (flags && index != wxNOT_FOUND) {
       *flags = wxBK_HITTEST_ONITEM;
     }
     return index;
   }
-  return m_notebook->HitTest(pt - m_notebook->GetPosition(), flags);
-}
-
-void GlyphBook::Split(size_t page, int direction) {
-  if (!HasVerticalTabs()) {
-    m_notebook->Split(page, direction);
+  if (flags && m_pages->GetRect().Contains(pt)) {
+    *flags = wxBK_HITTEST_ONPAGE;
   }
+  return wxNOT_FOUND;
 }
 
-void GlyphBook::UnsplitAll() { m_notebook->UnsplitAll(); }
+// Layout
+// ------
 
-void GlyphBook::SaveLayout(const wxString &name,
-                           wxAuiBookSerializer &serializer) const {
-  m_notebook->SaveLayout(name, serializer);
-}
-
-void GlyphBook::LoadLayout(const wxString &name,
-                           wxAuiBookDeserializer &deserializer) {
-  m_notebook->LoadLayout(name, deserializer);
-  if (HasVerticalTabs()) {
-    // A saved split cannot be shown by the bar.
-    m_notebook->UnsplitAll();
+BookLayout GlyphBook::SaveLayout() const {
+  BookLayout layout;
+  const size_t count = GetPageCount();
+  layout.tabs.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    BookLayout::Tab tab;
+    tab.label = GetPageText(i);
+    tab.selected = static_cast<int>(i) == GetSelection();
+    layout.tabs.push_back(std::move(tab));
   }
-  SyncTabBar();
+  return layout;
+}
+
+void GlyphBook::RestoreLayout(const BookLayout &layout) {
+  const size_t count = std::min(layout.tabs.size(), GetPageCount());
+  int selected = wxNOT_FOUND;
+  for (size_t i = 0; i < count; ++i) {
+    const BookLayout::Tab &tab = layout.tabs[i];
+    if (!tab.label.empty()) {
+      SetPageText(i, tab.label);
+    }
+    if (tab.selected && selected == wxNOT_FOUND) {
+      selected = static_cast<int>(i);
+    }
+  }
+  if (selected != wxNOT_FOUND) {
+    SetSelection(static_cast<size_t>(selected));
+  }
 }
 
 #endif // wxCHECK_VERSION(3, 3, 0)

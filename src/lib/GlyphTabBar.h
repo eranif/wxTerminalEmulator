@@ -1,7 +1,7 @@
 #pragma once
 
-// A vertical tab bar for a wxAuiNotebook. It needs GlyphTabArt and the
-// wxWidgets 3.3 notebook API.
+// A tab bar, painted with GlyphTabArt. It needs wxWidgets 3.3 (see
+// GlyphTabArt).
 #include <wx/version.h>
 
 #if wxCHECK_VERSION(3, 3, 0)
@@ -10,49 +10,52 @@
 #include <functional>
 #include <memory>
 #include <vector>
-#include <wx/aui/auibook.h>
-#include <wx/weakref.h>
 #include <wx/popupwin.h>
 #include <wx/window.h>
 
 /**
- * @brief Vertical tabs for a wxAuiNotebook, painted with a GlyphTabArt.
+ * @brief A bar of tabs on any side of the pages (see GlyphBook).
  *
- * wxAUI has no vertical tabs: wxAUI_NB_LEFT and wxAUI_NB_RIGHT are not
- * implemented in wxWidgets 3.3. This bar is a sibling of the notebook, put on
- * its left or right side by the parent (see SetSide()). It shows the pages in
- * the order of the main tab control of the notebook. While the bar is used,
- * the notebook should not be split, and should hide its own tabs with
- * SetTabCtrlHeight(0).
+ * The bar keeps the tabs: for each one a page window (it is not owned and not
+ * shown by the bar), a caption, an icon and a tooltip. It knows nothing about
+ * the pages or the notebook events. It tells its owner what the user did
+ * through the callbacks (see SetCallbacks()), and the owner changes the bar.
  *
- * Like the tabs of the notebook, the bar:
- * - selects a page on a click;
- * - closes a page with the close button or a middle click, with the events
- *   wxEVT_AUINOTEBOOK_PAGE_CLOSE (which can veto it) and
- *   wxEVT_AUINOTEBOOK_PAGE_CLOSED of the notebook;
- * - sends wxEVT_AUINOTEBOOK_TAB_RIGHT_UP from the notebook on a right click;
- * - moves a page when its tab is dragged up or down.
- *
- * The edge of the bar next to the notebook can be dragged to change the width
- * of the bar. Too many tabs scroll with the mouse wheel.
- *
- * The bar follows the notebook by itself: it reads the pages again when the
- * selection changes, when a page is closed, and in idle time.
+ * - Tabs on the top or the bottom are placed from left to right. When they do
+ *   not fit, they get narrower, and then the bar scrolls (mouse wheel) and
+ * shows a button with the list of all the tabs.
+ * - Tabs on the left or the right are rows, from top to bottom. The bar scrolls
+ *   with the mouse wheel, and its inner edge can be dragged to change its
+ * width.
+ * - A tab is selected by a click, and moved by dragging it.
  */
 class GlyphTabBar : public wxWindow {
 public:
-  // @p width is the width of the bar in DIPs.
-  GlyphTabBar(wxWindow *parent, wxAuiNotebook *notebook, int width);
+  struct Callbacks {
+    // The user clicked a tab (or chose it in the list). Called with the index.
+    std::function<void(size_t)> select;
+    // The user clicked the close button of a tab.
+    std::function<void(size_t)> close;
+    std::function<void(size_t)> middleUp;
+    std::function<void(size_t)> rightUp;
+  };
+
+  // @p width is the width of the bar in DIPs, when it is on the left or the
+  // right.
+  GlyphTabBar(wxWindow *parent, int width);
   ~GlyphTabBar() override = default;
 
   void SetArt(std::unique_ptr<GlyphTabArt> art);
+  void SetCallbacks(Callbacks callbacks) { m_callbacks = std::move(callbacks); }
 
-  // The side of the notebook the bar is on: wxLEFT or wxRIGHT. The parent
-  // puts the bar there; this only changes the drawing.
+  // The side of the pages the bar is on: wxTOP, wxBOTTOM, wxLEFT or wxRIGHT.
+  // The parent puts the bar there; this changes the drawing and the layout of
+  // the tabs.
   void SetSide(wxDirection side);
   wxDirection GetSide() const { return m_side; }
+  bool IsVertical() const { return m_side == wxLEFT || m_side == wxRIGHT; }
 
-  // The width of the bar in DIPs.
+  // The width of the bar in DIPs when it is on the left or the right.
   void SetBarWidth(int width);
   int GetBarWidth() const { return m_width; }
   // Called with the new width in DIPs after the user resized the bar.
@@ -60,23 +63,55 @@ public:
     m_onWidthChanged = std::move(callback);
   }
 
-  // Read the pages of the notebook again, and paint the bar if they changed.
-  void SyncWithNotebook();
+  // Which tabs have a close button: all, or only the selected one.
+  void SetCloseButtons(bool onAllTabs, bool onActiveTab);
 
-  // The index (in the notebook) of the page whose tab is at @p pt, in the
-  // coordinates of the bar, or wxNOT_FOUND.
-  int PageIndexAt(const wxPoint &pt) const;
+  // Tabs
+  // ----
+
+  size_t GetCount() const { return m_tabs.size(); }
+  // Add a tab before @p index (the end when it is the count). The selection
+  // does not change, except that it follows the tab it had.
+  void Insert(size_t index, wxWindow *window, const wxString &caption,
+              const wxBitmapBundle &bitmap);
+  // Remove a tab. The selection becomes -1 when it was this tab.
+  void Remove(size_t index);
+  void Clear();
+  // Move the tab @p from to the place @p to (an index in the list after the
+  // move).
+  void Move(size_t from, size_t to);
+
+  wxWindow *GetWindow(size_t index) const { return m_tabs[index].window; }
+  int Find(const wxWindow *window) const;
+
+  void SetCaption(size_t index, const wxString &caption);
+  const wxString &GetCaption(size_t index) const {
+    return m_tabs[index].info.caption;
+  }
+  void SetTooltip(size_t index, const wxString &tooltip);
+  const wxString &GetTooltip(size_t index) const {
+    return m_tabs[index].info.tooltip;
+  }
+  void SetBitmap(size_t index, const wxBitmapBundle &bitmap);
+  const wxBitmapBundle &GetBitmap(size_t index) const {
+    return m_tabs[index].info.bitmap;
+  }
+
+  // The selected tab, or -1. The bar scrolls to show it.
+  void SetSelection(int index);
+  int GetSelection() const { return m_selection; }
+
+  // The index of the tab at @p pt (in the coordinates of the bar), or
+  // wxNOT_FOUND.
+  int HitTest(const wxPoint &pt) const;
 
   bool AcceptsFocus() const override { return false; }
   bool AcceptsFocusFromKeyboard() const override { return false; }
 
 private:
   struct Tab {
-    // The rectangle of the row, and the rectangles of the buttons after the
-    // tab was painted.
-    wxAuiNotebookPage page;
-    // The index of the page in the notebook.
-    size_t index{0};
+    GlyphTabInfo info;
+    wxWindow *window{nullptr};
   };
 
   void OnPaint(wxPaintEvent &event);
@@ -89,55 +124,76 @@ private:
   void OnRightUp(wxMouseEvent &event);
   void OnWheel(wxMouseEvent &event);
   void OnCaptureLost(wxMouseCaptureLostEvent &event);
-  void OnIdle(wxIdleEvent &event);
   void OnDpiChanged(wxDPIChangedEvent &event);
-  void OnNotebookChanged(wxAuiNotebookEvent &event);
 
-  // The side of the bar next to the notebook.
-  wxDirection GetInnerSide() const {
-    return m_side == wxLEFT ? wxRIGHT : wxLEFT;
-  }
-  // Place the rows from the top, with the scroll offset.
+  // The side of the bar next to the pages.
+  wxDirection GetInnerSide() const;
+  // The close buttons of the tabs, for the selection and the options.
+  void UpdateButtons();
+  // Set the size the parent gives to the bar: the width, or the height of the
+  // tabs.
+  void UpdateMinSize();
+  // Ask the parent to layout again, once, after the events that are waiting.
+  void RequestParentLayout();
+  // Place the tabs, with the scroll offset.
   void LayoutTabs();
-  // The tab at @p pt, or nullptr.
-  Tab *TabAt(const wxPoint &pt);
-  // True if @p pt is on the close button of @p tab (as it was painted).
+  // Scroll so that the tab @p index is inside the bar.
+  void EnsureVisible(size_t index);
+  // The index of the tab at @p pt (a tab under the list button is not found).
+  int TabIndexAt(const wxPoint &pt) const;
+  // True if @p pt is on the close button of the tab (as it was painted).
   bool IsOnCloseButton(const Tab &tab, const wxPoint &pt) const;
   // True if @p pt is on the edge that resizes the bar.
   bool IsOnResizeEdge(const wxPoint &pt) const;
   // Update the tab under the mouse. Returns true if something changed.
   bool UpdateHover(const wxPoint &pt);
-  // Move the dragged tab to the row under @p pt.
+  // Move the dragged tab to the place of the mouse.
   void DragTo(const wxPoint &pt);
-  void ClosePage(size_t index);
-  void ScrollBy(int dy);
+  // Show the list of all the tabs, and call the select callback.
+  void ShowTabList();
+  void ScrollBy(int delta);
   void EndMouseAction();
   // @p width (in DIPs) inside the limits of the bar.
   int ClampWidth(int width) const;
   // Show the guide line at the edge the bar will have with m_dragWidth.
   void MoveGuide();
 
-  wxWeakRef<wxAuiNotebook> m_notebook;
   std::unique_ptr<GlyphTabArt> m_art;
+  Callbacks m_callbacks;
   std::vector<Tab> m_tabs;
-  wxDirection m_side{wxLEFT};
+  int m_selection{-1};
+  bool m_closeOnAll{false};
+  bool m_closeOnActive{false};
+  wxDirection m_side{wxTOP};
   int m_width;
   std::function<void(int)> m_onWidthChanged;
-  // The height of all rows, and the pixels scrolled off the top.
-  int m_contentHeight{0};
+  // The size of all the tabs along the bar, and the pixels scrolled off the
+  // start.
+  int m_contentSize{0};
   int m_scroll{0};
+  // The part of a wheel notch that did not scroll yet (touchpads and
+  // high-resolution wheels send less than one notch at a time).
+  int m_wheelRemainder{0};
+  // The room of the tabs along the bar (less than the bar with the list
+  // button), and the rectangle of the list button (empty without it).
+  int m_tabsRoom{0};
+  wxRect m_listRect;
+  bool m_listHover{false};
 
   // The page of the tab under the mouse, of the close button under the mouse,
   // and of the close button pressed.
   wxWindow *m_hover{nullptr};
   wxWindow *m_closeHover{nullptr};
   wxWindow *m_closePressed{nullptr};
-  // The page of the tab being dragged.
+  // The page of the tab being dragged, where the mouse went down, and if it
+  // moved far enough to start the drag.
   wxWindow *m_dragged{nullptr};
+  wxPoint m_pressPoint;
+  bool m_dragStarted{false};
   // Resizing: the mouse x on the screen and the width (in pixels) when it
   // started.
   bool m_resizing{false};
-  // A layout of the parent is waiting (see SetBarWidth()).
+  // A layout of the parent is waiting (see RequestParentLayout()).
   bool m_layoutPending{false};
   int m_resizeStartX{0};
   int m_resizeStartWidth{0};
