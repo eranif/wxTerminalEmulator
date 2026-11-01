@@ -200,7 +200,14 @@ public:
   ~MyFrame() override;
 
   // Show the context menu of a tab. @p tabIdx is the tab that was clicked.
-  void ShowTabMenu(int tabIdx = wxNOT_FOUND);
+  // @p pos is in the coordinates of the book; by default the menu is at the
+  // mouse.
+  void ShowTabMenu(int tabIdx = wxNOT_FOUND,
+                   const wxPoint &pos = wxDefaultPosition);
+  // The context menu of the header of a group, and of the bar of the tabs where
+  // there is no tab. The book fires events for them and shows no menu itself.
+  void ShowGroupMenu(int group, const wxPoint &pos);
+  void ShowBarMenu(const wxPoint &pos);
   // Ask for a text and show it as the header (or the footer) strip of a tab,
   // with random colours. An empty text keeps the current strip.
   void SetTabStrip(size_t tabIdx, bool footer);

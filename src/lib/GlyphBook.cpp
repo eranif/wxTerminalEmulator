@@ -7,10 +7,17 @@
 #include <wx/sizer.h>
 #include <wx/wupdlock.h>
 
-wxDEFINE_EVENT(wxEVT_GLYPHBOOK_PAGE_CLOSE, wxBookCtrlEvent);
-wxDEFINE_EVENT(wxEVT_GLYPHBOOK_PAGE_CLOSED, wxBookCtrlEvent);
-wxDEFINE_EVENT(wxEVT_GLYPHBOOK_TAB_RIGHT_UP, wxBookCtrlEvent);
-wxDEFINE_EVENT(wxEVT_GLYPHBOOK_TAB_MIDDLE_UP, wxBookCtrlEvent);
+wxIMPLEMENT_DYNAMIC_CLASS(GlyphBookEvent, wxBookCtrlEvent);
+
+wxDEFINE_EVENT(wxEVT_GLYPHBOOK_PAGE_CLOSE, GlyphBookEvent);
+wxDEFINE_EVENT(wxEVT_GLYPHBOOK_PAGE_CLOSED, GlyphBookEvent);
+wxDEFINE_EVENT(wxEVT_GLYPHBOOK_TAB_CONTEXT_MENU, GlyphBookEvent);
+wxDEFINE_EVENT(wxEVT_GLYPHBOOK_TAB_MIDDLE_UP, GlyphBookEvent);
+wxDEFINE_EVENT(wxEVT_GLYPHBOOK_GROUP_CONTEXT_MENU, GlyphBookEvent);
+wxDEFINE_EVENT(wxEVT_GLYPHBOOK_GROUP_MIDDLE_UP, GlyphBookEvent);
+wxDEFINE_EVENT(wxEVT_GLYPHBOOK_BAR_CONTEXT_MENU, GlyphBookEvent);
+wxDEFINE_EVENT(wxEVT_GLYPHBOOK_BAR_MIDDLE_UP, GlyphBookEvent);
+wxDEFINE_EVENT(wxEVT_GLYPHBOOK_GROUP_CHANGED, GlyphBookEvent);
 
 namespace {
 
@@ -54,17 +61,39 @@ bool GlyphBook::Create(wxWindow *parent, wxWindowID id, const wxPoint &pos,
     }
   };
   callbacks.close = [this](size_t index) { ClosePage(index); };
-  callbacks.middleUp = [this](size_t index) {
+  // The positions the bar gives are in its coordinates.
+  callbacks.tabMiddleUp = [this](size_t index, const wxPoint &position) {
     // Like wxAuiNotebook: the application can handle the click itself.
     bool handled = false;
     SendEvent(wxEVT_GLYPHBOOK_TAB_MIDDLE_UP, static_cast<int>(index),
-              wxNOT_FOUND, &handled);
+              wxNOT_FOUND, &handled, kNoGroup, position);
     if (!handled && (m_style & wxAUI_NB_MIDDLE_CLICK_CLOSE)) {
       ClosePage(index);
     }
   };
-  callbacks.rightUp = [this](size_t index) {
-    SendEvent(wxEVT_GLYPHBOOK_TAB_RIGHT_UP, static_cast<int>(index));
+  callbacks.tabContextMenu = [this](size_t index, const wxPoint &position) {
+    SendEvent(wxEVT_GLYPHBOOK_TAB_CONTEXT_MENU, static_cast<int>(index),
+              wxNOT_FOUND, nullptr, kNoGroup, position);
+  };
+  callbacks.groupContextMenu = [this](int group, const wxPoint &position) {
+    SendEvent(wxEVT_GLYPHBOOK_GROUP_CONTEXT_MENU, wxNOT_FOUND, wxNOT_FOUND,
+              nullptr, group, position);
+  };
+  callbacks.groupMiddleUp = [this](int group, const wxPoint &position) {
+    SendEvent(wxEVT_GLYPHBOOK_GROUP_MIDDLE_UP, wxNOT_FOUND, wxNOT_FOUND,
+              nullptr, group, position);
+  };
+  callbacks.barContextMenu = [this](const wxPoint &position) {
+    SendEvent(wxEVT_GLYPHBOOK_BAR_CONTEXT_MENU, wxNOT_FOUND, wxNOT_FOUND,
+              nullptr, kNoGroup, position);
+  };
+  callbacks.barMiddleUp = [this](const wxPoint &position) {
+    SendEvent(wxEVT_GLYPHBOOK_BAR_MIDDLE_UP, wxNOT_FOUND, wxNOT_FOUND, nullptr,
+              kNoGroup, position);
+  };
+  callbacks.groupChanged = [this](int group) {
+    SendEvent(wxEVT_GLYPHBOOK_GROUP_CHANGED, wxNOT_FOUND, wxNOT_FOUND, nullptr,
+              group);
   };
   m_tabBar->SetCallbacks(std::move(callbacks));
 
@@ -230,9 +259,15 @@ wxSize GlyphBook::DoGetBestSize() const {
 // ------
 
 bool GlyphBook::SendEvent(wxEventType type, int selection, int oldSelection,
-                          bool *handled) {
-  wxBookCtrlEvent event(type, GetId(), selection, oldSelection);
+                          bool *handled, int group, const wxPoint &position) {
+  GlyphBookEvent event(type, GetId(), selection, oldSelection);
   event.SetEventObject(this);
+  event.SetGroup(group);
+  // The position is in the coordinates of the bar; the application uses the
+  // ones of the book.
+  event.SetPosition(position == wxDefaultPosition
+                        ? position
+                        : position + m_tabBar->GetPosition());
   const bool processed = ProcessWindowEvent(event);
   if (handled) {
     *handled = processed;
@@ -482,17 +517,98 @@ int GlyphBook::HitTest(const wxPoint &pt, long *flags) const {
   return wxNOT_FOUND;
 }
 
+// Groups
+// ------
+
+int GlyphBook::AddPageToNewGroup(size_t page, const wxString &name,
+                                 const wxColour &colour) {
+  return page < GetPageCount() ? m_tabBar->AddTabToNewGroup(page, name, colour)
+                               : kNoGroup;
+}
+
+bool GlyphBook::AddPageToGroup(size_t page, int group) {
+  return m_tabBar->AddTabToGroup(page, group);
+}
+
+void GlyphBook::RemovePageFromGroup(size_t page) {
+  m_tabBar->RemoveTabFromGroup(page);
+}
+
+void GlyphBook::Ungroup(int group) { m_tabBar->Ungroup(group); }
+
+int GlyphBook::GetPageGroup(size_t page) const {
+  return page < GetPageCount() ? m_tabBar->GetTabGroup(page) : kNoGroup;
+}
+
+std::vector<int> GlyphBook::GetGroups() const { return m_tabBar->GetGroups(); }
+
+std::vector<size_t> GlyphBook::GetGroupPages(int group) const {
+  return m_tabBar->GetGroupTabs(group);
+}
+
+wxString GlyphBook::GetGroupName(int group) const {
+  return m_tabBar->GetGroupName(group);
+}
+
+void GlyphBook::SetGroupName(int group, const wxString &name) {
+  m_tabBar->SetGroupName(group, name);
+}
+
+wxColour GlyphBook::GetGroupColour(int group) const {
+  return m_tabBar->GetGroupColour(group);
+}
+
+void GlyphBook::SetGroupColour(int group, const wxColour &colour) {
+  m_tabBar->SetGroupColour(group, colour);
+}
+
+bool GlyphBook::IsGroupCollapsed(int group) const {
+  return m_tabBar->IsGroupCollapsed(group);
+}
+
+void GlyphBook::SetGroupCollapsed(int group, bool collapsed) {
+  m_tabBar->SetGroupCollapsed(group, collapsed);
+}
+
+const std::vector<GlyphBook::GroupColour> &GlyphBook::GetGroupColours() {
+  static const std::vector<GroupColour> colours = {
+      {"Grey", GlyphTabPainter::DefaultGroupColour()},
+      {"Blue", wxColour(0x1a, 0x73, 0xe8)},
+      {"Red", wxColour(0xd9, 0x30, 0x25)},
+      {"Yellow", wxColour(0xf2, 0xb7, 0x00)},
+      {"Green", wxColour(0x18, 0x80, 0x38)},
+      {"Pink", wxColour(0xd0, 0x18, 0x84)},
+      {"Purple", wxColour(0xa1, 0x42, 0xf4)},
+      {"Cyan", wxColour(0x00, 0x7b, 0x83)},
+      {"Orange", wxColour(0xe8, 0x71, 0x0a)}};
+  return colours;
+}
+
 // Layout
 // ------
 
 BookLayout GlyphBook::SaveLayout() const {
   BookLayout layout;
+  // The groups in the order of their tabs, and the tabs refer to them by their
+  // place in this list.
+  const std::vector<int> groups = GetGroups();
+  for (const int group : groups) {
+    BookLayout::Group saved;
+    saved.name = GetGroupName(group);
+    saved.colour = GetGroupColour(group);
+    saved.collapsed = IsGroupCollapsed(group);
+    layout.groups.push_back(std::move(saved));
+  }
+
   const size_t count = GetPageCount();
   layout.tabs.reserve(count);
   for (size_t i = 0; i < count; ++i) {
     BookLayout::Tab tab;
     tab.label = GetPageText(i);
     tab.selected = static_cast<int>(i) == GetSelection();
+    const auto group = std::find(groups.begin(), groups.end(), GetPageGroup(i));
+    tab.group =
+        group == groups.end() ? -1 : static_cast<int>(group - groups.begin());
     layout.tabs.push_back(std::move(tab));
   }
   return layout;
@@ -500,17 +616,37 @@ BookLayout GlyphBook::SaveLayout() const {
 
 void GlyphBook::RestoreLayout(const BookLayout &layout) {
   const size_t count = std::min(layout.tabs.size(), GetPageCount());
+  // The ids of the groups that were made, by their place in the layout.
+  std::vector<int> ids(layout.groups.size(), kNoGroup);
   int selected = wxNOT_FOUND;
   for (size_t i = 0; i < count; ++i) {
     const BookLayout::Tab &tab = layout.tabs[i];
     if (!tab.label.empty()) {
       SetPageText(i, tab.label);
     }
+    if (tab.group >= 0 && static_cast<size_t>(tab.group) < ids.size()) {
+      int &id = ids[static_cast<size_t>(tab.group)];
+      if (id == kNoGroup) {
+        const BookLayout::Group &group =
+            layout.groups[static_cast<size_t>(tab.group)];
+        id = AddPageToNewGroup(i, group.name, group.colour);
+      } else {
+        // The tabs of a group are next to each other, so this tab is already
+        // after the last one.
+        AddPageToGroup(i, id);
+      }
+    }
     if (tab.selected && selected == wxNOT_FOUND) {
       selected = static_cast<int>(i);
     }
   }
+  // Collapse after all the tabs are in: the selected tab stays visible.
   if (selected != wxNOT_FOUND) {
     SetSelection(static_cast<size_t>(selected));
+  }
+  for (size_t g = 0; g < ids.size(); ++g) {
+    if (ids[g] != kNoGroup) {
+      SetGroupCollapsed(ids[g], layout.groups[g].collapsed);
+    }
   }
 }

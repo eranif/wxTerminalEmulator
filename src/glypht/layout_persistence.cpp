@@ -75,6 +75,7 @@ void LayoutPersistence::Clear() {
 // ---------------------------------------------------------------------------
 
 bool SaveLayoutFile(const std::vector<LayoutPersistence::TabInfo> &tabs,
+                    const std::vector<LayoutPersistence::GroupInfo> &groups,
                     const wxSize &frameSize) {
   const wxString path = LayoutPersistence::GetLayoutPath();
   wxFileName fn(path);
@@ -96,13 +97,23 @@ bool SaveLayoutFile(const std::vector<LayoutPersistence::TabInfo> &tabs,
   if (frameSize.x > 0 && frameSize.y > 0) {
     file.AddLine(wxString::Format("size=%dx%d", frameSize.x, frameSize.y));
   }
+  for (const auto &group : groups) {
+    file.AddLine("[group]");
+    file.AddLine("name=" + Encode(group.name));
+    if (group.colour.IsOk()) {
+      file.AddLine("colour=" + group.colour.GetAsString(wxC2S_HTML_SYNTAX));
+    }
+    if (group.collapsed) {
+      file.AddLine("collapsed=1");
+    }
+  }
   for (const auto &tab : tabs) {
     file.AddLine("[tab]");
     file.AddLine("shell=" + Encode(tab.shellCommand));
     file.AddLine("cwd=" + Encode(tab.workingDirectory));
     file.AddLine("label=" + Encode(tab.customLabel));
-    if (!tab.group.empty()) {
-      file.AddLine("group=" + Encode(tab.group));
+    if (tab.group >= 0) {
+      file.AddLine(wxString::Format("group=%d", tab.group));
     }
     if (tab.selected) {
       file.AddLine("selected=1");
@@ -123,14 +134,20 @@ std::optional<LayoutFile> LoadLayoutFile() {
   }
 
   LayoutFile result;
-  bool inTab = false;
+  enum class Section { Header, Tab, Group };
+  Section section = Section::Header;
   LayoutPersistence::TabInfo current;
-  auto flushTab = [&]() {
-    if (inTab) {
+  LayoutPersistence::GroupInfo currentGroup;
+  // End the section that is open: the tab or the group is complete.
+  auto flush = [&]() {
+    if (section == Section::Tab) {
       result.tabs.push_back(current);
       current = LayoutPersistence::TabInfo{};
-      inTab = false;
+    } else if (section == Section::Group) {
+      result.groups.push_back(currentGroup);
+      currentGroup = LayoutPersistence::GroupInfo{};
     }
+    section = Section::Header;
   };
 
   for (size_t i = 0; i < file.GetLineCount(); ++i) {
@@ -142,18 +159,23 @@ std::optional<LayoutFile> LoadLayoutFile() {
     }
 
     if (trimmed == "[tab]") {
-      flushTab();
-      inTab = true;
+      flush();
+      section = Section::Tab;
+      continue;
+    }
+    if (trimmed == "[group]") {
+      flush();
+      section = Section::Group;
       continue;
     }
     if (trimmed == "[layout]") {
       // The tab controls of older versions: not used.
-      flushTab();
+      flush();
       continue;
     }
 
-    if (!inTab) {
-      // Header-level keys (before the first [tab] section).
+    if (section == Section::Header) {
+      // Header-level keys (before the first section).
       if (trimmed.StartsWith("active=")) {
         result.activeTitle = Decode(trimmed.Mid(7));
       } else if (trimmed.StartsWith("size=")) {
@@ -173,6 +195,16 @@ std::optional<LayoutFile> LoadLayoutFile() {
     }
     const wxString key = trimmed.Left(eq).Lower();
     const wxString value = Decode(trimmed.Mid(eq + 1));
+    if (section == Section::Group) {
+      if (key == "name") {
+        currentGroup.name = value;
+      } else if (key == "colour") {
+        currentGroup.colour = wxColour(value);
+      } else if (key == "collapsed") {
+        currentGroup.collapsed = value == "1";
+      }
+      continue;
+    }
     if (key == "shell") {
       current.shellCommand = value;
     } else if (key == "cwd") {
@@ -180,12 +212,15 @@ std::optional<LayoutFile> LoadLayoutFile() {
     } else if (key == "label") {
       current.customLabel = value;
     } else if (key == "group") {
-      current.group = value;
+      // A file of an older version had a name here: that is no group.
+      long index = -1;
+      current.group =
+          value.ToLong(&index) && index >= 0 ? static_cast<int>(index) : -1;
     } else if (key == "selected") {
       current.selected = value == "1";
     }
   }
-  flushTab();
+  flush();
 
   if (result.IsEmpty()) {
     return std::nullopt;

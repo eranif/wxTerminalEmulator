@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <wx/colour.h>
 #include <wx/string.h>
 
 /**
@@ -13,16 +14,26 @@
  * calls RestoreLayout().
  */
 struct BookLayout {
+  // A group of tabs (see GlyphBook). The tabs of a group are next to each
+  // other.
+  struct Group {
+    wxString name;
+    wxColour colour;
+    bool collapsed{false};
+  };
+
   struct Tab {
     // The caption of the tab. On restore, an empty label keeps the caption the
     // page has.
     wxString label;
-    // The name of the group of the tab, empty for a tab outside any group.
-    // Reserved for tab groups, which are not implemented yet: GlyphBook does
-    // not set it and ignores it on restore.
-    wxString group;
+    // The index of the group of the tab in BookLayout::groups, or -1 for a tab
+    // outside any group.
+    int group{-1};
     // True for the current tab. At most one tab is selected.
     bool selected{false};
   };
+
+  // The groups. The tabs refer to them by their index.
+  std::vector<Group> groups;
   std::vector<Tab> tabs;
 };

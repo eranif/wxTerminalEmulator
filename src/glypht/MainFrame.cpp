@@ -99,6 +99,45 @@ GlyphTabPainter::Style TabArtStyle(TabStyle style) {
                                   : GlyphTabPainter::Style::Browser;
 }
 
+// The text of a group in a menu: its name, or "Group N".
+wxString GroupMenuLabel(const TabBook &book, int group) {
+  wxString name = book.GetGroupName(group);
+  if (!name.empty()) {
+    name.Replace(wxS("&"), wxS("&&"));
+    return name;
+  }
+  const std::vector<int> groups = book.GetGroups();
+  const auto it = std::find(groups.begin(), groups.end(), group);
+  return wxString::Format(_("Group %d"),
+                          static_cast<int>(it - groups.begin()) + 1);
+}
+
+// The colour for a new group: the first colour of the palette that no group
+// has, else the next one in turn.
+wxColour NextGroupColour(const TabBook &book) {
+  const auto &palette = TabBook::GetGroupColours();
+  const std::vector<int> groups = book.GetGroups();
+  for (const auto &entry : palette) {
+    const bool used = std::any_of(groups.begin(), groups.end(), [&](int group) {
+      return book.GetGroupColour(group) == entry.colour;
+    });
+    if (!used) {
+      return entry.colour;
+    }
+  }
+  return palette[groups.size() % palette.size()].colour;
+}
+
+// Ask for the name of a group. Returns false if the user cancelled.
+bool AskGroupName(wxWindow *parent, const wxString &title, wxString &name) {
+  wxTextEntryDialog dialog(parent, _("Group name (it can be empty):"), title,
+                           name);
+  if (dialog.ShowModal() != wxID_OK) {
+    return false;
+  }
+  name = dialog.GetValue();
+  return true;
+}
 } // namespace
 
 MyFrame::MyFrame(const wxCmdLineParser &parser,
@@ -189,10 +228,28 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
     UpdateProgressStatus();
     UpdateAppSelectionStatus();
   });
-  m_notebook->Bind(wxEVT_GLYPHBOOK_TAB_RIGHT_UP,
-                   [this](wxBookCtrlEvent &event) {
-                     CallAfter(&MyFrame::ShowTabMenu, event.GetSelection());
+  // The book shows no menu: these events ask the application for one.
+  m_notebook->Bind(wxEVT_GLYPHBOOK_TAB_CONTEXT_MENU,
+                   [this](GlyphBookEvent &event) {
+                     CallAfter(&MyFrame::ShowTabMenu, event.GetSelection(),
+                               event.GetPosition());
                    });
+  m_notebook->Bind(wxEVT_GLYPHBOOK_GROUP_CONTEXT_MENU,
+                   [this](GlyphBookEvent &event) {
+                     CallAfter(&MyFrame::ShowGroupMenu, event.GetGroup(),
+                               event.GetPosition());
+                   });
+  m_notebook->Bind(wxEVT_GLYPHBOOK_BAR_CONTEXT_MENU,
+                   [this](GlyphBookEvent &event) {
+                     CallAfter(&MyFrame::ShowBarMenu, event.GetPosition());
+                   });
+  // A middle click on the bar, like on a browser, opens a new tab.
+  m_notebook->Bind(wxEVT_GLYPHBOOK_BAR_MIDDLE_UP, [this](GlyphBookEvent &) {
+    CallAfter([this] {
+      wxCommandEvent event;
+      OnNewTerminal(event);
+    });
+  });
 
   // When the user launches with a command or a working directory, honour those
   // and start a single fresh terminal. Otherwise try to restore the previously
@@ -266,7 +323,15 @@ void MyFrame::SaveLayout() {
     return;
   }
 
-  SaveLayoutFile(tabs, GetSize());
+  std::vector<LayoutPersistence::GroupInfo> groups;
+  for (const auto &group : book.groups) {
+    LayoutPersistence::GroupInfo info;
+    info.name = group.name;
+    info.colour = group.colour;
+    info.collapsed = group.collapsed;
+    groups.push_back(std::move(info));
+  }
+  SaveLayoutFile(tabs, groups, GetSize());
 }
 
 bool MyFrame::RestoreLayout() {
@@ -286,6 +351,13 @@ bool MyFrame::RestoreLayout() {
 
   // The layout of the book: one entry for each tab that was created, in order.
   BookLayout book;
+  for (const auto &group : layout->groups) {
+    BookLayout::Group entry;
+    entry.name = group.name;
+    entry.colour = group.colour;
+    entry.collapsed = group.collapsed;
+    book.groups.push_back(std::move(entry));
+  }
   for (const auto &tab : layout->tabs) {
     std::optional<wxString> cwd;
     if (!tab.workingDirectory.empty() && wxDirExists(tab.workingDirectory)) {
@@ -309,7 +381,8 @@ bool MyFrame::RestoreLayout() {
       page->SetTabLabel(tab.customLabel);
     }
     BookLayout::Tab entry;
-    entry.group = tab.group;
+    entry.group =
+        tab.group < static_cast<int>(book.groups.size()) ? tab.group : -1;
     entry.selected = tab.selected;
     book.tabs.push_back(std::move(entry));
   }
@@ -337,7 +410,7 @@ bool MyFrame::RestoreLayout() {
   return m_notebook->GetPageCount() > 0;
 }
 
-void MyFrame::ShowTabMenu(int tabIdx) {
+void MyFrame::ShowTabMenu(int tabIdx, const wxPoint &pos) {
   if (tabIdx == wxNOT_FOUND) {
     tabIdx =
         m_notebook->HitTest(m_notebook->ScreenToClient(::wxGetMousePosition()));
@@ -406,7 +479,122 @@ void MyFrame::ShowTabMenu(int tabIdx) {
         }
       },
       wxID_CLEAR);
-  m_notebook->PopupMenu(&menu);
+
+  // Groups of tabs. The book has no menu for them: it is built here.
+  if (tabIdx != wxNOT_FOUND) {
+    const size_t tab = static_cast<size_t>(tabIdx);
+    menu.AppendSeparator();
+    wxMenuItem *newGroup = menu.Append(wxID_ANY, _("Add to New Group..."));
+    menu.Bind(
+        wxEVT_MENU,
+        [this, tab](wxCommandEvent &) {
+          wxString name;
+          if (AskGroupName(this, _("New Group"), name)) {
+            m_notebook->AddPageToNewGroup(tab, name,
+                                          NextGroupColour(*m_notebook));
+          }
+        },
+        newGroup->GetId());
+    const std::vector<int> groups = m_notebook->GetGroups();
+    if (!groups.empty()) {
+      auto *submenu = new wxMenu;
+      for (const int group : groups) {
+        wxMenuItem *item = submenu->AppendCheckItem(
+            wxID_ANY, GroupMenuLabel(*m_notebook, group));
+        item->Check(m_notebook->GetPageGroup(tab) == group);
+        submenu->Bind(
+            wxEVT_MENU,
+            [this, tab, group](wxCommandEvent &) {
+              m_notebook->AddPageToGroup(tab, group);
+            },
+            item->GetId());
+      }
+      menu.AppendSubMenu(submenu, _("Add to Group"));
+    }
+    wxMenuItem *remove = menu.Append(wxID_ANY, _("Remove from Group"));
+    remove->Enable(m_notebook->GetPageGroup(tab) != TabBook::kNoGroup);
+    menu.Bind(
+        wxEVT_MENU,
+        [this, tab](wxCommandEvent &) { m_notebook->RemovePageFromGroup(tab); },
+        remove->GetId());
+  }
+  m_notebook->PopupMenu(&menu, pos);
+}
+
+void MyFrame::ShowGroupMenu(int group, const wxPoint &pos) {
+  if (group == TabBook::kNoGroup) {
+    return;
+  }
+  wxMenu menu;
+  wxMenuItem *rename = menu.Append(wxID_ANY, _("Rename Group..."));
+  menu.Bind(
+      wxEVT_MENU,
+      [this, group](wxCommandEvent &) {
+        wxString name = m_notebook->GetGroupName(group);
+        if (AskGroupName(this, _("Rename Group"), name)) {
+          m_notebook->SetGroupName(group, name);
+        }
+      },
+      rename->GetId());
+
+  auto *colours = new wxMenu;
+  const wxColour current = m_notebook->GetGroupColour(group);
+  for (const auto &entry : TabBook::GetGroupColours()) {
+    wxMenuItem *item =
+        colours->AppendRadioItem(wxID_ANY, wxGetTranslation(entry.name));
+    item->Check(entry.colour == current);
+    const wxColour colour = entry.colour;
+    colours->Bind(
+        wxEVT_MENU,
+        [this, group, colour](wxCommandEvent &) {
+          m_notebook->SetGroupColour(group, colour);
+        },
+        item->GetId());
+  }
+  menu.AppendSubMenu(colours, _("Colour"));
+
+  wxMenuItem *collapse = menu.Append(
+      wxID_ANY, m_notebook->IsGroupCollapsed(group) ? _("Expand Group")
+                                                    : _("Collapse Group"));
+  menu.Bind(
+      wxEVT_MENU,
+      [this, group](wxCommandEvent &) {
+        m_notebook->SetGroupCollapsed(group,
+                                      !m_notebook->IsGroupCollapsed(group));
+      },
+      collapse->GetId());
+  menu.AppendSeparator();
+
+  wxMenuItem *ungroup = menu.Append(wxID_ANY, _("Ungroup"));
+  menu.Bind(
+      wxEVT_MENU,
+      [this, group](wxCommandEvent &) { m_notebook->Ungroup(group); },
+      ungroup->GetId());
+  wxMenuItem *close = menu.Append(wxID_ANY, _("Close Group"));
+  menu.Bind(
+      wxEVT_MENU,
+      [this, group](wxCommandEvent &) {
+        // From the last tab, so the indexes of the others do not change.
+        const std::vector<size_t> pages = m_notebook->GetGroupPages(group);
+        for (auto it = pages.rbegin(); it != pages.rend(); ++it) {
+          m_notebook->DeletePage(*it);
+        }
+      },
+      close->GetId());
+  m_notebook->PopupMenu(&menu, pos);
+}
+
+void MyFrame::ShowBarMenu(const wxPoint &pos) {
+  wxMenu menu;
+  wxMenuItem *newTab = menu.Append(wxID_ANY, _("New Tab"));
+  menu.Bind(
+      wxEVT_MENU,
+      [this](wxCommandEvent &) {
+        wxCommandEvent event;
+        OnNewTerminal(event);
+      },
+      newTab->GetId());
+  m_notebook->PopupMenu(&menu, pos);
 }
 
 void MyFrame::SetTabStrip(size_t tabIdx, bool footer) {

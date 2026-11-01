@@ -238,6 +238,13 @@ void GlyphTabBar::Insert(size_t index, wxWindow *window,
   tab.info.bitmap = bitmap;
   index = std::min(index, m_tabs.size());
   m_dropIndex = -1;
+  // A tab between two tabs of a group is a part of the group: the tabs of a
+  // group stay together.
+  if (index > 0 && index < m_tabs.size() &&
+      m_tabs[index - 1].group != kNoGroup &&
+      m_tabs[index - 1].group == m_tabs[index].group) {
+    tab.group = m_tabs[index].group;
+  }
   m_tabs.insert(m_tabs.begin() + index, std::move(tab));
   if (m_selection >= 0 && static_cast<int>(index) <= m_selection) {
     ++m_selection;
@@ -267,6 +274,7 @@ void GlyphTabBar::Remove(size_t index) {
   } else if (static_cast<int>(index) == m_selection) {
     m_selection = -1;
   }
+  RemoveEmptyGroups();
   UpdateButtons();
   UpdateMinSize();
   LayoutTabs();
@@ -275,9 +283,12 @@ void GlyphTabBar::Remove(size_t index) {
 
 void GlyphTabBar::Clear() {
   m_tabs.clear();
+  m_groups.clear();
+  m_items.clear();
   m_dropIndex = -1;
   m_selection = -1;
   m_hover = m_closeHover = m_closePressed = m_dragged = nullptr;
+  m_hoverGroup = m_groupPressed = kNoGroup;
   m_scroll = 0;
   UpdateMinSize();
   LayoutTabs();
@@ -297,6 +308,257 @@ void GlyphTabBar::Move(size_t from, size_t to) {
   m_selection = selected ? Find(selected) : -1;
   LayoutTabs();
   Refresh();
+}
+
+// Groups
+// ------
+
+GlyphTabBar::Group *GlyphTabBar::FindGroup(int group) {
+  for (auto &candidate : m_groups) {
+    if (candidate.id == group) {
+      return &candidate;
+    }
+  }
+  return nullptr;
+}
+
+const GlyphTabBar::Group *GlyphTabBar::FindGroup(int group) const {
+  for (const auto &candidate : m_groups) {
+    if (candidate.id == group) {
+      return &candidate;
+    }
+  }
+  return nullptr;
+}
+
+std::vector<int> GlyphTabBar::GetGroups() const {
+  std::vector<int> groups;
+  for (const auto &tab : m_tabs) {
+    if (tab.group != kNoGroup &&
+        std::find(groups.begin(), groups.end(), tab.group) == groups.end()) {
+      groups.push_back(tab.group);
+    }
+  }
+  return groups;
+}
+
+std::vector<size_t> GlyphTabBar::GetGroupTabs(int group) const {
+  std::vector<size_t> tabs;
+  for (size_t i = 0; i < m_tabs.size(); ++i) {
+    if (m_tabs[i].group == group) {
+      tabs.push_back(i);
+    }
+  }
+  return tabs;
+}
+
+const wxString &GlyphTabBar::GetGroupName(int group) const {
+  static const wxString none;
+  const Group *found = FindGroup(group);
+  return found ? found->info.name : none;
+}
+
+void GlyphTabBar::SetGroupName(int group, const wxString &name) {
+  if (Group *found = FindGroup(group); found && found->info.name != name) {
+    found->info.name = name;
+    LayoutTabs();
+    Refresh();
+  }
+}
+
+const wxColour &GlyphTabBar::GetGroupColour(int group) const {
+  static const wxColour none;
+  const Group *found = FindGroup(group);
+  return found ? found->info.colour : none;
+}
+
+void GlyphTabBar::SetGroupColour(int group, const wxColour &colour) {
+  if (Group *found = FindGroup(group)) {
+    found->info.colour =
+        colour.IsOk() ? colour : GlyphTabPainter::DefaultGroupColour();
+    Refresh();
+  }
+}
+
+bool GlyphTabBar::IsGroupCollapsed(int group) const {
+  const Group *found = FindGroup(group);
+  return found && found->info.collapsed;
+}
+
+void GlyphTabBar::SetGroupCollapsed(int group, bool collapsed) {
+  if (Group *found = FindGroup(group);
+      found && found->info.collapsed != collapsed) {
+    found->info.collapsed = collapsed;
+    LayoutTabs();
+    Refresh();
+  }
+}
+
+int GlyphTabBar::AddTabToNewGroup(size_t index, const wxString &name,
+                                  const wxColour &colour) {
+  if (index >= m_tabs.size()) {
+    return kNoGroup;
+  }
+  // Out of the old group first: a tab in the middle of it would cut it in two.
+  index = DetachTab(index);
+  Group group;
+  group.id = m_nextGroupId++;
+  group.info.name = name;
+  group.info.colour =
+      colour.IsOk() ? colour : GlyphTabPainter::DefaultGroupColour();
+  m_groups.push_back(group);
+  AddTabToGroup(index, group.id);
+  return group.id;
+}
+
+bool GlyphTabBar::AddTabToGroup(size_t index, int group) {
+  if (index >= m_tabs.size() || !FindGroup(group)) {
+    return false;
+  }
+  if (m_tabs[index].group == group) {
+    return true;
+  }
+  // The end of the group: the tab goes after its last tab.
+  int last = -1;
+  for (size_t i = 0; i < m_tabs.size(); ++i) {
+    if (m_tabs[i].group == group) {
+      last = static_cast<int>(i);
+    }
+  }
+  m_tabs[index].group = group;
+  if (last != -1) {
+    // The index of the tab after the move: the tabs after it move one place
+    // down when it is taken out from before them.
+    Move(index,
+         static_cast<size_t>(static_cast<int>(index) < last ? last : last + 1));
+  }
+  RemoveEmptyGroups();
+  LayoutTabs();
+  Refresh();
+  return true;
+}
+
+size_t GlyphTabBar::DetachTab(size_t index) {
+  if (index >= m_tabs.size() || m_tabs[index].group == kNoGroup) {
+    return index;
+  }
+  const int group = m_tabs[index].group;
+  const bool sameBefore = index > 0 && m_tabs[index - 1].group == group;
+  const bool sameAfter =
+      index + 1 < m_tabs.size() && m_tabs[index + 1].group == group;
+  m_tabs[index].group = kNoGroup;
+  if (!sameBefore || !sameAfter) {
+    return index;
+  }
+  // In the middle of the group: it would cut the group in two, so the tab goes
+  // to the end of the group.
+  size_t last = index;
+  while (last + 1 < m_tabs.size() && m_tabs[last + 1].group == group) {
+    ++last;
+  }
+  Move(index, last);
+  return last;
+}
+
+void GlyphTabBar::RemoveTabFromGroup(size_t index) {
+  DetachTab(index);
+  RemoveEmptyGroups();
+  LayoutTabs();
+  Refresh();
+}
+
+void GlyphTabBar::Ungroup(int group) {
+  for (auto &tab : m_tabs) {
+    if (tab.group == group) {
+      tab.group = kNoGroup;
+    }
+  }
+  RemoveEmptyGroups();
+  LayoutTabs();
+  Refresh();
+}
+
+void GlyphTabBar::RemoveEmptyGroups() {
+  const auto hasTabs = [this](const Group &group) {
+    return std::any_of(m_tabs.begin(), m_tabs.end(), [&group](const Tab &tab) {
+      return tab.group == group.id;
+    });
+  };
+  for (size_t i = m_groups.size(); i-- > 0;) {
+    if (!hasTabs(m_groups[i])) {
+      if (m_hoverGroup == m_groups[i].id) {
+        m_hoverGroup = kNoGroup;
+      }
+      if (m_groupPressed == m_groups[i].id) {
+        m_groupPressed = kNoGroup;
+      }
+      m_groups.erase(m_groups.begin() + i);
+    }
+  }
+}
+
+bool GlyphTabBar::IsTabVisible(size_t index) const {
+  const Tab &tab = m_tabs[index];
+  if (tab.group == kNoGroup) {
+    return true;
+  }
+  // The selected tab of a collapsed group stays visible.
+  const Group *group = FindGroup(tab.group);
+  return !group || !group->info.collapsed ||
+         static_cast<int>(index) == m_selection;
+}
+
+int GlyphTabBar::GroupAt(const wxPoint &pt) const {
+  if (!m_listRect.IsEmpty() && pt.x >= m_tabsRoom) {
+    return kNoGroup;
+  }
+  for (const auto &group : m_groups) {
+    if (group.info.rect.Contains(pt)) {
+      return group.id;
+    }
+  }
+  return kNoGroup;
+}
+
+int GlyphTabBar::GroupForDrop(size_t from, size_t gap) const {
+  if (from >= m_tabs.size()) {
+    return kNoGroup;
+  }
+  const size_t to = gap > from ? gap - 1 : gap;
+  // The tabs without the one that is dropped: the tab goes between the one
+  // before `to` and the one at `to`.
+  const size_t count = m_tabs.size() - 1;
+  const auto groupOf = [this, from](size_t k) {
+    return m_tabs[k < from ? k : k + 1].group;
+  };
+  const int before = to > 0 ? groupOf(to - 1) : kNoGroup;
+  const int after = to < count ? groupOf(to) : kNoGroup;
+  return before == after ? before : kNoGroup;
+}
+
+void GlyphTabBar::DropTab(size_t from, size_t gap) {
+  if (from >= m_tabs.size()) {
+    return;
+  }
+  const size_t to = gap > from ? gap - 1 : gap;
+  const int oldGroup = m_tabs[from].group;
+  Move(from, to);
+  // The tab joins the group that is on both of its sides, and is in no group
+  // anywhere else: dropped in the middle of a group it is a part of the group,
+  // and dropped at the end of a group, or out of it, it is not.
+  const int before = to > 0 ? m_tabs[to - 1].group : kNoGroup;
+  const int after = to + 1 < m_tabs.size() ? m_tabs[to + 1].group : kNoGroup;
+  const int newGroup = before == after ? before : kNoGroup;
+  if (newGroup == oldGroup) {
+    return;
+  }
+  m_tabs[to].group = newGroup;
+  RemoveEmptyGroups();
+  LayoutTabs();
+  Refresh();
+  if (m_callbacks.groupChanged) {
+    m_callbacks.groupChanged(newGroup != kNoGroup ? newGroup : oldGroup);
+  }
 }
 
 void GlyphTabBar::SetCaption(size_t index, const wxString &caption) {
@@ -345,56 +607,102 @@ void GlyphTabBar::LayoutTabs() {
     return;
   }
   const wxSize client = GetClientSize();
+  const bool vertical = IsVertical();
   m_listRect = wxRect();
-
-  if (IsVertical()) {
-    // Rows from the top.
-    m_tabsRoom = client.y;
-    std::vector<int> heights;
-    heights.reserve(m_tabs.size());
-    m_contentSize = 0;
-    for (const auto &tab : m_tabs) {
-      heights.push_back(m_painter->GetVerticalTabHeight(this, tab.info));
-      m_contentSize += heights.back();
-    }
-    m_scroll = std::clamp(m_scroll, 0, std::max(0, m_contentSize - client.y));
-    int y = -m_scroll;
-    for (size_t i = 0; i < m_tabs.size(); ++i) {
-      m_tabs[i].info.rect = wxRect(0, y, client.x, heights[i]);
-      y += heights[i];
-    }
-    return;
+  m_items.clear();
+  for (auto &group : m_groups) {
+    group.info.rect = wxRect();
+    group.spanStart = group.spanEnd = 0;
+  }
+  // A tab that is not placed below is hidden: it has an empty rectangle.
+  for (auto &tab : m_tabs) {
+    tab.info.rect = wxRect();
   }
 
-  // Tabs from the left. They get narrower when they do not fit; when they are
-  // as narrow as they can be and still do not fit, the bar scrolls and has the
-  // list button.
-  std::vector<int> widths;
-  widths.reserve(m_tabs.size());
+  // The items in order, and their sizes along the bar: the width in a
+  // horizontal bar, the height in a vertical one.
+  std::vector<int> sizes;
+  // The items that are tabs. In a horizontal bar they can get narrower.
+  std::vector<size_t> flexible;
+  int previousGroup = kNoGroup;
+  for (size_t i = 0; i < m_tabs.size(); ++i) {
+    const Tab &tab = m_tabs[i];
+    if (tab.group != previousGroup) {
+      previousGroup = tab.group;
+      if (const Group *group = FindGroup(tab.group)) {
+        Item header;
+        header.header = true;
+        header.index = group->id;
+        header.firstTab = static_cast<int>(i);
+        m_items.push_back(header);
+        sizes.push_back(
+            vertical
+                ? m_painter->GetVerticalGroupHeaderHeight(this, group->info)
+                : m_painter->GetGroupHeaderSize(this, group->info).x);
+      }
+    }
+    if (IsTabVisible(i)) {
+      Item item;
+      item.index = static_cast<int>(i);
+      item.firstTab = static_cast<int>(i);
+      m_items.push_back(item);
+      flexible.push_back(m_items.size() - 1);
+      sizes.push_back(vertical ? m_painter->GetVerticalTabHeight(this, tab.info)
+                               : m_painter->GetTabSize(this, tab.info).x);
+    }
+  }
   int total = 0;
-  for (const auto &tab : m_tabs) {
-    widths.push_back(m_painter->GetTabSize(this, tab.info).x);
-    total += widths.back();
+  for (const int size : sizes) {
+    total += size;
   }
-  if (total > client.x && !m_tabs.empty()) {
-    ShrinkWidths(widths, client.x, FromDIP(kMinTabWidth));
-    total = 0;
-    for (const int width : widths) {
-      total += width;
+
+  m_tabsRoom = vertical ? client.y : client.x;
+  if (!vertical) {
+    // The tabs get narrower when they do not fit; when they are as narrow as
+    // they can be and still do not fit, the bar scrolls and has the list
+    // button.
+    if (total > client.x && !flexible.empty()) {
+      std::vector<int> widths;
+      int fixedTotal = total;
+      for (const size_t item : flexible) {
+        widths.push_back(sizes[item]);
+        fixedTotal -= sizes[item];
+      }
+      ShrinkWidths(widths, std::max(0, client.x - fixedTotal),
+                   FromDIP(kMinTabWidth));
+      total = fixedTotal;
+      for (size_t k = 0; k < flexible.size(); ++k) {
+        sizes[flexible[k]] = widths[k];
+        total += widths[k];
+      }
     }
-  }
-  m_tabsRoom = client.x;
-  if (total > client.x) {
-    const int listWidth = FromDIP(kListWidth);
-    m_tabsRoom = std::max(0, client.x - listWidth);
-    m_listRect = wxRect(m_tabsRoom, 0, client.x - m_tabsRoom, client.y);
+    if (total > client.x) {
+      const int listWidth = FromDIP(kListWidth);
+      m_tabsRoom = std::max(0, client.x - listWidth);
+      m_listRect = wxRect(m_tabsRoom, 0, client.x - m_tabsRoom, client.y);
+    }
   }
   m_contentSize = total;
   m_scroll = std::clamp(m_scroll, 0, std::max(0, total - m_tabsRoom));
-  int x = -m_scroll;
-  for (size_t i = 0; i < m_tabs.size(); ++i) {
-    m_tabs[i].info.rect = wxRect(x, 0, widths[i], client.y);
-    x += widths[i];
+
+  int position = -m_scroll;
+  for (size_t k = 0; k < m_items.size(); ++k) {
+    Item &item = m_items[k];
+    item.rect = vertical ? wxRect(0, position, client.x, sizes[k])
+                         : wxRect(position, 0, sizes[k], client.y);
+    if (item.header) {
+      Group *group = FindGroup(item.index);
+      group->info.rect = item.rect;
+      group->spanStart = position;
+      group->spanEnd = position + sizes[k];
+    } else {
+      Tab &tab = m_tabs[static_cast<size_t>(item.index)];
+      tab.info.rect = item.rect;
+      if (Group *group = FindGroup(tab.group)) {
+        group->spanEnd = position + sizes[k];
+      }
+    }
+    position += sizes[k];
   }
 }
 
@@ -437,6 +745,7 @@ void GlyphTabBar::OnPaint(wxPaintEvent &WXUNUSED(event)) {
 
   const wxDirection inner = GetInnerSide();
   m_painter->DrawBarBackground(dc, this, client, inner);
+
   for (auto &tab : m_tabs) {
     GlyphTabInfo &info = tab.info;
     info.hover = tab.window == m_hover;
@@ -449,8 +758,8 @@ void GlyphTabBar::OnPaint(wxPaintEvent &WXUNUSED(event)) {
         }
       }
     }
-    // The tabs that are not in the window are not painted, so their buttons
-    // cannot be clicked.
+    // The tabs that are not in the window, and the hidden ones (an empty
+    // rectangle), are not painted, so their buttons cannot be clicked.
     const wxRect rect = info.rect;
     if (!rect.Intersects(client) ||
         (!m_listRect.IsEmpty() && rect.x >= m_tabsRoom)) {
@@ -460,6 +769,30 @@ void GlyphTabBar::OnPaint(wxPaintEvent &WXUNUSED(event)) {
       continue;
     }
     m_painter->DrawTab(dc, this, info, rect, inner);
+  }
+
+  for (auto &group : m_groups) {
+    group.info.hover = group.id == m_hoverGroup;
+    const wxRect rect = group.info.rect;
+    if (rect.Intersects(client)) {
+      m_painter->DrawGroupHeader(dc, this, group.info, rect, inner);
+    }
+  }
+
+  // The line of each group is along its header and its tabs. It is drawn after
+  // them, or the hover and the current tab would cover it.
+  for (const auto &group : m_groups) {
+    if (group.info.rect.IsEmpty()) {
+      continue;
+    }
+    const wxRect span =
+        IsVertical() ? wxRect(0, group.spanStart, client.width,
+                              group.spanEnd - group.spanStart)
+                     : wxRect(group.spanStart, 0,
+                              group.spanEnd - group.spanStart, client.height);
+    if (span.Intersects(client)) {
+      m_painter->DrawGroupLine(dc, this, span, group.info.colour, inner);
+    }
   }
 
   if (m_dragged && m_dropIndex != wxNOT_FOUND) {
@@ -534,23 +867,28 @@ bool GlyphTabBar::UpdateHover(const wxPoint &pt) {
       closeHover = hover;
     }
   }
+  const int hoverGroup = inside ? GroupAt(pt) : kNoGroup;
   const bool listHover = inside && m_listRect.Contains(pt);
   if (hover == m_hover && closeHover == m_closeHover &&
-      listHover == m_listHover) {
+      hoverGroup == m_hoverGroup && listHover == m_listHover) {
     return false;
   }
-  if (hover != m_hover) {
+  if (hover != m_hover || hoverGroup != m_hoverGroup) {
     // The tooltip of the page, or the whole label, for a label that does not
-    // fit.
+    // fit; the name of a group.
     if (index != wxNOT_FOUND) {
       const GlyphTabInfo &info = m_tabs[index].info;
       SetToolTip(info.tooltip.empty() ? info.caption : info.tooltip);
+    } else if (const Group *group = FindGroup(hoverGroup);
+               group && !group->info.name.empty()) {
+      SetToolTip(group->info.name);
     } else {
       UnsetToolTip();
     }
   }
   m_hover = hover;
   m_closeHover = closeHover;
+  m_hoverGroup = hoverGroup;
   m_listHover = listHover;
   return true;
 }
@@ -628,6 +966,13 @@ void GlyphTabBar::OnLeftDown(wxMouseEvent &event) {
     return;
   }
 
+  if (const int group = GroupAt(pt); group != kNoGroup) {
+    // A click on a header collapses or expands the group, on release.
+    m_groupPressed = group;
+    CaptureMouse();
+    return;
+  }
+
   const int index = TabIndexAt(pt);
   if (index == wxNOT_FOUND) {
     return;
@@ -653,13 +998,20 @@ void GlyphTabBar::OnLeftUp(wxMouseEvent &event) {
   const bool onButton = closed && m_closeHover == closed;
   wxWindow *const dragged = m_dragged;
   const int drop = m_dropIndex;
+  const int groupPressed = m_groupPressed;
   EndMouseAction();
   if (dragged && drop != wxNOT_FOUND) {
     // The gap is counted before the tab is taken out of the list.
     const int from = Find(dragged);
     if (from != wxNOT_FOUND) {
-      Move(static_cast<size_t>(from),
-           static_cast<size_t>(drop > from ? drop - 1 : drop));
+      DropTab(static_cast<size_t>(from), static_cast<size_t>(drop));
+    }
+  }
+  if (groupPressed != kNoGroup &&
+      GroupAt(event.GetPosition()) == groupPressed) {
+    SetGroupCollapsed(groupPressed, !IsGroupCollapsed(groupPressed));
+    if (m_callbacks.groupChanged) {
+      m_callbacks.groupChanged(groupPressed);
     }
   }
   if (onButton) {
@@ -674,16 +1026,32 @@ void GlyphTabBar::OnLeftUp(wxMouseEvent &event) {
 }
 
 void GlyphTabBar::OnMiddleUp(wxMouseEvent &event) {
-  const int index = TabIndexAt(event.GetPosition());
-  if (index != wxNOT_FOUND && m_callbacks.middleUp) {
-    m_callbacks.middleUp(static_cast<size_t>(index));
+  const wxPoint pt = event.GetPosition();
+  if (const int index = TabIndexAt(pt); index != wxNOT_FOUND) {
+    if (m_callbacks.tabMiddleUp) {
+      m_callbacks.tabMiddleUp(static_cast<size_t>(index), pt);
+    }
+  } else if (const int group = GroupAt(pt); group != kNoGroup) {
+    if (m_callbacks.groupMiddleUp) {
+      m_callbacks.groupMiddleUp(group, pt);
+    }
+  } else if (!m_listRect.Contains(pt) && m_callbacks.barMiddleUp) {
+    m_callbacks.barMiddleUp(pt);
   }
 }
 
 void GlyphTabBar::OnRightUp(wxMouseEvent &event) {
-  const int index = TabIndexAt(event.GetPosition());
-  if (index != wxNOT_FOUND && m_callbacks.rightUp) {
-    m_callbacks.rightUp(static_cast<size_t>(index));
+  const wxPoint pt = event.GetPosition();
+  if (const int index = TabIndexAt(pt); index != wxNOT_FOUND) {
+    if (m_callbacks.tabContextMenu) {
+      m_callbacks.tabContextMenu(static_cast<size_t>(index), pt);
+    }
+  } else if (const int group = GroupAt(pt); group != kNoGroup) {
+    if (m_callbacks.groupContextMenu) {
+      m_callbacks.groupContextMenu(group, pt);
+    }
+  } else if (!m_listRect.Contains(pt) && m_callbacks.barContextMenu) {
+    m_callbacks.barContextMenu(pt);
   }
 }
 
@@ -699,7 +1067,13 @@ void GlyphTabBar::OnWheel(wxMouseEvent &event) {
   m_wheelRemainder -= rows * delta;
   int step = FromDIP(kWheelStep);
   if (IsVertical()) {
-    step = m_tabs.empty() ? FromDIP(24) : m_tabs.front().info.rect.height;
+    step = FromDIP(24);
+    for (const Item &item : m_items) {
+      if (!item.header) {
+        step = item.rect.height;
+        break;
+      }
+    }
   }
   ScrollBy(-rows * step);
   if (UpdateHover(event.GetPosition())) {
@@ -712,22 +1086,34 @@ void GlyphTabBar::DragTo(const wxPoint &pt) {
   if (current == wxNOT_FOUND || m_tabs.empty()) {
     return;
   }
-  // The gap under the mouse: before the first tab whose middle is after the
-  // mouse, or after the last tab.
+  // The gap under the mouse: before the first item (a tab or the header of a
+  // group) whose middle is after the mouse, or after the last tab. The gap is
+  // the number of the tab it is before.
   const int position = IsVertical() ? pt.y : pt.x;
   int gap = static_cast<int>(m_tabs.size());
-  for (size_t i = 0; i < m_tabs.size(); ++i) {
-    const wxRect &rect = m_tabs[i].info.rect;
+  for (const Item &item : m_items) {
+    const wxRect &rect = item.rect;
     const int middle =
         IsVertical() ? rect.y + rect.height / 2 : rect.x + rect.width / 2;
     if (position < middle) {
-      gap = static_cast<int>(i);
+      gap = item.firstTab;
       break;
     }
   }
-  // The gaps before and after the tab itself do not move it.
+  // The gaps before and after the tab itself do not move it. They take it out
+  // of its group only when the mouse is really out of the group, on the item
+  // next to it: the group of the tab is then different. Over the header, or
+  // over the first or the last tab of the group (even over the half of it that
+  // is next to the edge), a small move of the mouse changes nothing.
   if (gap == current || gap == current + 1) {
-    gap = wxNOT_FOUND;
+    const Tab &dragged = m_tabs[static_cast<size_t>(current)];
+    const Group *group = FindGroup(dragged.group);
+    const bool inGroup =
+        group && position >= group->spanStart && position < group->spanEnd;
+    if (inGroup || GroupForDrop(static_cast<size_t>(current),
+                                static_cast<size_t>(gap)) == dragged.group) {
+      gap = wxNOT_FOUND;
+    }
   }
   if (gap != m_dropIndex) {
     m_dropIndex = gap;
@@ -737,19 +1123,22 @@ void GlyphTabBar::DragTo(const wxPoint &pt) {
 
 void GlyphTabBar::DrawDropLine(wxDC &dc) const {
   const int index = m_dropIndex;
-  if (m_tabs.empty() || index < 0 || index > static_cast<int>(m_tabs.size())) {
+  if (m_items.empty() || index < 0) {
     return;
   }
   const bool vertical = IsVertical();
   const wxSize client = GetClientSize();
-  // The line is on the edge between two tabs: the start of the tab after the
-  // gap, or the end of the last tab.
+  // The line is on the edge between two items: the start of the first item at
+  // or after the gap (a header comes before the first tab of its group), or the
+  // end of the last item.
   int edge = 0;
-  if (index < static_cast<int>(m_tabs.size())) {
-    const wxRect &rect = m_tabs[static_cast<size_t>(index)].info.rect;
-    edge = vertical ? rect.y : rect.x;
+  const auto item = std::find_if(
+      m_items.begin(), m_items.end(),
+      [index](const Item &candidate) { return candidate.firstTab >= index; });
+  if (item != m_items.end()) {
+    edge = vertical ? item->rect.y : item->rect.x;
   } else {
-    const wxRect &rect = m_tabs.back().info.rect;
+    const wxRect &rect = m_items.back().rect;
     edge = vertical ? rect.GetBottom() + 1 : rect.GetRight() + 1;
   }
   const int thickness = std::max(2, FromDIP(2));
@@ -801,6 +1190,7 @@ void GlyphTabBar::EndMouseAction() {
   m_dragged = nullptr;
   m_dragStarted = false;
   m_dropIndex = -1;
+  m_groupPressed = kNoGroup;
   m_closePressed = nullptr;
   Refresh();
   if (resized && m_onWidthChanged) {

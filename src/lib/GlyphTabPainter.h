@@ -1,6 +1,8 @@
 #pragma once
 
 #include "terminal_theme.h"
+#include <map>
+#include <tuple>
 #include <vector>
 #include <wx/bmpbndl.h>
 #include <wx/colour.h>
@@ -43,6 +45,22 @@ struct GlyphTabInfo {
   // The buttons at the end of the tab, usually the close button.
   std::vector<GlyphTabButton> buttons;
   // Where the tab was drawn.
+  wxRect rect;
+};
+
+/**
+ * @brief What GlyphTabPainter needs to draw and measure the header of a group
+ *        of tabs.
+ *
+ * The header looks like a tab with the colour of the group.
+ */
+struct GlyphGroupInfo {
+  wxString name;
+  wxColour colour;
+  bool collapsed{false};
+  // The header is under the mouse.
+  bool hover{false};
+  // Where the header was drawn.
   wxRect rect;
 };
 
@@ -97,6 +115,10 @@ public:
 
   Style GetStyle() const { return m_style; }
 
+  // The colour of a group that has no valid colour. It is also the first colour
+  // of the palette of GlyphBook.
+  static wxColour DefaultGroupColour() { return wxColour(0x5f, 0x63, 0x68); }
+
   /**
    * Draw a tab in @p rect. @p inner is the side of the tab next to the
    * terminal: wxBOTTOM for tabs above the terminal, wxTOP for tabs below it,
@@ -114,6 +136,20 @@ public:
   // while the mouse is on it.
   void DrawDropDownButton(wxDC &dc, wxWindow *wnd, const wxRect &rect,
                           bool hot);
+  // The header of a group: a chip with the colour and the name of the group,
+  // in the place of a tab. Sets group.rect.
+  void DrawGroupHeader(wxDC &dc, wxWindow *wnd, GlyphGroupInfo &group,
+                       const wxRect &rect, wxDirection inner);
+  // The line of the colour of a group along the side of the bar that is next to
+  // the pages, over the header and the tabs of the group. Draw it after the
+  // tabs, or what a tab draws (for example the hover) covers it. @p span is the
+  // part of the bar they take.
+  void DrawGroupLine(wxDC &dc, wxWindow *wnd, const wxRect &span,
+                     const wxColour &colour, wxDirection inner);
+  // The size of the header of a group in a horizontal bar.
+  wxSize GetGroupHeaderSize(wxWindow *wnd, const GlyphGroupInfo &group);
+  // The height of the header of a group in a vertical bar.
+  int GetVerticalGroupHeaderHeight(wxWindow *wnd, const GlyphGroupInfo &group);
   // The size of a tab in a horizontal bar.
   wxSize GetTabSize(wxWindow *wnd, const GlyphTabInfo &tab);
   // The height of a row of a vertical tab bar.
@@ -139,6 +175,12 @@ private:
   // without buttons).
   wxSize ButtonSize(wxWindow *wnd, const GlyphTabButton &button) const;
   int GetButtonsWidth(wxWindow *wnd, const GlyphTabInfo &tab) const;
+  // The size of the triangle on the header of a group, for a chip that is
+  // @p chipHeight high.
+  int IndicatorSize(wxWindow *wnd, int chipHeight) const;
+  // The triangle as a bitmap of @p size pixels, drawn from an SVG that is made
+  // in memory. It is empty without SVG support.
+  wxBitmap GetIndicatorBitmap(bool collapsed, const wxColour &colour, int size);
   // The size of the icon, the label and the buttons, without the padding.
   wxSize GetContentSize(wxWindow *wnd, const GlyphTabInfo &tab) const;
 
@@ -155,4 +197,6 @@ private:
   wxColour m_fgNormal; // Text of the other tabs.
   wxColour m_fgDimmed; // Buttons of the other tabs.
   wxColour m_fgHover;  // Text of a tab under the mouse.
+  // The triangles that were made: by collapsed, colour and size.
+  std::map<std::tuple<bool, unsigned long, int>, wxBitmap> m_indicatorCache;
 };

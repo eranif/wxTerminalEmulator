@@ -10,20 +10,69 @@
 #include <wx/bookctrl.h>
 #include <wx/simplebook.h>
 
-// Events of GlyphBook that the standard book events do not have. They are
-// wxBookCtrlEvent, with GetSelection() the index of the tab.
+/**
+ * @brief The event of GlyphBook. It is a wxBookCtrlEvent, so a handler that
+ *        takes a wxBookCtrlEvent& works with it.
+ *
+ * - GetSelection() is the index of the tab, or wxNOT_FOUND.
+ * - GetGroup() is the id of the group, or GlyphBook::kNoGroup.
+ * - GetPosition() is the position of the mouse in the coordinates of the book:
+ *   use it to show a context menu.
+ */
+class GlyphBookEvent : public wxBookCtrlEvent {
+public:
+  explicit GlyphBookEvent(wxEventType type = wxEVT_NULL, int id = 0,
+                          int tab = wxNOT_FOUND, int oldTab = wxNOT_FOUND)
+      : wxBookCtrlEvent(type, id, tab, oldTab) {}
+  GlyphBookEvent(const GlyphBookEvent &event) = default;
+
+  wxEvent *Clone() const override { return new GlyphBookEvent(*this); }
+
+  int GetGroup() const { return m_group; }
+  void SetGroup(int group) { m_group = group; }
+  const wxPoint &GetPosition() const { return m_position; }
+  void SetPosition(const wxPoint &position) { m_position = position; }
+
+private:
+  int m_group{-1};
+  wxPoint m_position;
+
+  wxDECLARE_DYNAMIC_CLASS_NO_ASSIGN(GlyphBookEvent);
+};
+
+// Events of GlyphBook that the standard book events (wxEVT_BOOKCTRL_PAGE_*) do
+// not have. All of them are GlyphBookEvent.
 //
+// Pages:
 // - PAGE_CLOSE: the user asks to close a page (close button, or a middle click
 //   with wxAUI_NB_MIDDLE_CLICK_CLOSE). Veto() keeps the page.
 // - PAGE_CLOSED: the page was closed.
 //   Like with wxAuiNotebook, these two are sent only for a close by the user.
 //   DeletePage() and RemovePage() send neither of them.
-// - TAB_RIGHT_UP, TAB_MIDDLE_UP: a click on a tab. A handler of TAB_MIDDLE_UP
-//   that does not Skip() stops the close of the middle click.
-wxDECLARE_EVENT(wxEVT_GLYPHBOOK_PAGE_CLOSE, wxBookCtrlEvent);
-wxDECLARE_EVENT(wxEVT_GLYPHBOOK_PAGE_CLOSED, wxBookCtrlEvent);
-wxDECLARE_EVENT(wxEVT_GLYPHBOOK_TAB_RIGHT_UP, wxBookCtrlEvent);
-wxDECLARE_EVENT(wxEVT_GLYPHBOOK_TAB_MIDDLE_UP, wxBookCtrlEvent);
+//
+// Clicks. The book does not show any menu: the application handles these
+// events and builds its own.
+// - TAB_CONTEXT_MENU: the right button was released on a tab.
+// - TAB_MIDDLE_UP: the middle button was released on a tab. A handler that does
+//   not Skip() stops the close of the middle click.
+// - GROUP_CONTEXT_MENU, GROUP_MIDDLE_UP: the same on the header of a group
+//   (GetGroup()). Nothing happens by default.
+// - BAR_CONTEXT_MENU, BAR_MIDDLE_UP: the same on the bar where there is no tab
+//   or header. Nothing happens by default.
+//
+// Groups:
+// - GROUP_CHANGED: the user collapsed or expanded a group (a click on its
+//   header), or moved a tab into a group or out of it with a drag. The
+//   functions of GlyphBook do not send it.
+wxDECLARE_EVENT(wxEVT_GLYPHBOOK_PAGE_CLOSE, GlyphBookEvent);
+wxDECLARE_EVENT(wxEVT_GLYPHBOOK_PAGE_CLOSED, GlyphBookEvent);
+wxDECLARE_EVENT(wxEVT_GLYPHBOOK_TAB_CONTEXT_MENU, GlyphBookEvent);
+wxDECLARE_EVENT(wxEVT_GLYPHBOOK_TAB_MIDDLE_UP, GlyphBookEvent);
+wxDECLARE_EVENT(wxEVT_GLYPHBOOK_GROUP_CONTEXT_MENU, GlyphBookEvent);
+wxDECLARE_EVENT(wxEVT_GLYPHBOOK_GROUP_MIDDLE_UP, GlyphBookEvent);
+wxDECLARE_EVENT(wxEVT_GLYPHBOOK_BAR_CONTEXT_MENU, GlyphBookEvent);
+wxDECLARE_EVENT(wxEVT_GLYPHBOOK_BAR_MIDDLE_UP, GlyphBookEvent);
+wxDECLARE_EVENT(wxEVT_GLYPHBOOK_GROUP_CHANGED, GlyphBookEvent);
 
 /**
  * @brief A book control with tabs at the top, at the bottom, on the left or on
@@ -63,6 +112,9 @@ wxDECLARE_EVENT(wxEVT_GLYPHBOOK_TAB_MIDDLE_UP, wxBookCtrlEvent);
  */
 class GlyphBook : public wxBookCtrlBase {
 public:
+  // The group of a page that is in no group.
+  static constexpr int kNoGroup = GlyphTabBar::kNoGroup;
+
   GlyphBook();
   GlyphBook(wxWindow *parent, wxWindowID id = wxID_ANY,
             const wxPoint &pos = wxDefaultPosition,
@@ -113,6 +165,45 @@ public:
   wxWindow *GetPagesParent() const { return m_pages; }
   // The bar of the tabs.
   GlyphTabBar *GetTabBar() const { return m_tabBar; }
+
+  // Groups
+  // ------
+  //
+  // A group is a header with a name and a colour, and the tabs after it. The
+  // tabs of a group are always next to each other. A collapsed group shows only
+  // its header and its selected tab. The book shows no menu for the groups: the
+  // application handles the context menu events and calls these functions.
+  // The user can collapse a group with a click on its header, and can drag a
+  // tab into a group or out of it (wxEVT_GLYPHBOOK_GROUP_CHANGED).
+
+  // Make a group with the page in it. Returns the id of the group.
+  int AddPageToNewGroup(size_t page, const wxString &name,
+                        const wxColour &colour);
+  // Move the page to the end of the group.
+  bool AddPageToGroup(size_t page, int group);
+  // A page in the middle of its group goes to the end of the group.
+  void RemovePageFromGroup(size_t page);
+  // Remove the group. The pages stay where they are.
+  void Ungroup(int group);
+
+  // The id of the group of the page, or kNoGroup.
+  int GetPageGroup(size_t page) const;
+  // The ids of the groups, in the order of their tabs.
+  std::vector<int> GetGroups() const;
+  std::vector<size_t> GetGroupPages(int group) const;
+  wxString GetGroupName(int group) const;
+  void SetGroupName(int group, const wxString &name);
+  wxColour GetGroupColour(int group) const;
+  void SetGroupColour(int group, const wxColour &colour);
+  bool IsGroupCollapsed(int group) const;
+  void SetGroupCollapsed(int group, bool collapsed);
+
+  // Colours for a menu of group colours.
+  struct GroupColour {
+    const char *name;
+    wxColour colour;
+  };
+  static const std::vector<GroupColour> &GetGroupColours();
 
   // Pages
   // -----
@@ -185,10 +276,13 @@ private:
   // Give the painter to the bar.
   void ApplyPainter(std::unique_ptr<GlyphTabPainter> painter);
 
-  // Send an event with @p selection (and the old one). Returns false if a
-  // handler vetoed it. @p handled tells if a handler processed it.
+  // Send an event with @p selection (and the old one), and the group and the
+  // position of the mouse in the coordinates of the bar, if any. Returns false
+  // if a handler vetoed it. @p handled tells if a handler processed it.
   bool SendEvent(wxEventType type, int selection,
-                 int oldSelection = wxNOT_FOUND, bool *handled = nullptr);
+                 int oldSelection = wxNOT_FOUND, bool *handled = nullptr,
+                 int group = kNoGroup,
+                 const wxPoint &position = wxDefaultPosition);
   int DoSetSelection(size_t page, bool sendEvents);
   // Show the page window of the tab @p index in the pages.
   void ShowPage(int index);

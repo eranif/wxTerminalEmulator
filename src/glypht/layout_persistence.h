@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <vector>
+#include <wx/colour.h>
 #include <wx/gdicmn.h>
 #include <wx/string.h>
 
@@ -9,8 +10,7 @@
 //
 // For each tab it stores what is needed to recreate the terminal (shell,
 // working directory, custom label) and what the book remembers about the tab
-// (whether it is the current one, and its group, see BookLayout; groups are
-// not implemented yet, so the group is always empty). The tabs are
+// (whether it is the current one, and its group, see BookLayout). The tabs are
 // in the order of the book.
 //
 // The layout is written to ~/.wxterminal/layout.conf as a small line-based
@@ -22,11 +22,18 @@ public:
     wxString shellCommand;
     wxString workingDirectory;
     wxString customLabel;
-    // The group of the tab, empty for none. Reserved: the book has no groups
-    // yet, so this is always empty.
-    wxString group;
+    // The index of the group of the tab in the list of groups of the file, or
+    // -1 for none.
+    int group{-1};
     // True for the current tab.
     bool selected{false};
+  };
+
+  // A group of tabs (see BookLayout).
+  struct GroupInfo {
+    wxString name;
+    wxColour colour;
+    bool collapsed{false};
   };
 
   static wxString GetLayoutPath();
@@ -38,6 +45,7 @@ public:
 // Parsed contents of a layout file.
 struct LayoutFile {
   std::vector<LayoutPersistence::TabInfo> tabs;
+  std::vector<LayoutPersistence::GroupInfo> groups;
   // Title of the current tab, from a file of an older version that did not mark
   // the tab. When several tabs share this title the first one is selected on
   // restore. Empty if unknown.
@@ -51,5 +59,6 @@ struct LayoutFile {
 // Free functions doing the actual file IO. Kept separate from the frame so the
 // serialization logic can be unit tested in isolation.
 bool SaveLayoutFile(const std::vector<LayoutPersistence::TabInfo> &tabs,
+                    const std::vector<LayoutPersistence::GroupInfo> &groups,
                     const wxSize &frameSize);
 std::optional<LayoutFile> LoadLayoutFile();

@@ -32,9 +32,22 @@ public:
     std::function<void(size_t)> select;
     // The user clicked the close button of a tab.
     std::function<void(size_t)> close;
-    std::function<void(size_t)> middleUp;
-    std::function<void(size_t)> rightUp;
+    // The mouse buttons were released on a tab, on the header of a group, or on
+    // the bar where there is neither. The position is in the coordinates of
+    // the bar.
+    std::function<void(size_t, const wxPoint &)> tabContextMenu;
+    std::function<void(size_t, const wxPoint &)> tabMiddleUp;
+    std::function<void(int, const wxPoint &)> groupContextMenu;
+    std::function<void(int, const wxPoint &)> groupMiddleUp;
+    std::function<void(const wxPoint &)> barContextMenu;
+    std::function<void(const wxPoint &)> barMiddleUp;
+    // The user collapsed or expanded a group (a click on its header), or moved
+    // a tab into a group or out of it. Called with the group.
+    std::function<void(int)> groupChanged;
   };
+
+  // The group of a tab that is in no group.
+  static constexpr int kNoGroup = -1;
 
   // @p width is the width of the bar in DIPs, when it is on the left or the
   // right.
@@ -101,6 +114,37 @@ public:
   // wxNOT_FOUND.
   int HitTest(const wxPoint &pt) const;
 
+  // Groups
+  // ------
+  //
+  // A group is a header (a chip with a name and a colour) and the tabs after
+  // it. The tabs of a group are always next to each other. A group without tabs
+  // is removed. A collapsed group shows only its header, and its selected tab.
+
+  // Make a group with the tab @p index in it. Returns the id of the group.
+  int AddTabToNewGroup(size_t index, const wxString &name,
+                       const wxColour &colour);
+  // Move the tab to the end of the group, and make it a part of it.
+  bool AddTabToGroup(size_t index, int group);
+  // Take the tab out of its group. If it is in the middle of the group, it goes
+  // to the end of it.
+  void RemoveTabFromGroup(size_t index);
+  // Remove the group; its tabs stay where they are.
+  void Ungroup(int group);
+
+  bool HasGroup(int group) const { return FindGroup(group) != nullptr; }
+  int GetTabGroup(size_t index) const { return m_tabs[index].group; }
+  // The ids of the groups in the order of their tabs.
+  std::vector<int> GetGroups() const;
+  // The indexes of the tabs of the group.
+  std::vector<size_t> GetGroupTabs(int group) const;
+  const wxString &GetGroupName(int group) const;
+  void SetGroupName(int group, const wxString &name);
+  const wxColour &GetGroupColour(int group) const;
+  void SetGroupColour(int group, const wxColour &colour);
+  bool IsGroupCollapsed(int group) const;
+  void SetGroupCollapsed(int group, bool collapsed);
+
   bool AcceptsFocus() const override { return false; }
   bool AcceptsFocusFromKeyboard() const override { return false; }
 
@@ -108,6 +152,25 @@ private:
   struct Tab {
     GlyphTabInfo info;
     wxWindow *window{nullptr};
+    int group{kNoGroup};
+  };
+
+  struct Group {
+    int id{kNoGroup};
+    GlyphGroupInfo info;
+    // Where its header and its tabs are along the bar, after the last layout.
+    int spanStart{0};
+    int spanEnd{0};
+  };
+  // What the bar shows, in order: a header of a group or a tab that is not
+  // hidden. Set by LayoutTabs().
+  struct Item {
+    bool header{false};
+    // The index of the tab, or the id of the group.
+    int index{0};
+    // The index of the tab, or of the first tab of the group.
+    int firstTab{0};
+    wxRect rect;
   };
 
   void OnPaint(wxPaintEvent &event);
@@ -133,6 +196,24 @@ private:
   void RequestParentLayout();
   // Place the tabs, with the scroll offset.
   void LayoutTabs();
+  // A tab of a collapsed group is hidden, except the selected one.
+  bool IsTabVisible(size_t index) const;
+  Group *FindGroup(int group);
+  const Group *FindGroup(int group) const;
+  // The id of the group whose header is at @p pt, or kNoGroup.
+  int GroupAt(const wxPoint &pt) const;
+  // Remove the groups that have no tabs.
+  void RemoveEmptyGroups();
+  // Take the tab out of its group. A tab in the middle of its group goes to
+  // the end of it, so the group stays in one piece. Returns the index of the
+  // tab after that.
+  size_t DetachTab(size_t index);
+  // The group the tab @p from would be in if it were dropped in the gap @p gap
+  // (see DropTab()).
+  int GroupForDrop(size_t from, size_t gap) const;
+  // Move the tab @p from to the gap @p gap (a number of tab, before which the
+  // tab goes) and put it in the group of its new neighbours.
+  void DropTab(size_t from, size_t gap);
   // Scroll so that the tab @p index is inside the bar.
   void EnsureVisible(size_t index);
   // The index of the tab at @p pt (a tab under the list button is not found).
@@ -159,6 +240,9 @@ private:
   std::unique_ptr<GlyphTabPainter> m_painter;
   Callbacks m_callbacks;
   std::vector<Tab> m_tabs;
+  std::vector<Group> m_groups;
+  int m_nextGroupId{1};
+  std::vector<Item> m_items;
   int m_selection{-1};
   bool m_closeOnAll{false};
   bool m_closeOnActive{false};
@@ -183,6 +267,9 @@ private:
   wxWindow *m_hover{nullptr};
   wxWindow *m_closeHover{nullptr};
   wxWindow *m_closePressed{nullptr};
+  // The group whose header is under the mouse, and the one pressed.
+  int m_hoverGroup{kNoGroup};
+  int m_groupPressed{kNoGroup};
   // The page of the tab being dragged, where the mouse went down, and if it
   // moved far enough to start the drag.
   wxWindow *m_dragged{nullptr};

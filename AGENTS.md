@@ -79,9 +79,11 @@ wxTerminalEmulator/
 | **wxTerminalViewCtrl** | `src/lib/terminal_view.h` | Embeddable terminal control |
 | **PtyBackend** | `src/lib/pty_backend.h` | Interface for platform PTY implementations |
 | **TerminalGLRenderer** | `src/lib/terminal_gl_renderer.h` | OpenGL renderer, only when `USE_OPENGL=1` |
-| **GlyphTabArt** | `src/lib/GlyphTabArt.h` | Pill or browser style tabs for a `wxAuiNotebook`, painted with a `wxTerminalTheme` (wxWidgets 3.3+ only) |
-| **GlyphBook** | `src/lib/GlyphBook.h` | `wxBookCtrlBase` with the API and events of `wxAuiNotebook` and tabs on any side (`wxAUI_NB_TOP/BOTTOM/LEFT/RIGHT`). Inside: a `wxAuiNotebook` for the pages and a `GlyphTabBar` for the left and right sides. The `wxEVT_AUINOTEBOOK_*` events of the inner notebook are sent again with the book as the source. In GlyphT it is `TabBook` in `MainFrame.h` (wxWidgets 3.3+ only; a `wxAuiNotebook` before that) |
-| **GlyphTabBar** | `src/lib/GlyphTabBar.h` | The vertical tab bar used by `GlyphBook`, drawn with `GlyphTabArt` (wxAUI has no vertical tabs) |
+| **GlyphTabPainter** | `src/lib/GlyphTabPainter.h` | Draws and measures tabs and group headers with the colours of a `wxTerminalTheme`: Pills or Browser style. Plain wxWidgets 3.2+, no AUI types. Used by `GlyphTabBar` |
+| **GlyphTabArt** | `src/lib/GlyphTabArt.h` | Thin adapter that gives `GlyphTabPainter` to a `wxAuiNotebook` as its tab art (wxWidgets 3.3+ only, needs `wxAuiTabArtBase`) |
+| **GlyphBook** | `src/lib/GlyphBook.h` | `wxBookCtrlBase` with tabs on any side (`wxAUI_NB_TOP/BOTTOM/LEFT/RIGHT`), wxWidgets 3.2+. Inside: a `GlyphTabBar` for the tabs and a `wxSimplebook` for the pages; it does not use `wxAuiNotebook`. Sends the standard `wxEVT_BOOKCTRL_PAGE_CHANGING/CHANGED` and its own `wxEVT_GLYPHBOOK_*` events (`GlyphBookEvent`: tab, group and mouse position) for closing a page, context menus and middle clicks on a tab, a group header or the bar, and group changes. It shows no menu: the application builds it. Groups of tabs, `SaveLayout()` / `RestoreLayout()` with `BookLayout`. In GlyphT it is `TabBook` in `MainFrame.h` |
+| **GlyphTabBar** | `src/lib/GlyphTabBar.h` | The tab bar of `GlyphBook` for all four sides: owns the tabs and the groups, lays them out, scrolls, shows the list of tabs, drags a tab with a drop line. Drawn with `GlyphTabPainter` |
+| **BookLayout** | `src/lib/BookLayout.h` | Plain struct with the groups and the tabs of a `GlyphBook` (label, group, selected), to save and restore. GlyphT stores it in `layout.conf` (`src/glypht/layout_persistence.h`) |
 | **Demo app** | `src/glypht/main.cpp` | Example usage with tabs, themes, menus |
 
 ## Repo-Specific Patterns
