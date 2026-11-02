@@ -47,6 +47,11 @@ constexpr int kPillRadius = 2;
 constexpr int kVPillGapX = 6;
 constexpr int kVPillGapY = 2;
 
+// The gloss of the header of a group (see DrawGloss()): the alpha of the white
+// at the top of the header and in its middle.
+constexpr unsigned char kGlossTopAlpha = 60;
+constexpr unsigned char kGlossMiddleAlpha = 20;
+
 // The corners of a rectangle that are rounded (see DrawRoundedRect()).
 enum Corner {
   kTopLeft = 1,
@@ -173,6 +178,36 @@ void DrawRoundedRect(wxDC &dc, const wxRect &rect, int radius, int corners,
   AddRoundedRect(path, rect.x + inset, rect.y + inset, rect.width - 2 * inset,
                  rect.height - 2 * inset, radius, corners);
   gc->DrawPath(path);
+}
+
+// The gloss of a shape drawn with DrawRoundedRect() in @p rect (with the same
+// @p radius and @p corners): its top half is made lighter, with a sharp change
+// in the middle, like a glossy button. The light is strongest at the top. It
+// stays @p inset pixels inside the edge, so an outline keeps its colour.
+// Nothing is drawn without a graphics context.
+void DrawGloss(wxDC &dc, const wxRect &rect, int radius, int corners,
+               int inset) {
+  std::unique_ptr<wxGraphicsContext> gc{
+      wxGraphicsContext::CreateFromUnknownDC(dc)};
+  if (!gc) {
+    return;
+  }
+  const double x = rect.x + inset;
+  const double y = rect.y + inset;
+  const double w = rect.width - 2.0 * inset;
+  const double h = rect.height - 2.0 * inset;
+  if (w <= 0 || h <= 0) {
+    return;
+  }
+  // Only the top half.
+  gc->Clip(x, y, w, h / 2);
+  gc->SetPen(*wxTRANSPARENT_PEN);
+  gc->SetBrush(gc->CreateLinearGradientBrush(
+      x, y, x, y + h / 2, wxColour(255, 255, 255, kGlossTopAlpha),
+      wxColour(255, 255, 255, kGlossMiddleAlpha)));
+  wxGraphicsPath path = gc->CreatePath();
+  AddRoundedRect(path, x, y, w, h, std::max(0, radius - inset), corners);
+  gc->FillPath(path);
 }
 
 // The close button: an X in the middle of @p rect, and with @p highlight
@@ -742,6 +777,9 @@ void GlyphTabPainter::DrawGroupHeader(wxDC &dc, wxWindow *wnd,
                             ? Mix(colour, TextOn(colour, 1.0), 0.15)
                             : colour;
   DrawRoundedRect(dc, chip, wnd->FromDIP(kTabRadius), corners, fill, penColour);
+  // It looks glossy: the top half is lighter. The gloss stays inside the
+  // outline.
+  DrawGloss(dc, chip, wnd->FromDIP(kTabRadius), corners, 1);
 
   // The arrow of a group that cannot be collapsed is dimmed: a mix of the
   // colour of the text and the colour of the chip.
