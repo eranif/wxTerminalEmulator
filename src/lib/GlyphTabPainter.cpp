@@ -56,6 +56,12 @@ enum Corner {
   kAllCorners = kTopLeft | kTopRight | kBottomRight | kBottomLeft
 };
 
+bool IsDark(const wxColour &c) {
+  // Perceived luminance (ITU-R BT.601)
+  double luminance = 0.299 * c.Red() + 0.587 * c.Green() + 0.114 * c.Blue();
+  return luminance < 128.0;
+}
+
 // The colour @p t (0 to 1) of the way from @p a to @p b.
 wxColour Mix(const wxColour &a, const wxColour &b, double t) {
   const auto mix = [t](unsigned char x, unsigned char y) {
@@ -679,7 +685,7 @@ static void DrawGroupIndicator(wxDC &dc, const wxRect &rect, bool collapsed,
   // The points of the chevron as fractions of the square.
   static const double kRight[3][2] = {{0.34, 0.16}, {0.69, 0.5}, {0.34, 0.84}};
   static const double kDown[3][2] = {{0.16, 0.34}, {0.5, 0.69}, {0.84, 0.34}};
-  const double (*corners)[2] = collapsed ? kRight : kDown;
+  const double(*corners)[2] = collapsed ? kRight : kDown;
 
   std::unique_ptr<wxGraphicsContext> gc{
       wxGraphicsContext::CreateFromUnknownDC(dc)};
@@ -723,6 +729,8 @@ void GlyphTabPainter::DrawGroupHeader(wxDC &dc, wxWindow *wnd,
   wxDCClipper clip(dc, rect);
   group.rect = rect;
   const wxColour colour = GetGroupColour(group.colour);
+  const wxColour penColour =
+      IsDark(colour) ? colour.ChangeLightness(115) : colour.ChangeLightness(85);
 
   // The same in both styles, always the Browser look: rounded on the outer
   // side only (the inner side touches the group line), and as big as the whole
@@ -733,7 +741,8 @@ void GlyphTabPainter::DrawGroupHeader(wxDC &dc, wxWindow *wnd,
   const wxColour fill = group.hover && !group.locked
                             ? Mix(colour, TextOn(colour, 1.0), 0.15)
                             : colour;
-  DrawRoundedRect(dc, chip, wnd->FromDIP(kTabRadius), corners, fill);
+  DrawRoundedRect(dc, chip, wnd->FromDIP(kTabRadius), corners, fill, penColour);
+
   // The arrow of a group that cannot be collapsed is dimmed: a mix of the
   // colour of the text and the colour of the chip.
   const wxColour arrowColour =
