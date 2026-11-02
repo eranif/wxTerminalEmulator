@@ -374,8 +374,22 @@ const wxColour &GlyphTabBar::GetGroupColour(int group) const {
 
 void GlyphTabBar::SetGroupColour(int group, const wxColour &colour) {
   if (Group *found = FindGroup(group)) {
-    found->info.colour =
-        colour.IsOk() ? colour : GlyphTabPainter::DefaultGroupColour();
+    found->info.colour = colour;
+    Refresh();
+  }
+}
+
+const wxBitmapBundle &GlyphTabBar::GetGroupBitmap(int group) const {
+  static const wxBitmapBundle none;
+  const Group *found = FindGroup(group);
+  return found ? found->info.bitmap : none;
+}
+
+void GlyphTabBar::SetGroupBitmap(int group, const wxBitmapBundle &bitmap) {
+  if (Group *found = FindGroup(group)) {
+    found->info.bitmap = bitmap;
+    // The icon changes the size of the header.
+    LayoutTabs();
     Refresh();
   }
 }
@@ -413,8 +427,7 @@ int GlyphTabBar::AddTabToNewGroup(size_t index, const wxString &name,
   Group group;
   group.id = m_nextGroupId++;
   group.info.name = name;
-  group.info.colour =
-      colour.IsOk() ? colour : GlyphTabPainter::DefaultGroupColour();
+  group.info.colour = colour;
   m_groups.push_back(group);
   AddTabToGroup(index, group.id);
   return group.id;

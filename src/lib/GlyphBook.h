@@ -169,13 +169,14 @@ public:
   // Groups
   // ------
   //
-  // A group is a header with a name and a colour, and the tabs after it. The
-  // tabs of a group are always next to each other. A collapsed group shows only
-  // its header. A group with the selected page is never collapsed: it is opened
-  // when it gets the selection. The book shows no menu for the groups: the
-  // application handles the context menu events and calls these functions.
-  // The user can collapse a group with a click on its header, and can drag a
-  // tab into a group or out of it (wxEVT_GLYPHBOOK_GROUP_CHANGED).
+  // A group is a header with a name, a colour and an optional icon, and the
+  // tabs after it. The tabs of a group are always next to each other. A
+  // collapsed group shows only its header. A group with the selected page is
+  // never collapsed: it is opened when it gets the selection. The book shows
+  // no menu for the groups: the application handles the context menu events
+  // and calls these functions. The user can collapse a group with a click on
+  // its header, and can drag a tab into a group or out of it
+  // (wxEVT_GLYPHBOOK_GROUP_CHANGED).
 
   // Make a group with the page in it. Returns the id of the group.
   int AddPageToNewGroup(size_t page, const wxString &name,
@@ -194,8 +195,14 @@ public:
   std::vector<size_t> GetGroupPages(int group) const;
   wxString GetGroupName(int group) const;
   void SetGroupName(int group, const wxString &name);
+  // An invalid colour (wxNullColour) is the default: the colour of the tab
+  // bar, lighter on a dark bar and darker on a light one. It follows the theme.
   wxColour GetGroupColour(int group) const;
   void SetGroupColour(int group, const wxColour &colour);
+  // The icon on the header of the group, before the name. An empty bundle
+  // removes it.
+  wxBitmapBundle GetGroupBitmap(int group) const;
+  void SetGroupBitmap(int group, const wxBitmapBundle &bitmap);
   bool IsGroupCollapsed(int group) const;
   // Returns true if the state changed. A group with the selected page cannot be
   // collapsed.

@@ -562,6 +562,14 @@ void GlyphBook::SetGroupColour(int group, const wxColour &colour) {
   m_tabBar->SetGroupColour(group, colour);
 }
 
+wxBitmapBundle GlyphBook::GetGroupBitmap(int group) const {
+  return m_tabBar->GetGroupBitmap(group);
+}
+
+void GlyphBook::SetGroupBitmap(int group, const wxBitmapBundle &bitmap) {
+  m_tabBar->SetGroupBitmap(group, bitmap);
+}
+
 bool GlyphBook::IsSelectedInGroup(int group) const {
   return m_tabBar->IsSelectedInGroup(group);
 }

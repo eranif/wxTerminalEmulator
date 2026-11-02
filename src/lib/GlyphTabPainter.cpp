@@ -598,21 +598,32 @@ int GlyphTabPainter::GetVerticalTabHeight(wxWindow *wnd,
 }
 
 namespace {
-// The header of a group is measured like a tab with the name as its label.
+// The header of a group is measured like a tab with the icon and the name of
+// the group.
 GlyphTabInfo HeaderTab(const GlyphGroupInfo &group) {
   GlyphTabInfo tab;
   tab.caption = group.name;
+  tab.bitmap = group.bitmap;
   return tab;
+}
+
+// True if the header shows something after the arrow: an icon or a name.
+bool HasHeaderLabel(const GlyphGroupInfo &group) {
+  return !group.name.empty() || group.bitmap.IsOk();
 }
 } // namespace
 
 wxSize GlyphTabPainter::GetGroupHeaderSize(wxWindow *wnd,
                                            const GlyphGroupInfo &group) {
   wxSize size = GetTabSize(wnd, HeaderTab(group));
-  // The arrow, and the space after it when there is a name. The chip is as
-  // high as the tab.
+  // The arrow, and the space after it when there is an icon or a name. The
+  // chip is as high as the tab.
   size.x += IndicatorSize(wnd, size.y) +
-            (group.name.empty() ? 0 : wnd->FromDIP(kIndicatorGap));
+            (HasHeaderLabel(group) ? wnd->FromDIP(kIndicatorGap) : 0);
+  // A tab puts a margin after its icon. A header without a name has none.
+  if (group.bitmap.IsOk() && group.name.empty()) {
+    size.x -= wnd->FromDIP(kMargin);
+  }
   size.x = std::max(size.x, wnd->FromDIP(kMinHeaderWidth));
   return size;
 }
@@ -697,13 +708,21 @@ static void DrawGroupIndicator(wxDC &dc, const wxRect &rect, bool collapsed,
   dc.DrawLine(points[1], points[2]);
 }
 
+wxColour GlyphTabPainter::GetGroupColour(const wxColour &colour) const {
+  if (colour.IsOk()) {
+    return colour;
+  }
+  const double luminance =
+      0.299 * m_bgBar.Red() + 0.587 * m_bgBar.Green() + 0.114 * m_bgBar.Blue();
+  return m_bgBar.ChangeLightness(luminance < 128.0 ? 115 : 80);
+}
+
 void GlyphTabPainter::DrawGroupHeader(wxDC &dc, wxWindow *wnd,
                                       GlyphGroupInfo &group, const wxRect &rect,
                                       wxDirection inner) {
   wxDCClipper clip(dc, rect);
   group.rect = rect;
-  const wxColour colour =
-      group.colour.IsOk() ? group.colour : DefaultGroupColour();
+  const wxColour colour = GetGroupColour(group.colour);
 
   // The same in both styles, always the Browser look: rounded on the outer
   // side only (the inner side touches the group line), and as big as the whole
@@ -724,16 +743,25 @@ void GlyphTabPainter::DrawGroupHeader(wxDC &dc, wxWindow *wnd,
   dc.SetTextForeground(textColour);
   const int padding = wnd->FromDIP(kPaddingX);
   const int indicator = IndicatorSize(wnd, chip.height);
-  const int gap = group.name.empty() ? 0 : wnd->FromDIP(kIndicatorGap);
+  const int gap = HasHeaderLabel(group) ? wnd->FromDIP(kIndicatorGap) : 0;
+  // The icon, and the margin between it and the name.
+  wxBitmap icon;
+  int iconWidth = 0;
+  if (group.bitmap.IsOk()) {
+    icon = group.bitmap.GetBitmapFor(wnd);
+    iconWidth = icon.GetLogicalWidth() +
+                (group.name.empty() ? 0 : wnd->FromDIP(kMargin));
+  }
   wxString text = group.name;
-  const int room = std::max(chip.width - 2 * padding - indicator - gap, 0);
+  const int room =
+      std::max(chip.width - 2 * padding - indicator - gap - iconWidth, 0);
   if (dc.GetTextExtent(text).x > room) {
     text = wxControl::Ellipsize(text, dc, wxELLIPSIZE_END, room);
   }
   const int textWidth = text.empty() ? 0 : dc.GetTextExtent(text).x;
-  // The arrow and the name together: centred in a horizontal bar, from the
-  // start in a vertical one.
-  const int content = indicator + gap + textWidth;
+  // The arrow, the icon and the name together: centred in a horizontal bar,
+  // from the start in a vertical one.
+  const int content = indicator + gap + iconWidth + textWidth;
   const int x = IsHorizontal(inner) ? chip.x + (chip.width - content) / 2
                                     : chip.x + padding;
   const wxRect indicatorRect(x, chip.y + (chip.height - indicator) / 2,
@@ -746,15 +774,19 @@ void GlyphTabPainter::DrawGroupHeader(wxDC &dc, wxWindow *wnd,
     // No SVG support: draw the arrow.
     DrawGroupIndicator(dc, indicatorRect, group.collapsed, arrowColour);
   }
+  if (icon.IsOk()) {
+    dc.DrawBitmap(icon, x + indicator + gap,
+                  chip.y + (chip.height - icon.GetLogicalHeight()) / 2, true);
+  }
   if (!text.empty()) {
-    dc.DrawText(text, x + indicator + gap,
+    dc.DrawText(text, x + indicator + gap + iconWidth,
                 chip.y + (chip.height - dc.GetCharHeight()) / 2);
   }
 }
 
 void GlyphTabPainter::DrawGroupLine(wxDC &dc, wxWindow *wnd, const wxRect &span,
                                     const wxColour &colour, wxDirection inner) {
-  const wxColour lineColour = colour.IsOk() ? colour : DefaultGroupColour();
+  const wxColour lineColour = GetGroupColour(colour);
   // The line is along the side of the bar that is next to the pages: at the
   // bottom of a bar above the pages, at the top of a bar below them, on the
   // right of a bar on the left, and on the left of a bar on the right.

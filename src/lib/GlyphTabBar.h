@@ -141,8 +141,12 @@ public:
   std::vector<size_t> GetGroupTabs(int group) const;
   const wxString &GetGroupName(int group) const;
   void SetGroupName(int group, const wxString &name);
+  // An invalid colour is the default (see GlyphTabPainter::GetGroupColour()).
   const wxColour &GetGroupColour(int group) const;
   void SetGroupColour(int group, const wxColour &colour);
+  // The icon on the header, before the name. An empty bundle removes it.
+  const wxBitmapBundle &GetGroupBitmap(int group) const;
+  void SetGroupBitmap(int group, const wxBitmapBundle &bitmap);
   bool IsGroupCollapsed(int group) const;
   // Returns true if the state changed. A group with the selected tab cannot be
   // collapsed.

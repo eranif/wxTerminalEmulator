@@ -112,20 +112,16 @@ wxString GroupMenuLabel(const TabBook &book, int group) {
                           static_cast<int>(it - groups.begin()) + 1);
 }
 
-// The colour for a new group: the first colour of the palette that no group
-// has, else the next one in turn.
-wxColour NextGroupColour(const TabBook &book) {
-  const auto &palette = TabBook::GetGroupColours();
-  const std::vector<int> groups = book.GetGroups();
-  for (const auto &entry : palette) {
-    const bool used = std::any_of(groups.begin(), groups.end(), [&](int group) {
-      return book.GetGroupColour(group) == entry.colour;
-    });
-    if (!used) {
-      return entry.colour;
-    }
-  }
-  return palette[groups.size() % palette.size()].colour;
+// The icon of a group: a circle of @p colour, made from an SVG in memory so it
+// is sharp at every scale. It is empty without SVG support.
+wxBitmapBundle MakeCircleIcon(const wxColour &colour) {
+  const wxString svg = wxString::Format(
+      wxS("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" "
+          "height=\"16\" viewBox=\"0 0 16 16\"><circle cx=\"8\" cy=\"8\" "
+          "r=\"7\" fill=\"#%02x%02x%02x\"/></svg>"),
+      colour.Red(), colour.Green(), colour.Blue());
+  const wxScopedCharBuffer data = svg.utf8_str();
+  return wxBitmapBundle::FromSVG(data.data(), wxSize(12, 12));
 }
 
 // Ask for the name of a group. Returns false if the user cancelled.
@@ -407,7 +403,37 @@ bool MyFrame::RestoreLayout() {
   }
 
   m_notebook->RestoreLayout(book);
+  // The icons are not saved: each restored group gets a new one.
+  for (const int group : m_notebook->GetGroups()) {
+    SetRandomGroupIcon(group);
+  }
   return m_notebook->GetPageCount() > 0;
+}
+
+void MyFrame::SetRandomGroupIcon(int group) {
+  // A random colour of the palette (without the grey) that no other group
+  // uses for its icon. When all are used, any of them.
+  const auto &palette = TabBook::GetGroupColours();
+  const std::vector<int> groups = m_notebook->GetGroups();
+  std::vector<wxColour> free;
+  std::vector<wxColour> all;
+  for (size_t i = 1; i < palette.size(); ++i) {
+    all.push_back(palette[i].colour);
+    const bool used = std::any_of(groups.begin(), groups.end(), [&](int g) {
+      const auto it = m_groupIconColours.find(g);
+      return g != group && it != m_groupIconColours.end() &&
+             it->second == palette[i].colour;
+    });
+    if (!used) {
+      free.push_back(palette[i].colour);
+    }
+  }
+  const std::vector<wxColour> &choices = free.empty() ? all : free;
+  static std::mt19937 rng{std::random_device{}()};
+  std::uniform_int_distribution<size_t> pick(0, choices.size() - 1);
+  const wxColour colour = choices[pick(rng)];
+  m_groupIconColours[group] = colour;
+  m_notebook->SetGroupBitmap(group, MakeCircleIcon(colour));
 }
 
 void MyFrame::ShowTabMenu(int tabIdx, const wxPoint &pos) {
@@ -490,8 +516,11 @@ void MyFrame::ShowTabMenu(int tabIdx, const wxPoint &pos) {
         [this, tab](wxCommandEvent &) {
           wxString name;
           if (AskGroupName(this, _("New Group"), name)) {
-            m_notebook->AddPageToNewGroup(tab, name,
-                                          NextGroupColour(*m_notebook));
+            // No colour: the group gets the default one, made from the colour
+            // of the tab bar.
+            const int group =
+                m_notebook->AddPageToNewGroup(tab, name, wxNullColour);
+            SetRandomGroupIcon(group);
           }
         },
         newGroup->GetId());
@@ -539,6 +568,15 @@ void MyFrame::ShowGroupMenu(int group, const wxPoint &pos) {
 
   auto *colours = new wxMenu;
   const wxColour current = m_notebook->GetGroupColour(group);
+  // The default colour comes from the tab bar and follows the theme.
+  wxMenuItem *defaultColour = colours->AppendRadioItem(wxID_ANY, _("Default"));
+  defaultColour->Check(!current.IsOk());
+  colours->Bind(
+      wxEVT_MENU,
+      [this, group](wxCommandEvent &) {
+        m_notebook->SetGroupColour(group, wxNullColour);
+      },
+      defaultColour->GetId());
   for (const auto &entry : TabBook::GetGroupColours()) {
     wxMenuItem *item =
         colours->AppendRadioItem(wxID_ANY, wxGetTranslation(entry.name));

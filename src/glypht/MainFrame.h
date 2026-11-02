@@ -12,6 +12,7 @@
 #include "terminal_view.h"
 
 #include <deque>
+#include <map>
 #include <optional>
 #include <vector>
 #include <wx/app.h>
@@ -270,10 +271,14 @@ public:
   // Recreate the tabs saved by SaveLayout(). Returns true if a layout was
   // restored (at least one tab created).
   bool RestoreLayout();
+  // Give the group a circle icon of a random colour that no other group has.
+  void SetRandomGroupIcon(int group);
   void OnClose(wxCloseEvent &event);
 
 private:
   TabBook *m_notebook{nullptr};
+  // The colour of the icon of each group, by the id of the group.
+  std::map<int, wxColour> m_groupIconColours;
   // The tabs in most-recently-used order.
   TabMRU m_tabMru;
   TabSwitcherDlg *m_tabSwitcher{nullptr};

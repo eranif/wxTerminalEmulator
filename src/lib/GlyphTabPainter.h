@@ -56,7 +56,10 @@ struct GlyphTabInfo {
  */
 struct GlyphGroupInfo {
   wxString name;
+  // An invalid colour follows the bar: see GlyphTabPainter::GetGroupColour().
   wxColour colour;
+  // An icon before the name; it is not drawn if it is not valid.
+  wxBitmapBundle bitmap;
   bool collapsed{false};
   // The group cannot be collapsed (it has the current tab): the arrow is dimmed
   // and the header does not react to the mouse.
@@ -118,9 +121,12 @@ public:
 
   Style GetStyle() const { return m_style; }
 
-  // The colour of a group that has no valid colour. It is also the first colour
-  // of the palette of GlyphBook.
+  // The grey of the palette of GlyphBook.
   static wxColour DefaultGroupColour() { return wxColour(0x5f, 0x63, 0x68); }
+  // The colour a group with @p colour is drawn with. An invalid colour gives
+  // the colour of the bar, lighter on a dark bar and darker on a light one, so
+  // it follows the theme.
+  wxColour GetGroupColour(const wxColour &colour) const;
 
   /**
    * Draw a tab in @p rect. @p inner is the side of the tab next to the
@@ -139,11 +145,11 @@ public:
   // while the mouse is on it.
   void DrawDropDownButton(wxDC &dc, wxWindow *wnd, const wxRect &rect,
                           bool hot);
-  // The header of a group: a chip with the colour and the name of the group,
-  // in the place of a tab. Sets group.rect.
+  // The header of a group: a chip with the colour, the icon and the name of
+  // the group, in the place of a tab. Sets group.rect.
   void DrawGroupHeader(wxDC &dc, wxWindow *wnd, GlyphGroupInfo &group,
                        const wxRect &rect, wxDirection inner);
-  // The line of the colour of a group along the side of the bar that is next to
+  // The line of the colour of a group (see GetGroupColour()) along the side of the bar that is next to
   // the pages, over the header and the tabs of the group. Draw it after the
   // tabs, or what a tab draws (for example the hover) covers it. @p span is the
   // part of the bar they take.
