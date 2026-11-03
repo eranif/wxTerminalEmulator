@@ -23,3 +23,5 @@ compile_commands.json
 # Bundled ConPTY binaries
 !assets/conpty/**/*.dll
 !assets/conpty/**/*.exe
+
+/.build-*/
