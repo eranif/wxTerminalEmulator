@@ -102,6 +102,7 @@ bool GlyphBook::Create(wxWindow *parent, wxWindowID id, const wxPoint &pos,
 
   SetTheme(wxTerminalTheme::MakeDarkTheme());
   UpdateLayout();
+  UpdateEmptyLook();
   return true;
 }
 
@@ -133,11 +134,27 @@ void GlyphBook::RebuildPainter() {
 
 void GlyphBook::OnSysColourChanged(wxSysColourChangedEvent &event) {
   event.Skip();
+  UpdateEmptyLook();
   // The button face changes with the appearance of the app, so the bar of the
   // tabs must be made again.
   if (m_themed && !m_barColour.IsOk()) {
     RebuildPainter();
   }
+}
+
+void GlyphBook::UpdateEmptyLook() {
+  if (!m_tabBar || !m_pages) {
+    return;
+  }
+  if (GetPageCount() == 0) {
+    const wxColour face = wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE);
+    m_tabBar->SetPlainColour(face);
+    m_pages->SetBackgroundColour(face);
+  } else {
+    m_tabBar->SetPlainColour(wxNullColour);
+    m_pages->SetBackgroundColour(wxNullColour);
+  }
+  m_pages->Refresh();
 }
 
 void GlyphBook::SetPainter(GlyphTabPainter *painter) {
@@ -300,6 +317,7 @@ bool GlyphBook::InsertPage(size_t pageIdx, wxWindow *page,
   }
   const bool first = GetPageCount() == 0;
   m_tabBar->Insert(pageIdx, page, caption, bitmap);
+  UpdateEmptyLook();
   DoInvalidateBestSize();
 
   if (first) {
@@ -354,6 +372,7 @@ wxWindow *GlyphBook::RemoveTab(size_t index, bool destroy) {
     // The caller owns the page now, so it is not a child of the pages.
     window->Reparent(this);
   }
+  UpdateEmptyLook();
   DoInvalidateBestSize();
 
   if (newSelection != wxNOT_FOUND) {
@@ -374,6 +393,7 @@ wxWindow *GlyphBook::DoRemovePage(size_t page) {
 bool GlyphBook::DeleteAllPages() {
   m_tabBar->Clear();
   const bool ok = m_pages->DeleteAllPages();
+  UpdateEmptyLook();
   DoInvalidateBestSize();
   return ok;
 }

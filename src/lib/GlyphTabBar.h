@@ -55,6 +55,9 @@ public:
   ~GlyphTabBar() override = default;
 
   void SetPainter(std::unique_ptr<GlyphTabPainter> painter);
+  // Fill the bar with @p colour and nothing else (no line along the pages).
+  // An invalid colour goes back to the painter.
+  void SetPlainColour(const wxColour &colour);
   void SetCallbacks(Callbacks callbacks) { m_callbacks = std::move(callbacks); }
 
   // The side of the pages the bar is on: wxTOP, wxBOTTOM, wxLEFT or wxRIGHT.
@@ -247,6 +250,7 @@ private:
   void MoveGuide();
 
   std::unique_ptr<GlyphTabPainter> m_painter;
+  wxColour m_plainColour; // See SetPlainColour().
   Callbacks m_callbacks;
   std::vector<Tab> m_tabs;
   std::vector<Group> m_groups;

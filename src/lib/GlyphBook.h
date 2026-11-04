@@ -287,6 +287,9 @@ private:
   void OnSysColourChanged(wxSysColourChangedEvent &event);
   // Give the painter to the bar.
   void ApplyPainter(std::unique_ptr<GlyphTabPainter> painter);
+  // Without pages the bar and the pages are both the button face, so the book
+  // is one empty area. Call it after the number of pages changes.
+  void UpdateEmptyLook();
 
   // Send an event with @p selection (and the old one), and the group and the
   // position of the mouse in the coordinates of the bar, if any. Returns false

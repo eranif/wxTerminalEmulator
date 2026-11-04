@@ -764,9 +764,23 @@ void GlyphTabBar::EnsureVisible(size_t index) {
 // Painting
 // --------
 
+void GlyphTabBar::SetPlainColour(const wxColour &colour) {
+  if (colour.IsOk() == m_plainColour.IsOk() &&
+      (!colour.IsOk() || colour == m_plainColour)) {
+    return;
+  }
+  m_plainColour = colour;
+  Refresh();
+}
+
 void GlyphTabBar::OnPaint(wxPaintEvent &WXUNUSED(event)) {
   wxAutoBufferedPaintDC dc(this);
   const wxRect client = GetClientRect();
+  if (m_plainColour.IsOk()) {
+    dc.SetBackground(wxBrush(m_plainColour));
+    dc.Clear();
+    return;
+  }
   if (!m_painter) {
     dc.SetBackground(GetBackgroundColour());
     dc.Clear();
