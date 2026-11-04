@@ -25,3 +25,7 @@ compile_commands.json
 !assets/conpty/**/*.exe
 
 /.build-*/
+
+# Work in progress, not part of the build
+/src/lib/StatusUpdater.cpp
+/src/lib/spinner_svg.h
