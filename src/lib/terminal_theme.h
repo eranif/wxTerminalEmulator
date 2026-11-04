@@ -1,8 +1,12 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <random>
+#include <vector>
 #include <wx/colour.h>
 #include <wx/font.h>
+#include <wx/settings.h>
 
 #ifdef __WXMAC__
 constexpr int kDefaultFontSize = 20;
@@ -94,6 +98,31 @@ struct wxTerminalTheme {
 #endif // __FreeBSD__
   }
 
+  static bool IsDark(const wxColour &c) {
+    // Perceived luminance (ITU-R BT.601)
+    double luminance = 0.299 * c.Red() + 0.587 * c.Green() + 0.114 * c.Blue();
+    return luminance < 128.0;
+  }
+
+  bool IsDark() const { return IsDark(bg); }
+  bool IsLight() const { return !IsDark(); }
+
+  // A random colour of the palette of the theme: red, green, yellow, blue,
+  // magenta or cyan. With @p includeBrightColours the bright versions of them
+  // can also be returned. Black, white and the greys are never returned: they
+  // look like the foreground or the background of the theme.
+  // Not thread safe: call it from the UI thread.
+  wxColour RandomColour(bool includeBrightColours = false) const {
+    std::vector<wxColour> choices{red, green, yellow, blue, magenta, cyan};
+    if (includeBrightColours) {
+      choices.insert(choices.end(), {brightRed, brightGreen, brightYellow,
+                                     brightBlue, brightMagenta, brightCyan});
+    }
+    static std::mt19937 rng{std::random_device{}()};
+    std::uniform_int_distribution<std::size_t> pick(0, choices.size() - 1);
+    return choices[pick(rng)];
+  }
+
   // Helper: get ANSI colour by index (0-7) + bright flag
   std::uint32_t GetAnsiColor(int index, bool bright = false) const {
     static const wxColour wxTerminalTheme::*normal[8] = {
@@ -137,6 +166,11 @@ struct wxTerminalTheme {
     t.brightCyan = t.cyan.ChangeLightness(120);
     t.linkColour = wxColour("#33BBFF");
     return t;
+  }
+
+  static inline wxTerminalTheme MakeDefaultTheme() {
+    wxColour btnFace = wxSystemSettings::GetColour(wxSYS_COLOUR_3DFACE);
+    return IsDark(btnFace) ? MakeDarkTheme() : MakeLightTheme();
   }
 
   static inline wxTerminalTheme MakeLightTheme() {

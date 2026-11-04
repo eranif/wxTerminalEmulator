@@ -518,8 +518,8 @@ void MyFrame::ShowTabMenu(int tabIdx, const wxPoint &pos) {
           if (AskGroupName(this, _("New Group"), name)) {
             // No colour: the group gets the default one, made from the colour
             // of the tab bar.
-            const int group =
-                m_notebook->AddPageToNewGroup(tab, name, wxNullColour);
+            const int group = m_notebook->AddPageToNewGroup(
+                tab, name, m_config.GetActiveTheme().RandomColour());
             SetRandomGroupIcon(group);
           }
         },
@@ -888,6 +888,11 @@ void MyFrame::ApplyThemeToAllTabs(const wxTerminalTheme &theme,
   m_notebook->SetTheme(theme,
                        AppConfig::GetTabOutlineColourOf(theme, outlineColour),
                        TabArtStyle(m_config.GetTabStyle()));
+  const auto groups = m_notebook->GetGroups();
+  for (int grpId : groups) {
+    m_notebook->SetGroupColour(grpId, theme.RandomColour());
+  }
+  m_notebook->Refresh();
 }
 
 wxTerminalViewCtrl *MyFrame::GetActiveTerminalView() const {
