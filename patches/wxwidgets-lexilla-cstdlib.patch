@@ -1,0 +1,12 @@
+diff --git a/src/stc/lexilla/lexlib/OptionSet.h b/src/stc/lexilla/lexlib/OptionSet.h
+--- a/src/stc/lexilla/lexlib/OptionSet.h
++++ b/src/stc/lexilla/lexlib/OptionSet.h
+@@ -10,6 +10,8 @@
+ #ifndef OPTIONSET_H
+ #define OPTIONSET_H
+ 
++#include <cstdlib>
++
+ #include "LexillaCompat.h"
+ 
+ namespace Lexilla {

@@ -89,7 +89,7 @@ function fetch_wx_widgets() {
 # Applies our patches to the wxWidgets sources (the current directory is
 # .build-release/wxWidgets/.build-release). A patch that does not apply, for
 # example because it is already in the wxWidgets version, is skipped.
-function apply_wx_patches_Linux() {
+function apply_wx_patches() {
   local patch
   for patch in "${ROOT_DIR}"/patches/wxwidgets-*.patch; do
     [ -f "${patch}" ] || continue
@@ -117,7 +117,7 @@ function build_wx_widgets_Linux() {
   fi
 
   fetch_wx_widgets
-  apply_wx_patches_Linux
+  apply_wx_patches
   INFO "Building wxWidgets"
   ../configure --disable-debug_flag --with-gtk=3 --enable-stl \
     --prefix="${WX_INSTALL_DIR}" --disable-shared --enable-monolithic \
@@ -133,6 +133,7 @@ function build_wx_widgets_macOS() {
   fi
 
   fetch_wx_widgets
+  apply_wx_patches
   INFO "Building wxWidgets"
   cmake .. -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_OSX_DEPLOYMENT_TARGET="${MACOS_DEPLOYMENT_TARGET}" \
@@ -162,6 +163,7 @@ function build_wx_widgets_MSW() {
   fi
 
   fetch_wx_widgets
+  apply_wx_patches
   INFO "Building wxWidgets"
   cmake .. -G"MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release \
     -DwxBUILD_DEBUG_LEVEL=0 \

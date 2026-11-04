@@ -64,7 +64,7 @@ wxTerminalEmulator/
 ├── src/glypht/                    # GlyphT demo application
 ├── libtsm/                        # Vendored libtsm (VT parser), own CMake target `tsm`
 ├── cmake/                         # CMake helpers, e.g. FindWxWidgetsMSYS.cmake
-├── patches/                       # Patches for wxWidgets, applied by build.sh on Linux
+├── patches/                       # Patches for wxWidgets, applied by build.sh on all platforms
 ├── assets/                        # Icons, images and the bundled font (assets/fonts)
 ├── build.sh                       # Builds wxWidgets and GlyphT (see Build Configuration)
 ├── CMakeLists.txt                 # Build configuration
