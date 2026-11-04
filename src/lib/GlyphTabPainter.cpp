@@ -48,9 +48,13 @@ constexpr int kVPillGapX = 6;
 constexpr int kVPillGapY = 2;
 
 // The gloss of the header of a group (see DrawGloss()): the alpha of the white
-// at the top of the header and in its middle.
+// at the top of the header and in its middle. A light colour cannot get
+// lighter, so its lower half gets darker instead: the alpha of the black in the
+// middle of the header and at the bottom.
 constexpr unsigned char kGlossTopAlpha = 60;
 constexpr unsigned char kGlossMiddleAlpha = 20;
+constexpr unsigned char kShadeMiddleAlpha = 25;
+constexpr unsigned char kShadeBottomAlpha = 45;
 
 // The corners of a rectangle that are rounded (see DrawRoundedRect()).
 enum Corner {
@@ -181,12 +185,14 @@ void DrawRoundedRect(wxDC &dc, const wxRect &rect, int radius, int corners,
 }
 
 // The gloss of a shape drawn with DrawRoundedRect() in @p rect (with the same
-// @p radius and @p corners): its top half is made lighter, with a sharp change
-// in the middle, like a glossy button. The light is strongest at the top. It
-// stays @p inset pixels inside the edge, so an outline keeps its colour.
-// Nothing is drawn without a graphics context.
-void DrawGloss(wxDC &dc, const wxRect &rect, int radius, int corners,
-               int inset) {
+// @p radius and @p corners), like a glossy button, with a sharp change in the
+// middle. On a dark colour (@p darkBase) the top half is made lighter, and the
+// light is strongest at the top. A light colour cannot get lighter (white on it
+// cannot be seen), so its lower half is made darker, and the shade is strongest
+// at the bottom. It stays @p inset pixels inside the edge, so an outline keeps
+// its colour. Nothing is drawn without a graphics context.
+void DrawGloss(wxDC &dc, const wxRect &rect, int radius, int corners, int inset,
+               bool darkBase) {
   std::unique_ptr<wxGraphicsContext> gc{
       wxGraphicsContext::CreateFromUnknownDC(dc)};
   if (!gc) {
@@ -199,12 +205,20 @@ void DrawGloss(wxDC &dc, const wxRect &rect, int radius, int corners,
   if (w <= 0 || h <= 0) {
     return;
   }
-  // Only the top half.
-  gc->Clip(x, y, w, h / 2);
   gc->SetPen(*wxTRANSPARENT_PEN);
-  gc->SetBrush(gc->CreateLinearGradientBrush(
-      x, y, x, y + h / 2, wxColour(255, 255, 255, kGlossTopAlpha),
-      wxColour(255, 255, 255, kGlossMiddleAlpha)));
+  if (darkBase) {
+    // Only the top half, lighter.
+    gc->Clip(x, y, w, h / 2);
+    gc->SetBrush(gc->CreateLinearGradientBrush(
+        x, y, x, y + h / 2, wxColour(255, 255, 255, kGlossTopAlpha),
+        wxColour(255, 255, 255, kGlossMiddleAlpha)));
+  } else {
+    // Only the lower half, darker.
+    gc->Clip(x, y + h / 2, w, h - h / 2);
+    gc->SetBrush(gc->CreateLinearGradientBrush(
+        x, y + h / 2, x, y + h, wxColour(0, 0, 0, kShadeMiddleAlpha),
+        wxColour(0, 0, 0, kShadeBottomAlpha)));
+  }
   wxGraphicsPath path = gc->CreatePath();
   AddRoundedRect(path, x, y, w, h, std::max(0, radius - inset), corners);
   gc->FillPath(path);
@@ -720,7 +734,7 @@ static void DrawGroupIndicator(wxDC &dc, const wxRect &rect, bool collapsed,
   // The points of the chevron as fractions of the square.
   static const double kRight[3][2] = {{0.34, 0.16}, {0.69, 0.5}, {0.34, 0.84}};
   static const double kDown[3][2] = {{0.16, 0.34}, {0.5, 0.69}, {0.84, 0.34}};
-  const double(*corners)[2] = collapsed ? kRight : kDown;
+  const double (*corners)[2] = collapsed ? kRight : kDown;
 
   std::unique_ptr<wxGraphicsContext> gc{
       wxGraphicsContext::CreateFromUnknownDC(dc)};
@@ -777,9 +791,9 @@ void GlyphTabPainter::DrawGroupHeader(wxDC &dc, wxWindow *wnd,
                             ? Mix(colour, TextOn(colour, 1.0), 0.15)
                             : colour;
   DrawRoundedRect(dc, chip, wnd->FromDIP(kTabRadius), corners, fill, penColour);
-  // It looks glossy: the top half is lighter. The gloss stays inside the
-  // outline.
-  DrawGloss(dc, chip, wnd->FromDIP(kTabRadius), corners, 1);
+  // It looks glossy: the top half is lighter, or the lower half is darker for a
+  // light colour. The gloss stays inside the outline.
+  DrawGloss(dc, chip, wnd->FromDIP(kTabRadius), corners, 1, IsDark(colour));
 
   // The arrow of a group that cannot be collapsed is dimmed: a mix of the
   // colour of the text and the colour of the chip.
@@ -833,7 +847,12 @@ void GlyphTabPainter::DrawGroupHeader(wxDC &dc, wxWindow *wnd,
 
 void GlyphTabPainter::DrawGroupLine(wxDC &dc, wxWindow *wnd, const wxRect &span,
                                     const wxColour &colour, wxDirection inner) {
-  const wxColour lineColour = GetGroupColour(colour);
+  // The line has the colour of the bottom of the header. A light colour is
+  // darker there (see DrawGloss()), and the line has that shade, so the header
+  // and the line look like one piece. A dark colour has no shade.
+  const wxColour base = GetGroupColour(colour);
+  const wxColour lineColour =
+      IsDark(base) ? base : Mix(base, *wxBLACK, kShadeBottomAlpha / 255.0);
   // The line is along the side of the bar that is next to the pages: at the
   // bottom of a bar above the pages, at the top of a bar below them, on the
   // right of a bar on the left, and on the left of a bar on the right.

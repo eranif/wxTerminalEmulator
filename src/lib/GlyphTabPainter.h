@@ -149,10 +149,11 @@ public:
   // the group, in the place of a tab. Sets group.rect.
   void DrawGroupHeader(wxDC &dc, wxWindow *wnd, GlyphGroupInfo &group,
                        const wxRect &rect, wxDirection inner);
-  // The line of the colour of a group (see GetGroupColour()) along the side of the bar that is next to
-  // the pages, over the header and the tabs of the group. Draw it after the
-  // tabs, or what a tab draws (for example the hover) covers it. @p span is the
-  // part of the bar they take.
+  // The line of the colour of a group (see GetGroupColour()) along the side of
+  // the bar that is next to the pages. A light colour is drawn as dark as the
+  // bottom of the header. The line is over the header and the tabs of the
+  // group. Draw it after the tabs, or what a tab draws (for example the hover)
+  // covers it. @p span is the part of the bar they take.
   void DrawGroupLine(wxDC &dc, wxWindow *wnd, const wxRect &span,
                      const wxColour &colour, wxDirection inner);
   // The size of the header of a group in a horizontal bar.
