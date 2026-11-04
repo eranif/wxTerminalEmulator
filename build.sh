@@ -268,7 +268,7 @@ function build_MSW() {
   build_wx_widgets_MSW
   export WXWIN="${WX_INSTALL_DIR}"
   INFO "WXWIN is set to '${WXWIN}'"
-  build_glypht -DWXWIN="${WXWIN}"
+  build_glypht -DWXWIN="${WXWIN}" -G"MinGW Makefiles"
 
   INFO ""
   INFO "To run GlyphT:"
