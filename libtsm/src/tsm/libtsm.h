@@ -408,6 +408,7 @@ enum tsm_vte_color {
 #define TSM_VTE_MOUSE_MODE_SGR   1006 /* modern mode that allows unlimited x and y coordinates */
 #define TSM_VTE_MOUSE_MODE_PIXEL 1016 /* sends pixel coordinates instead of cell coordinates */
 #define TSM_VTE_BRACKETED_PASTE  2004 /* enclose paste data with escape characters */
+#define TSM_VTE_THEME_NOTIFY     2031 /* tell the application when the theme changes between dark and light */
 
 enum tsm_mouse_track_mode {
 	TSM_MOUSE_TRACK_DISABLE = 0, /* don't track mouse events */
@@ -536,6 +537,19 @@ int tsm_vte_set_palette(struct tsm_vte *vte, const char *palette_name);
  * @retval -ENOMEM if malloc fails.
  */
 int tsm_vte_set_custom_palette(struct tsm_vte *vte, uint8_t (*palette)[3]);
+
+/**
+ * @brief Tell the vte that the palette (and so the default background) was
+ * changed.
+ *
+ * If the application turned on mode 2031 and the theme changed between dark and
+ * light, the report `CSI ? 997 ; 1 n` (dark) or `CSI ? 997 ; 2 n` (light) is
+ * written. The application can also ask for it with `CSI ? 996 n`. Call this
+ * after tsm_vte_set_palette() or tsm_vte_set_custom_palette().
+ *
+ * @param vte The vte object
+ */
+void tsm_vte_notify_theme_changed(struct tsm_vte *vte);
 
 void tsm_vte_get_def_attr(struct tsm_vte *vte, struct tsm_screen_attr *out);
 unsigned int tsm_vte_get_flags(struct tsm_vte *vte);

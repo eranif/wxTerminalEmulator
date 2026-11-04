@@ -523,9 +523,10 @@ clickable links and text selection features. See `terminal_core.h` for detailed 
 - **Screen Manipulation**: ED, EL, SU, SD, ICH, DCH, IL, DL, ECH
 - **Scrolling**: DECSTBM (set scroll region), RI (reverse index), IND (index)
 - **Cursor Save/Restore**: DECSC, DECRC, SCP, RCP
-- **Text Attributes**: SGR (all standard attributes plus 256-color and true color)
+- **Text Attributes**: SGR (all standard attributes plus 256-color and true color, in the `;` and the `:` forms; the underline colour, SGR 58 and 59, is read and ignored)
 - **Mode Setting**: DECSET/DECRST (alternate screen, cursor visibility, etc.)
-- **Device Reports**: DSR (cursor position), DA (device attributes)
+- **Device Reports**: DSR (cursor position), DA (device attributes), `CSI ? 996 n` (dark or light theme, answered with `CSI ? 997 ; 1 n` or `; 2 n`)
+- **Theme Notifications**: mode 2031 (`CSI ? 2031 h`): the terminal sends the same `CSI ? 997 ; Ps n` report when the theme changes between dark and light
 - **OSC Sequences**: Title setting, color queries
 
 ### Color Support

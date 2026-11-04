@@ -181,6 +181,11 @@ struct tsm_vte {
 	unsigned int mouse_last_col;
 	unsigned int mouse_last_row;
 	bool bracketed_paste;
+	/* mode 2031: the application wants to be told when the theme changes
+	 * between dark and light */
+	bool theme_notify;
+	/* the last theme that was known: true for a dark background */
+	bool theme_dark;
 
 	tsm_vte_bell_cb bell_cb;
 	void *bell_data;
@@ -933,6 +938,8 @@ void tsm_vte_reset(struct tsm_vte *vte)
 	vte->g2 = &tsm_vte_unicode_lower;
 	vte->g3 = &tsm_vte_unicode_upper;
 
+	vte->theme_notify = false;
+
 	bool was_tracking = vte->mouse_mode != 0;
 
 	vte->mouse_mode = 0;
@@ -1390,9 +1397,102 @@ static void lookup_color(struct tsm_vte *vte, int color, uint8_t *cr,
 	}
 }
 
+/*
+ * Read the arguments of SGR 38, 48 or 58 at csi_argv[*pi], the colour that
+ * follows. There are two forms:
+ *   38;5;N   38;2;R;G;B                     (separated by ';')
+ *   38:5:N   38:2:R:G:B   38:2:CS:R:G:B     (sub-parameters, separated by ':';
+ *                                            CS is the colour space, usually
+ *                                            empty, and it is ignored)
+ * On success *pi is the index of the last argument that was read, *code is the
+ * palette code (or -1 for an RGB colour) and *r, *g, *b are the colour. When
+ * the arguments are not valid the function returns false. In the ':' form all
+ * the sub-parameters are skipped anyway, so they are not taken as other
+ * attributes; in the ';' form *pi is not changed.
+ */
+static bool sgr_extended_color(struct tsm_vte *vte, unsigned int *pi, int *code,
+			       uint8_t *r, uint8_t *g, uint8_t *b)
+{
+	unsigned int i = *pi;
+	unsigned int end = i + 1;
+	int kind, index;
+	unsigned int first;
+
+	if (i + 1 >= vte->csi_argc) {
+		llog_debug(vte, "invalid SGR");
+		return false;
+	}
+	kind = vte->csi_argv[i + 1];
+
+	if (vte->csi_sep[i + 1] == ':') {
+		/* the sub-parameters of this colour are i+1 .. end-1 */
+		while (end < vte->csi_argc && vte->csi_sep[end] == ':')
+			end++;
+		*pi = end - 1;
+
+		if (kind == 5 && end - (i + 1) >= 2) {
+			index = vte->csi_argv[i + 2];
+		} else if (kind == 2 && end - (i + 1) >= 4) {
+			/* with a colour space there are five sub-parameters */
+			first = end - (i + 1) >= 5 ? i + 3 : i + 2;
+			if (vte->csi_argv[first] < 0 || vte->csi_argv[first + 1] < 0 ||
+			    vte->csi_argv[first + 2] < 0) {
+				llog_debug(vte, "invalid true color SGR");
+				return false;
+			}
+			*r = vte->csi_argv[first];
+			*g = vte->csi_argv[first + 1];
+			*b = vte->csi_argv[first + 2];
+			*code = -1;
+			return true;
+		} else {
+			llog_debug(vte, "invalid SGR");
+			return false;
+		}
+	} else if (kind == 5) { /* 256 colour mode */
+		if (i + 2 >= vte->csi_argc || vte->csi_argv[i + 2] < 0) {
+			llog_debug(vte, "invalid 256color SGR");
+			return false;
+		}
+		index = vte->csi_argv[i + 2];
+		*pi = i + 2;
+	} else if (kind == 2) { /* true colour mode */
+		if (i + 4 >= vte->csi_argc || vte->csi_argv[i + 2] < 0 ||
+		    vte->csi_argv[i + 3] < 0 || vte->csi_argv[i + 4] < 0) {
+			llog_debug(vte, "invalid true color SGR");
+			return false;
+		}
+		*r = vte->csi_argv[i + 2];
+		*g = vte->csi_argv[i + 3];
+		*b = vte->csi_argv[i + 4];
+		*code = -1;
+		*pi = i + 4;
+		return true;
+	} else {
+		llog_debug(vte, "invalid SGR");
+		return false;
+	}
+
+	/* a palette colour */
+	if (index > 255) {
+		llog_debug(vte, "invalid 256color SGR");
+		return false;
+	}
+	if (index < 16) {
+		/* the code of the palette is used as it is */
+		*code = index;
+		*r = *g = *b = 0;
+	} else {
+		lookup_color(vte, index, r, g, b);
+		*code = -1;
+	}
+	return true;
+}
+
 static void csi_attribute(struct tsm_vte *vte)
 {
-	unsigned int i, code, val;
+	unsigned int i, val;
+	int code;
 	uint8_t cr, cg, cb;
 
 	if (vte->csi_argc <= 1 && vte->csi_argv[0] == -1) {
@@ -1560,40 +1660,21 @@ static void csi_attribute(struct tsm_vte *vte)
 		case 107:
 			vte->cattr.bccode = TSM_COLOR_WHITE;
 			break;
+		case 59:
+			/* default underline colour: we do not draw it */
+			break;
 		case 38:
 			/* fallthrough */
 		case 48:
+			/* fallthrough */
+		case 58:
 			val = vte->csi_argv[i];
-			if (vte->csi_argv[i + 1] == 5) { // 256color mode
-				if (i + 2 >= vte->csi_argc ||
-					vte->csi_argv[i + 2] < 0) {
-					llog_debug(vte, "invalid 256color SGR");
-					break;
-				}
-				code = vte->csi_argv[i + 2];
-				if (code < 16) {
-					//no change
-					cb = cg = cr = 0;
-				} else {
-					lookup_color(vte, code, &cr, &cg, &cb);
-					code = -1;
-				}
-				i += 2;
-			} else if (vte->csi_argv[i + 1] == 2) {  // true color mode
-				if (i + 4 >= vte->csi_argc ||
-					vte->csi_argv[i + 2] < 0 ||
-					vte->csi_argv[i + 3] < 0 ||
-					vte->csi_argv[i + 4] < 0) {
-						llog_debug(vte, "invalid true color SGR");
-						break;
-					}
-				cr = vte->csi_argv[i + 2];
-				cg = vte->csi_argv[i + 3];
-				cb = vte->csi_argv[i + 4];
-				code = -1;
-				i += 4;
-			} else {
-				llog_debug(vte, "invalid SGR");
+			if (!sgr_extended_color(vte, &i, &code, &cr, &cg, &cb))
+				break;
+			if (val == 58) {
+				/* underline colour: the arguments are read so that
+				 * they are not taken as other attributes, but we do
+				 * not draw it */
 				break;
 			}
 			if (val == 38) {
@@ -1673,6 +1754,14 @@ static inline void set_reset_flag(struct tsm_vte *vte, bool set,
 		vte->flags |= flag;
 	else
 		vte->flags &= ~flag;
+}
+
+/* true if the default background is dark */
+static bool vte_background_is_dark(struct tsm_vte *vte)
+{
+	const struct tsm_screen_attr *attr = &vte->def_attr;
+
+	return 0.299 * attr->br + 0.587 * attr->bg + 0.114 * attr->bb < 128.0;
 }
 
 static void csi_mode(struct tsm_vte *vte, bool set)
@@ -1873,6 +1962,11 @@ static void csi_mode(struct tsm_vte *vte, bool set)
 		case TSM_VTE_BRACKETED_PASTE:
 			vte->bracketed_paste = set;
 			continue;
+		case TSM_VTE_THEME_NOTIFY:
+			vte->theme_notify = set;
+			/* the notifications are about the changes from now on */
+			vte->theme_dark = vte_background_is_dark(vte);
+			continue;
 		default:
 			llog_debug(vte, "unknown DEC %set-Mode %d",
 				   set?"S":"Res", vte->csi_argv[i]);
@@ -1897,10 +1991,42 @@ static void csi_dev_attr(struct tsm_vte *vte)
 		   vte->csi_argv[0], vte->csi_argv[1], vte->csi_argv[2]);
 }
 
+/* The report of the colour scheme: CSI ? 997 ; 1 n for dark, 2 for light. */
+static void vte_write_theme(struct tsm_vte *vte, bool dark)
+{
+	if (dark)
+		vte_write(vte, "\e[?997;1n", 9);
+	else
+		vte_write(vte, "\e[?997;2n", 9);
+}
+
+SHL_EXPORT
+void tsm_vte_notify_theme_changed(struct tsm_vte *vte)
+{
+	bool dark;
+
+	if (!vte)
+		return;
+
+	dark = vte_background_is_dark(vte);
+	if (dark != vte->theme_dark) {
+		vte->theme_dark = dark;
+		if (vte->theme_notify)
+			vte_write_theme(vte, dark);
+	}
+}
+
 static void csi_dsr(struct tsm_vte *vte)
 {
 	char buf[64];
 	unsigned int x, y, len;
+
+	if ((vte->csi_flags & CSI_WHAT) && vte->csi_argv[0] == 996) {
+		/* the application asks if the theme is dark or light */
+		vte->theme_dark = vte_background_is_dark(vte);
+		vte_write_theme(vte, vte->theme_dark);
+		return;
+	}
 
 	if (vte->csi_argv[0] == 5) {
 		vte_write(vte, "\e[0n", 4);

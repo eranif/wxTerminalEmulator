@@ -163,6 +163,9 @@ void TerminalCore::SyncPalette() {
   setEntry(TSM_COLOR_BACKGROUND, m_theme.bg);
   tsm_vte_set_palette(m_tsmVte, "custom");
   tsm_vte_set_custom_palette(m_tsmVte, palette);
+  // Programs that asked for it (mode 2031) are told if the theme is now dark
+  // or light.
+  tsm_vte_notify_theme_changed(m_tsmVte);
 }
 
 void TerminalCore::SetMaxLines(std::size_t maxLines) {
