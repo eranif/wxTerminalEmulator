@@ -20,8 +20,8 @@ embeds a working terminal into a wxWidgets application.
 
 - Static library (`wxterminal_lib`) plus the demo application `glypht`
   ("GlyphT"), built from `src/glypht/`
-- C++20, CMake 3.10+, wxWidgets 3.2.x (CI builds against `v3.2.8.1` on macOS
-  and Linux, and against `v3.3.4` on Windows/MSYS2; 3.3.x also works)
+- C++20, CMake 3.10+, wxWidgets 3.2.x or 3.3.x (CI runs `./build.sh`, which
+  builds wxWidgets `v3.3.4`; set `WX_VERSION` to use another tag)
 - VT parsing is done by a vendored copy of **libtsm** in `libtsm/`
 - PTY: Windows (ConPTY), macOS and Linux (`forkpty`)
 - Two renderers: an OpenGL glyph atlas and the older wxDC renderer
@@ -258,7 +258,7 @@ Notes:
   `wxwidgets-wayland-gl-scrollbar.patch` fixes the scroll bar of a
   `wxGLCanvas` on Wayland: wxWidgets (v3.3.4) sized the GL subsurface with the
   whole control, which covered the scroll bar. It does not reach builds that use
-  their own wxWidgets (`WX_CONFIG`, CI); the fix belongs upstream.
+  their own wxWidgets (`WX_CONFIG`); the fix belongs upstream.
 - Build log lines look like `INFO ...` and `ERROR ...`. When a build fails, read
   the lines above the first `ERROR`.
 
@@ -419,9 +419,10 @@ one for keyboard layout translation).
    gauge takes no room. The sizer does the layout, so none of the code above
    knows it.
 
-10. **CI option name is stale**: the workflows still pass
-   `-DBUILD_WXTERMINAL_DEMO=OFF`. That option no longer exists; the current name
-   is `BUILD_GLYPHT`, so that CI job builds the demo anyway.
+10. **CI uses `build.sh`**: all three workflows (`macos.yml`, `msys2.yml`,
+   `ubuntu.yml`) run `./build.sh` with `WX_VERSION` from the matrix, and cache
+   `.build-release/wxWidgets-install`. The cache key has `build.sh` and
+   `patches/`, so a change of either builds wxWidgets again.
 
 ## Integration Example
 

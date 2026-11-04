@@ -22,13 +22,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        wx-version: ['v3.2.8.1']
+        wx-version: ['v3.3.4']
 
     steps:
     - name: Checkout wxTerminalEmulator
       uses: actions/checkout@v7
       with:
         submodules: recursive
+
+    # build.sh builds wxWidgets once and reuses it when it finds the install.
+    - name: Cache wxWidgets
+      uses: actions/cache@v4
+      with:
+        path: .build-release/wxWidgets-install
+        key: wxwidgets-${{ runner.os }}-${{ matrix.wx-version }}-${{ hashFiles('build.sh', 'patches/**') }}
 
     - name: cmake --version
       run: cmake --version
