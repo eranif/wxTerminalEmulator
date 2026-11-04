@@ -10,6 +10,13 @@
 
 cmake_minimum_required(VERSION 3.10)
 
+# file(GET_RUNTIME_DEPENDENCIES) matches the regexes below against normalized
+# paths (forward slashes). Setting the policy also silences the warning of newer
+# CMake versions.
+if(POLICY CMP0207)
+  cmake_policy(SET CMP0207 NEW)
+endif()
+
 if(NOT EXECUTABLE
    OR NOT BUNDLE_DIR
    OR NOT TARGET_OS)
