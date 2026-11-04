@@ -26,9 +26,12 @@ fi
 USE_OPENGL=${USE_OPENGL:-}
 
 # GNU make: the Makefiles of wxWidgets need it. On FreeBSD it is "gmake", and
-# "make" is BSD make.
+# "make" is BSD make. On Windows the Makefiles are made by the "MinGW Makefiles"
+# generator of CMake: the make of MSYS2 can not run them, mingw32-make can.
 if [[ "${OS_NAME}" == "FreeBSD" ]]; then
   MAKE_CMD=gmake
+elif [[ "${OS_NAME}" == *MINGW* ]]; then
+  MAKE_CMD=mingw32-make
 else
   MAKE_CMD=make
 fi
@@ -90,14 +93,17 @@ function fetch_wx_widgets() {
 # .build-release/wxWidgets/.build-release). A patch that does not apply, for
 # example because it is already in the wxWidgets version, is skipped.
 function apply_wx_patches() {
-  local patch
+  local patch reason
   for patch in "${ROOT_DIR}"/patches/wxwidgets-*.patch; do
     [ -f "${patch}" ] || continue
-    if git -C .. apply --check "${patch}" >/dev/null 2>&1; then
+    # --ignore-whitespace: the wxWidgets sources can have CRLF line endings on
+    # Windows, the patches have LF.
+    if reason=$(git -C .. apply --check --ignore-whitespace "${patch}" 2>&1); then
       INFO "Applying $(basename "${patch}") to wxWidgets"
-      git -C .. apply "${patch}"
+      git -C .. apply --ignore-whitespace "${patch}"
     else
       WARN "Skipping $(basename "${patch}"): it does not apply to wxWidgets ${WX_VERSION}"
+      WARN "${reason}"
     fi
   done
 }
@@ -169,7 +175,7 @@ function build_wx_widgets_MSW() {
     -DwxBUILD_DEBUG_LEVEL=0 \
     -DwxBUILD_MONOLITHIC=1 -DwxBUILD_SAMPLES=OFF -DwxUSE_STL=ON \
     -DCMAKE_INSTALL_PREFIX="${WX_INSTALL_DIR}"
-  make -j"$(jobs)" install
+  ${MAKE_CMD} -j"$(jobs)" install
   echo "${WX_VERSION}" >"${WX_INSTALL_DIR}/.wx-version"
   cd "${ROOT_DIR}"
 }
