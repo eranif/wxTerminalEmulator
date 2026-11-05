@@ -8,6 +8,7 @@ MACOS_DEPLOYMENT_TARGET=${MACOS_DEPLOYMENT_TARGET:-13.0}
 OS_NAME="$(uname -s)"
 FORCE_CMAKE=0
 DO_PACKAGE=0
+BUILD_BENCHMARKS=0
 
 # Version used by the "package" target. Empty: use the default of each package.
 GLYPHT_VERSION=${GLYPHT_VERSION:-}
@@ -201,9 +202,24 @@ function build_glypht() {
     fi
   fi
 
-  # Configure if the build tree has not been generated yet, if the renderer
-  # changed, or if CMakeLists.txt is newer than the generated Makefile.
+  # The benchmarks are chosen when CMake configures, too.
+  local benchmarks
+  benchmarks="$([ "${BUILD_BENCHMARKS}" = "1" ] && echo ON || echo OFF)"
+  cmake_args+=(-DBUILD_BENCHMARKS="${benchmarks}")
+  local benchmarks_changed=0
+  if [ -f "${BUILD_DIR}/CMakeCache.txt" ]; then
+    local cached_benchmarks
+    cached_benchmarks=$(sed -n 's/^BUILD_BENCHMARKS:BOOL=//p' "${BUILD_DIR}/CMakeCache.txt")
+    if [ "${cached_benchmarks:-OFF}" != "${benchmarks}" ]; then
+      benchmarks_changed=1
+    fi
+  fi
+
+  # Configure if the build tree has not been generated yet, if the renderer or
+  # the benchmarks option changed, or if CMakeLists.txt is newer than the
+  # generated Makefile.
   if [ "${FORCE_CMAKE}" = "1" ] || [ "${renderer_changed}" = "1" ] ||
+    [ "${benchmarks_changed}" = "1" ] ||
     [ ! -f "${BUILD_DIR}/CMakeCache.txt" ] ||
     [ "${ROOT_DIR}/CMakeLists.txt" -nt "${BUILD_DIR}/Makefile" ]; then
     INFO "Configuring wxTerminalEmulator"
@@ -213,6 +229,16 @@ function build_glypht() {
   fi
   ${MAKE_CMD} -j"$(jobs)"
   INFO "wxTerminalEmulator built successfully"
+  # tsm_bench is not built on Windows.
+  if [ "${BUILD_BENCHMARKS}" = "1" ] && [ -x "${BUILD_DIR}/benchmark/tsm_bench" ]; then
+    INFO ""
+    INFO "To run the benchmark:"
+    INFO "====================="
+    INFO "${BUILD_DIR}/benchmark/tsm_bench -n 30 <file>"
+    INFO "perf record -g ${BUILD_DIR}/benchmark/tsm_bench -n 30 <file>"
+    INFO "perf report --no-children"
+    INFO ""
+  fi
   cd "${ROOT_DIR}"
 }
 
@@ -371,11 +397,12 @@ function distclean() {
 }
 
 function usage() {
-  echo "Usage: $(basename "$0") [--cmake] [--opengl] [target]"
+  echo "Usage: $(basename "$0") [--cmake] [--opengl] [--benchmark] [target]"
   echo ""
   echo "Options:"
   echo "  --cmake     Force the cmake configure stage"
   echo "  --opengl    Use the OpenGL renderer (Linux and FreeBSD only; the same as USE_OPENGL=1)"
+  echo "  --benchmark Also build the benchmarks (benchmark/), into ${BUILD_DIR}/benchmark"
   echo ""
   echo "Targets:"
   echo "  (none)      Build GlyphT (default)"
@@ -429,6 +456,10 @@ while [ $# -gt 0 ]; do
       exit 1
     fi
     USE_OPENGL=1
+    shift
+    ;;
+  --benchmark)
+    BUILD_BENCHMARKS=1
     shift
     ;;
   *)

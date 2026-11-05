@@ -62,6 +62,7 @@ The `.agents/summary/` files are older than the code. Trust the code first.
 wxTerminalEmulator/
 ├── src/lib/                       # The library
 ├── src/glypht/                    # GlyphT demo application
+├── benchmark/                     # Command line benchmarks (tsm_bench), built with --benchmark
 ├── libtsm/                        # Vendored libtsm (VT parser), own CMake target `tsm`
 ├── cmake/                         # CMake helpers, e.g. FindWxWidgetsMSYS.cmake
 ├── patches/                       # Patches for wxWidgets, applied by build.sh on all platforms
@@ -200,6 +201,7 @@ repository root:
 ./build.sh              # build wxWidgets (first run only), then glypht
 ./build.sh --cmake      # same, but force the CMake configure step
 ./build.sh --opengl     # Linux only: use the OpenGL renderer (same as USE_OPENGL=1)
+./build.sh --benchmark  # also build the benchmarks (benchmark/)
 ./build.sh clean        # make clean
 ./build.sh package      # build, then create the package for this OS
 ./build.sh distclean    # delete .build-release, including wxWidgets
@@ -259,6 +261,11 @@ Notes:
   `wxGLCanvas` on Wayland: wxWidgets (v3.3.4) sized the GL subsurface with the
   whole control, which covered the scroll bar. It does not reach builds that use
   their own wxWidgets (`WX_CONFIG`); the fix belongs upstream.
+- `--benchmark` sets `BUILD_BENCHMARKS=ON` and builds `benchmark/tsm_bench`
+  (not on Windows) into `.build-release/benchmark/`. It feeds a file to
+  `tsm_vte_input()` and prints MB/s, and it can run under `perf`:
+  `.build-release/benchmark/tsm_bench -n 30 <file>`. Changing the option makes
+  CMake configure again.
 - Build log lines look like `INFO ...` and `ERROR ...`. When a build fails, read
   the lines above the first `ERROR`.
 

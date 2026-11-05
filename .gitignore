@@ -16,6 +16,7 @@
   
 # Log files  
 *.log 
+perf.data*
 compile_commands.json
 .kiro
 .DS_Store
