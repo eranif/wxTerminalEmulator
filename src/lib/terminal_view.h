@@ -621,7 +621,6 @@ private:
   void OnPaste(wxCommandEvent &evt);
   void OnMiddleClickPaste(wxMouseEvent &evt);
   void OnClearBuffer(wxCommandEvent &evt);
-  void DrawFocusBorder(wxDC &dc) const;
   void DebugDumpViewArea(TerminalLogLevel log_level, int viewLine = -1);
   void UpdateFontCache();
   void UpdateScrollbar();
@@ -853,7 +852,7 @@ private:
   std::atomic_bool m_shutdownFlag{false};
 #endif
   std::unordered_set<wxChar> m_selectionDelimChars;
-  bool m_hasFocusBorder{false};
+  bool m_hasFocus{false};
   Strip m_header;
   Strip m_footer;
   std::vector<wxString> m_pendingCommands;

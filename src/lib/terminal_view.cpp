@@ -2130,16 +2130,24 @@ void wxTerminalViewCtrl::OnPaintDC() {
     const int cursorCols = cursorInfo.cols;
     int cx = cursorInfo.col * m_charW;
 
-    // Draw cursor block
-    dc.SetPen(*wxTRANSPARENT_PEN);
-    dc.SetBrush(wxBrush(theme.cursorColour));
+    // Draw cursor block. A view without focus gets a hollow block, so the
+    // glyph below it stays readable.
+    const bool hollowCursor = !m_hasFocus && m_core.GetTheme().isBlockCursor;
     int cursorWidth =
         m_core.GetTheme().isBlockCursor ? cursorCols * m_charW : 2;
-    dc.DrawRectangle(cx, cy, cursorWidth, m_charH);
+    if (hollowCursor) {
+      dc.SetPen(wxPen(theme.cursorColour, 1));
+      dc.SetBrush(*wxTRANSPARENT_BRUSH);
+      dc.DrawRectangle(cx, cy, cursorWidth, m_charH);
+    } else {
+      dc.SetPen(*wxTRANSPARENT_PEN);
+      dc.SetBrush(wxBrush(theme.cursorColour));
+      dc.DrawRectangle(cx, cy, cursorWidth, m_charH);
+    }
 
     // Draw the character at cursor position with inverted color
     // (typically black on white cursor)
-    if (m_core.GetTheme().isBlockCursor && cursorCell &&
+    if (!hollowCursor && m_core.GetTheme().isBlockCursor && cursorCell &&
         cursorCell->ch != U' ') {
       dc.SetTextForeground(theme.bg); // Use background color (typically black)
       // Use the same font as the row does, so the glyph does not change when
@@ -2158,9 +2166,6 @@ void wxTerminalViewCtrl::OnPaintDC() {
       dc.SetFont(m_defaultFont);
     }
   }
-
-  // Finally, draw the focus border.
-  DrawFocusBorder(dc);
 
   // The buffer now holds the current frame; subsequent paints can reuse it.
   m_renderCacheValid = true;
@@ -2327,28 +2332,29 @@ void wxTerminalViewCtrl::OnPaintGL() {
     const int cursorCols = cursorInfo.cols;
     const int cx = cursorInfo.col * m_charW;
     const int cursorWidth = theme.isBlockCursor ? cursorCols * m_charW : 2;
-    m_glRenderer.AddSolidRect(cx, cy, cursorWidth, m_charH, theme.cursorColour);
+    // A view without focus gets a hollow block, so the glyph below it stays
+    // readable.
+    const bool hollowCursor = !m_hasFocus && theme.isBlockCursor;
+    if (hollowCursor) {
+      m_glRenderer.AddSolidRect(cx, cy, cursorWidth, 1, theme.cursorColour);
+      m_glRenderer.AddSolidRect(cx, cy + m_charH - 1, cursorWidth, 1,
+                                theme.cursorColour);
+      m_glRenderer.AddSolidRect(cx, cy, 1, m_charH, theme.cursorColour);
+      m_glRenderer.AddSolidRect(cx + cursorWidth - 1, cy, 1, m_charH,
+                                theme.cursorColour);
+    } else {
+      m_glRenderer.AddSolidRect(cx, cy, cursorWidth, m_charH,
+                                theme.cursorColour);
+    }
 
-    if (theme.isBlockCursor && cursorCell && cursorCell->ch != U' ' &&
-        cursorCell->ch != 0) {
+    if (!hollowCursor && theme.isBlockCursor && cursorCell &&
+        cursorCell->ch != U' ' && cursorCell->ch != 0) {
       // Draw the glyph in the background colour so it reads as inverted
       // against the cursor block.
       m_glRenderer.AddGlyph(cursorCell->ch, cursorCell->IsBold(),
                             cursorCell->IsUnderlined(), cx, cy,
                             cursorCols * m_charW, m_charH, theme.bg);
     }
-  }
-
-  // Lastly, draw a focus border (drawn as four solid edge rectangles).
-  if (m_hasFocusBorder && clientSize.x > 1 && clientSize.y > 1) {
-    const int penW = 1;
-    const wxColour borderColour("#5E9ED6");
-    m_glRenderer.AddSolidRect(0, 0, clientSize.x, penW, borderColour);
-    m_glRenderer.AddSolidRect(0, clientSize.y - penW, clientSize.x, penW,
-                              borderColour);
-    m_glRenderer.AddSolidRect(0, 0, penW, clientSize.y, borderColour);
-    m_glRenderer.AddSolidRect(clientSize.x - penW, 0, penW, clientSize.y,
-                              borderColour);
   }
 
   m_glRenderer.EndFrame();
@@ -2934,7 +2940,7 @@ void wxTerminalViewCtrl::OnPaste(wxCommandEvent &evt) {
 void wxTerminalViewCtrl::OnFocus(wxFocusEvent &evt) {
   // Ensure we can receive keyboard events
   evt.Skip();
-  m_hasFocusBorder = true;
+  m_hasFocus = true;
   InvalidateRenderCache();
   UpdateCursor();
   RefreshView();
@@ -2942,46 +2948,11 @@ void wxTerminalViewCtrl::OnFocus(wxFocusEvent &evt) {
 
 void wxTerminalViewCtrl::OnLostFocus(wxFocusEvent &evt) {
   evt.Skip();
-  m_hasFocusBorder = false;
+  m_hasFocus = false;
   InvalidateRenderCache();
   SetCursor(wxCursor(wxCURSOR_ARROW));
   ClearMouseSelection();
   RefreshView();
-}
-
-void wxTerminalViewCtrl::DrawFocusBorder(wxDC &dc) const {
-  if (!m_hasFocusBorder) {
-    return;
-  }
-
-  wxRect r = GetClientRect();
-  if (r.width <= 1 || r.height <= 1) {
-    return;
-  }
-
-#ifdef __WXMSW__
-  constexpr int kFocusPenWidth = 1;
-  wxColour focusRectColour("#5E9ED6");
-  wxPen pen(focusRectColour, kFocusPenWidth);
-  pen.SetCap(wxCAP_BUTT);
-  pen.SetJoin(wxJOIN_MITER);
-#elif defined(__WXMAC__)
-  constexpr int kFocusPenWidth = 1;
-  wxColour focusRectColour("#5E9ED6");
-  wxPen pen(focusRectColour, kFocusPenWidth);
-  pen.SetCap(wxCAP_ROUND);
-  pen.SetJoin(wxJOIN_ROUND);
-#else
-  constexpr int kFocusPenWidth = 1;
-  wxColour focusRectColour("#3DAEE9");
-  wxPen pen(focusRectColour, kFocusPenWidth);
-  pen.SetCap(wxCAP_BUTT);
-  pen.SetJoin(wxJOIN_MITER);
-#endif
-
-  dc.SetPen(pen);
-  dc.SetBrush(*wxTRANSPARENT_BRUSH);
-  dc.DrawRectangle(GetClientRect());
 }
 
 namespace {
