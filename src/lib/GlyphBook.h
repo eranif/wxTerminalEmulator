@@ -187,6 +187,10 @@ public:
   void RemovePageFromGroup(size_t page);
   // Remove the group. The pages stay where they are.
   void Ungroup(int group);
+  // Show or hide the headers of the groups (shown by default). While they are
+  // hidden the groups are kept, but the bar shows only the tabs.
+  void SetGroupsShown(bool shown);
+  bool AreGroupsShown() const;
 
   // The id of the group of the page, or kNoGroup.
   int GetPageGroup(size_t page) const;

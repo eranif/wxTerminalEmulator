@@ -328,6 +328,9 @@ bool AppPersistence::Load(AppConfig &config) {
       } else if (key == "blockcursor") {
         config.SetBlockCursor(value == "1" || value == "true" ||
                               value == "yes" || value == "on");
+      } else if (key == "showtabgroups") {
+        config.SetShowTabGroups(value == "1" || value == "true" ||
+                                value == "yes" || value == "on");
       } else if (key == "taboutline") {
         config.SetTabOutlineColour(value);
       } else if (key == "tabposition") {
@@ -397,6 +400,8 @@ bool AppPersistence::Save(const AppConfig &config) {
       "showclosebutton=%s", config.GetShowCloseButton() ? "true" : "false"));
   file.AddLine(wxString::Format("blockcursor=%s",
                                 config.GetBlockCursor() ? "true" : "false"));
+  file.AddLine(wxString::Format("showtabgroups=%s",
+                                config.GetShowTabGroups() ? "true" : "false"));
   file.AddLine("taboutline=" + config.GetTabOutlineColour());
   file.AddLine("tabposition=" +
                AppConfig::TabPositionToString(config.GetTabPosition()));

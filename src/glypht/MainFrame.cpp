@@ -224,6 +224,7 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
     UpdateProgressStatus();
     UpdateAppSelectionStatus();
   });
+  m_notebook->SetGroupsShown(m_config.GetShowTabGroups());
   // The book shows no menu: these events ask the application for one.
   m_notebook->Bind(wxEVT_GLYPHBOOK_TAB_CONTEXT_MENU,
                    [this](GlyphBookEvent &event) {
@@ -547,6 +548,8 @@ void MyFrame::ShowTabMenu(int tabIdx, const wxPoint &pos) {
         [this, tab](wxCommandEvent &) { m_notebook->RemovePageFromGroup(tab); },
         remove->GetId());
   }
+  menu.AppendSeparator();
+  AppendShowTabGroupsItem(menu);
   m_notebook->PopupMenu(&menu, pos);
 }
 
@@ -635,7 +638,21 @@ void MyFrame::ShowBarMenu(const wxPoint &pos) {
         OnNewTerminal(event);
       },
       newTab->GetId());
+  menu.AppendSeparator();
+  AppendShowTabGroupsItem(menu);
   m_notebook->PopupMenu(&menu, pos);
+}
+
+void MyFrame::AppendShowTabGroupsItem(wxMenu &menu) {
+  wxMenuItem *item = menu.AppendCheckItem(wxID_ANY, _("Show Tab Groups"));
+  item->Check(m_config.GetShowTabGroups());
+  menu.Bind(
+      wxEVT_MENU,
+      [this](wxCommandEvent &) {
+        m_config.SetShowTabGroups(!m_config.GetShowTabGroups());
+        m_notebook->SetGroupsShown(m_config.GetShowTabGroups());
+      },
+      item->GetId());
 }
 
 void MyFrame::SetTabStrip(size_t tabIdx, bool footer) {

@@ -519,9 +519,23 @@ void GlyphTabBar::RemoveEmptyGroups() {
   }
 }
 
+void GlyphTabBar::SetGroupsShown(bool shown) {
+  if (shown == m_groupsShown) {
+    return;
+  }
+  m_groupsShown = shown;
+  m_hoverGroup = m_groupPressed = kNoGroup;
+  UpdateMinSize();
+  LayoutTabs();
+  if (m_selection >= 0) {
+    EnsureVisible(static_cast<size_t>(m_selection));
+  }
+  Refresh();
+}
+
 bool GlyphTabBar::IsTabVisible(size_t index) const {
   const Tab &tab = m_tabs[index];
-  if (tab.group == kNoGroup) {
+  if (tab.group == kNoGroup || !m_groupsShown) {
     return true;
   }
   // A group with the selected tab is never collapsed (see LayoutTabs()).
@@ -659,7 +673,7 @@ void GlyphTabBar::LayoutTabs() {
     const Tab &tab = m_tabs[i];
     if (tab.group != previousGroup) {
       previousGroup = tab.group;
-      if (const Group *group = FindGroup(tab.group)) {
+      if (const Group *group = m_groupsShown ? FindGroup(tab.group) : nullptr) {
         Item header;
         header.header = true;
         header.index = group->id;
@@ -729,6 +743,10 @@ void GlyphTabBar::LayoutTabs() {
       Tab &tab = m_tabs[static_cast<size_t>(item.index)];
       tab.info.rect = item.rect;
       if (Group *group = FindGroup(tab.group)) {
+        if (!m_groupsShown && group->spanEnd == 0) {
+          // No header: the group starts at its first tab.
+          group->spanStart = position;
+        }
         group->spanEnd = position + sizes[k];
       }
     }

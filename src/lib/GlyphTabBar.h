@@ -157,6 +157,12 @@ public:
   // True if the selected tab is in the group.
   bool IsSelectedInGroup(int group) const;
 
+  // Show or hide the headers of the groups. Hidden headers: the groups stay as
+  // they are (a tab keeps its group, a collapsed group keeps its state), but
+  // the bar shows only the tabs, all of them, with no group lines.
+  void SetGroupsShown(bool shown);
+  bool AreGroupsShown() const { return m_groupsShown; }
+
   bool AcceptsFocus() const override { return false; }
   bool AcceptsFocusFromKeyboard() const override { return false; }
 
@@ -255,6 +261,7 @@ private:
   std::vector<Tab> m_tabs;
   std::vector<Group> m_groups;
   int m_nextGroupId{1};
+  bool m_groupsShown{true};
   std::vector<Item> m_items;
   int m_selection{-1};
   bool m_closeOnAll{false};

@@ -556,6 +556,10 @@ void GlyphBook::RemovePageFromGroup(size_t page) {
 
 void GlyphBook::Ungroup(int group) { m_tabBar->Ungroup(group); }
 
+void GlyphBook::SetGroupsShown(bool shown) { m_tabBar->SetGroupsShown(shown); }
+
+bool GlyphBook::AreGroupsShown() const { return m_tabBar->AreGroupsShown(); }
+
 int GlyphBook::GetPageGroup(size_t page) const {
   return page < GetPageCount() ? m_tabBar->GetTabGroup(page) : kNoGroup;
 }

@@ -72,6 +72,10 @@ struct AppConfig {
   void SetBlockCursor(bool block) { blockCursor = block; }
   bool GetBlockCursor() const { return blockCursor; }
 
+  /// Show the headers of the tab groups (the "Show Tab Groups" menu item).
+  void SetShowTabGroups(bool show) { showTabGroups = show; }
+  bool GetShowTabGroups() const { return showTabGroups; }
+
   /// The colours the outline of the current tab can have.
   static const std::vector<TabOutlineColour> &GetTabOutlineColours();
   /// The key of the outline colour of the current tab (see TabOutlineColour).
@@ -133,6 +137,7 @@ private:
   bool safeDrawingEnabled{true};
   bool showCloseButton{true};
   bool blockCursor{true};
+  bool showTabGroups{true};
   wxString tabOutlineColour{"default"};
   TabPosition tabPosition{TabPosition::Top};
   TabStyle tabStyle{TabStyle::Browser};

@@ -209,6 +209,8 @@ public:
   // there is no tab. The book fires events for them and shows no menu itself.
   void ShowGroupMenu(int group, const wxPoint &pos);
   void ShowBarMenu(const wxPoint &pos);
+  /// The "Show Tab Groups" check item, for the menus of the tab bar.
+  void AppendShowTabGroupsItem(wxMenu &menu);
   // Ask for a text and show it as the header (or the footer) strip of a tab,
   // with random colours. An empty text keeps the current strip.
   void SetTabStrip(size_t tabIdx, bool footer);
