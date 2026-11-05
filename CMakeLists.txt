@@ -8,6 +8,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/FindWxWidgetsMSYS.cmake)
 
 option(BUILD_GLYPHT "Build the GlyphT Terminal Application" ON)
+option(BUILD_BENCHMARKS "Build the command line benchmarks (benchmark/)" OFF)
 if (UNIX AND NOT APPLE)
   set(OpenGL_GL_PREFERENCE "GLVND")
 endif ()
@@ -60,6 +61,10 @@ add_compile_definitions(wxDEBUG_LEVEL=0)
 
 # Build libtsm
 add_subdirectory(libtsm)
+
+if(BUILD_BENCHMARKS)
+  add_subdirectory(benchmark)
+endif()
 
 # Source files
 set(LIB_SOURCES
