@@ -12,6 +12,9 @@ SettingsDlg::~SettingsDlg() {}
 
 wxString SettingsDlg::GetTabOutlineColour() const {
   const auto &colours = AppConfig::GetTabOutlineColours();
+  if (m_choiceOutlineColour->GetStringSelection() == _("default"))
+    return _("default");
+
   const int index = m_choiceOutlineColour->GetSelection();
   if (index < 0 || static_cast<size_t>(index) >= colours.size()) {
     return m_config.GetTabOutlineColour();
@@ -204,18 +207,15 @@ void SettingsDlg::OnDialogInit(wxInitDialogEvent &event) {
 
   // An unknown key in config.ini shows the default, magenta.
   int outline = wxNOT_FOUND;
-  int magenta = wxNOT_FOUND;
   for (const auto &entry : AppConfig::GetTabOutlineColours()) {
     const int index = m_choiceOutlineColour->Append(entry.label);
     if (m_config.GetTabOutlineColour() == entry.key) {
       outline = index;
     }
-    if (wxString(entry.key) == "magenta") {
-      magenta = index;
-    }
   }
-  m_choiceOutlineColour->SetSelection(outline != wxNOT_FOUND ? outline
-                                                             : magenta);
+  m_choiceOutlineColour->Append(_("default")); // Last
+  m_choiceOutlineColour->SetSelection(
+      outline != wxNOT_FOUND ? outline : m_choiceOutlineColour->GetCount() - 1);
 
   m_choiceTabPosition->Append(_("Top"));
   m_tabPositions.push_back(TabPosition::Top);

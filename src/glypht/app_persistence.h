@@ -133,7 +133,7 @@ private:
   bool safeDrawingEnabled{true};
   bool showCloseButton{true};
   bool blockCursor{true};
-  wxString tabOutlineColour{"magenta"};
+  wxString tabOutlineColour{"default"};
   TabPosition tabPosition{TabPosition::Top};
   TabStyle tabStyle{TabStyle::Browser};
   int tabBarWidth{200};

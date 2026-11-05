@@ -34,10 +34,10 @@ void TerminalLogger::EnsureOpen() {
 #ifdef __WXMSW__
   wxString dir;
   dir << R"(C:\Users\)" << ::wxGetUserId() << wxFileName::GetPathSeparator()
-      << ".wxterminal";
+      << ".glypht";
 #else
   wxString dir =
-      wxFileName::GetHomeDir() + wxFileName::GetPathSeparator() + ".wxterminal";
+      wxFileName::GetHomeDir() + wxFileName::GetPathSeparator() + ".glypht";
 #endif
 
   if (!wxFileName::DirExists(dir))

@@ -32,7 +32,12 @@ constexpr int kMinIndicatorSize = 8;
 constexpr int kIndicatorGap = 8;
 // The thickness of the line of a group, in DIPs.
 constexpr int kGroupLineWidth = 3;
+#ifdef __WXGTK__
+constexpr int kPaddingY = 10;
+#else
 constexpr int kPaddingY = 6;
+#endif
+
 // Browser: the space between the outer edge of the bar and the tab.
 constexpr int kTopGap = 4;
 // The radius of the corners of the current tab and of the highlight.

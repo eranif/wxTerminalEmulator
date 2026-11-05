@@ -94,7 +94,8 @@ const std::vector<TabOutlineColour> &AppConfig::GetTabOutlineColours() {
 
 wxColour AppConfig::GetTabOutlineColourOf(const wxTerminalTheme &theme,
                                           const wxString &key) {
-  wxColour colour = theme.magenta;
+  wxColour colour = theme.IsDark() ? theme.bg.ChangeLightness(120)
+                                   : theme.bg.ChangeLightness(80);
   for (const auto &entry : GetTabOutlineColours()) {
     if (key == entry.key) {
       colour = theme.*(entry.member);
@@ -254,10 +255,10 @@ wxString AppPersistence::GetConfigPath() {
 #ifdef __WXMSW__
   wxString dir;
   dir << R"(C:\Users\)" << ::wxGetUserId() << wxFileName::GetPathSeparator()
-      << ".wxterminal";
+      << ".glypht";
 #else
   wxString dir =
-      wxFileName::GetHomeDir() + wxFileName::GetPathSeparator() + ".wxterminal";
+      wxFileName::GetHomeDir() + wxFileName::GetPathSeparator() + ".glypht";
 #endif
   return dir + wxFileName::GetPathSeparator() + "config.ini";
 }

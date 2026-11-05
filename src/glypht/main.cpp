@@ -123,6 +123,8 @@ public:
       return false;
     }
 
+    SetAppName("glypht");
+
     wxString logLevelStr;
     if (parser.Found("log-level", &logLevelStr)) {
       logLevelStr = logLevelStr.Lower();

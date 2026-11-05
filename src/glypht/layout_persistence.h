@@ -13,7 +13,7 @@
 // (whether it is the current one, and its group, see BookLayout). The tabs are
 // in the order of the book.
 //
-// The layout is written to ~/.wxterminal/layout.conf as a small line-based
+// The layout is written to ~/.glypht/layout.conf as a small line-based
 // text file so it stays human-readable and easy to evolve.
 class LayoutPersistence {
 public:
