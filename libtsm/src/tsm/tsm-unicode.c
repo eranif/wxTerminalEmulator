@@ -494,6 +494,13 @@ void tsm_utf8_mach_free(struct tsm_utf8_mach *mach)
 	free(mach);
 }
 
+bool tsm_utf8_mach_is_idle(struct tsm_utf8_mach *mach)
+{
+	return mach->state == TSM_UTF8_START ||
+	       mach->state == TSM_UTF8_ACCEPT ||
+	       mach->state == TSM_UTF8_REJECT;
+}
+
 int tsm_utf8_mach_feed(struct tsm_utf8_mach *mach, char ci)
 {
 	uint32_t c;

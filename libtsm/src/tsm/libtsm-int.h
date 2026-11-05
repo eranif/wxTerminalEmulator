@@ -77,6 +77,8 @@ void tsm_utf8_mach_free(struct tsm_utf8_mach *mach);
 int tsm_utf8_mach_feed(struct tsm_utf8_mach *mach, char c);
 uint32_t tsm_utf8_mach_get(struct tsm_utf8_mach *mach);
 void tsm_utf8_mach_reset(struct tsm_utf8_mach *mach);
+/* true if the machine is between two characters */
+bool tsm_utf8_mach_is_idle(struct tsm_utf8_mach *mach);
 
 /* TSM screen */
 
@@ -164,6 +166,16 @@ void tsm_screen_set_opts(struct tsm_screen *scr, unsigned int opts);
 void tsm_screen_reset_opts(struct tsm_screen *scr, unsigned int opts);
 unsigned int tsm_screen_get_opts(struct tsm_screen *scr);
 void tsm_screen_repeat_char(struct tsm_screen *con, unsigned int num);
+
+/*
+ * Writes a run of printable ASCII (0x20..0x7e) at the cursor. The cells, the
+ * cursor and the flags are the same as after calling tsm_screen_write() for
+ * each character, but the wrap and scroll checks and the cursor move are done
+ * once per line segment instead of once per character. The age counter is
+ * increased once per call, so the ages differ. Used by the VTE parser.
+ */
+void tsm_screen_write_ascii(struct tsm_screen *con, const char *s, size_t len,
+			    const struct tsm_screen_attr *attr);
 
 static inline void screen_inc_age(struct tsm_screen *con)
 {

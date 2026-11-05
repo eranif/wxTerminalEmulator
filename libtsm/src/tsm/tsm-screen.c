@@ -1369,6 +1369,71 @@ void tsm_screen_write(struct tsm_screen *con, tsm_symbol_t ch,
 	move_cursor(con, con->cursor_x + len, con->cursor_y);
 }
 
+void tsm_screen_write_ascii(struct tsm_screen *con, const char *s, size_t len,
+			    const struct tsm_screen_attr *attr)
+{
+	unsigned int last, n, i;
+	struct line *line;
+	struct cell *cell;
+
+	if (!con)
+		return;
+
+	/* Insert mode shifts the rest of the line: use the general path. */
+	if (con->flags & TSM_SCREEN_INSERT_MODE) {
+		for (; len; ++s, --len)
+			tsm_screen_write(con, (unsigned char)*s, attr);
+		return;
+	}
+
+	screen_inc_age(con);
+
+	while (len) {
+		/* Wrap and scroll exactly like tsm_screen_write(). */
+		if (con->cursor_y <= con->margin_bottom ||
+		    con->cursor_y >= con->size_y)
+			last = con->margin_bottom;
+		else
+			last = con->size_y - 1;
+
+		if (con->cursor_x >= con->size_x) {
+			if (con->flags & TSM_SCREEN_AUTO_WRAP)
+				move_cursor(con, 0, con->cursor_y + 1);
+			else
+				move_cursor(con, con->size_x - 1, con->cursor_y);
+		}
+
+		if (con->cursor_y > last) {
+			move_cursor(con, con->cursor_x, last);
+			screen_scroll_up(con, 1);
+		}
+
+		/* The cursor is on the screen now: write up to the end of the
+		 * line. ASCII has width 1. */
+		line = con->lines[con->cursor_y];
+		n = con->size_x - con->cursor_x;
+		if (n > len)
+			n = len;
+
+		cell = &line->cells[con->cursor_x];
+		for (i = 0; i < n; ++i, ++cell) {
+			/* Only a cell that is part of a wide character needs
+			 * the cleanup. */
+			if (cell->width != 1)
+				screen_break_wide(con, line, con->cursor_x + i,
+						  attr);
+			cell->age = con->age_cnt;
+			cell->ch = (unsigned char)s[i];
+			cell->width = 1;
+			memcpy(&cell->attr, attr, sizeof(*attr));
+		}
+
+		move_cursor(con, con->cursor_x + n, con->cursor_y);
+		s += n;
+		len -= n;
+	}
+}
+
 SHL_EXPORT
 void tsm_screen_newline(struct tsm_screen *con)
 {

@@ -2890,6 +2890,37 @@ static void parse_data(struct tsm_vte *vte, uint32_t raw)
 	llog_warning(vte, "unhandled input %u in state %d", raw, vte->state);
 }
 
+/*
+ * Fast path for plain text. In the ground state, with UTF-8 input and no
+ * charset mapping, a run of printable ASCII (0x20..0x7e) only prints: it does
+ * not change the parser state. Print the whole run at once instead of running
+ * every byte through the UTF-8 machine and the state machine. Returns the
+ * number of bytes used, or 0 when the fast path does not apply.
+ */
+static size_t vte_print_ascii_run(struct tsm_vte *vte, const char *u8,
+				  size_t len)
+{
+	size_t n;
+
+	if (vte->state != STATE_GROUND || vte->glt ||
+	    *vte->gl != &tsm_vte_unicode_lower ||
+	    !tsm_utf8_mach_is_idle(vte->mach))
+		return 0;
+
+	for (n = 0; n < len; ++n) {
+		unsigned char c = (unsigned char)u8[n];
+
+		if (c < 0x20 || c > 0x7e)
+			break;
+	}
+	if (!n)
+		return 0;
+
+	to_rgb(vte, &vte->cattr);
+	tsm_screen_write_ascii(vte->con, u8, n, &vte->cattr);
+	return n;
+}
+
 SHL_EXPORT
 void tsm_vte_input(struct tsm_vte *vte, const char *u8, size_t len)
 {
@@ -2910,6 +2941,12 @@ void tsm_vte_input(struct tsm_vte *vte, const char *u8, size_t len)
 		} else if (vte->flags & TSM_VTE_FLAG_8BIT_MODE) {
 			parse_data(vte, u8[i]);
 		} else {
+			size_t used = vte_print_ascii_run(vte, u8 + i, len - i);
+
+			if (used) {
+				i += used - 1;
+				continue;
+			}
 			state = tsm_utf8_mach_feed(vte->mach, u8[i]);
 			if (state == TSM_UTF8_ACCEPT ||
 			    state == TSM_UTF8_REJECT) {
