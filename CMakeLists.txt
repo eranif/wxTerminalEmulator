@@ -99,11 +99,23 @@ set(GLYPHT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/wxTerminalUI.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/SettingsDlg.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/TabSwitcherDlg.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/WindowUtils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/shell_locator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/theme_loader.cpp)
 
 if(MINGW)
   list(APPEND GLYPHT_SOURCES "${CMAKE_CURRENT_LIST_DIR}/src/glypht/glypht.rc")
+endif()
+
+# StylePopupWindow() on macOS is Objective-C++ (as in CodeLite).
+if(APPLE)
+  enable_language(OBJCXX)
+  set(_WINDOW_UTILS_MAC "${CMAKE_CURRENT_LIST_DIR}/src/glypht/WindowUtilsMac.mm")
+  list(APPEND GLYPHT_SOURCES "${_WINDOW_UTILS_MAC}")
+  # No precompiled header, same C++ standard as the rest.
+  set_source_files_properties(
+    "${_WINDOW_UTILS_MAC}" PROPERTIES SKIP_PRECOMPILE_HEADERS ON COMPILE_OPTIONS
+                                                              "-std=c++20")
 endif()
 
 if(WIN32)
@@ -209,6 +221,10 @@ if(BUILD_GLYPHT)
   endif()
 
   target_link_libraries(glypht PRIVATE wxterminal_lib)
+  if(APPLE)
+    # WindowUtilsMac.mm uses AppKit directly (NSWindow, NSColor)
+    target_link_libraries(glypht PRIVATE "-framework Cocoa")
+  endif()
 
   # Platform specific settings
   if(WIN32)

@@ -672,9 +672,7 @@ bool MyFrame::ShowTabSwitcher(bool backwards) {
         }
       },
       m_config.GetTabSwitcherSize());
-  m_tabSwitcher->Show();
-  m_tabSwitcher->Raise();
-  m_tabSwitcher->FocusList();
+  m_tabSwitcher->ShowPopup();
   return true;
 }
 
