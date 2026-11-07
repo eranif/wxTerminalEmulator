@@ -1,6 +1,7 @@
 #include "terminal_logger.h"
 #include "wx/utils.h"
 
+#include <cstdio>
 #include <wx/datetime.h>
 
 namespace {
@@ -54,13 +55,20 @@ void TerminalLogger::SetLogFile(const wxString &path) {
 }
 
 void TerminalLogger::Write(TerminalLogLevel level, const wxString &msg) {
-  EnsureOpen();
-  if (!m_file.IsOpened())
-    return;
+  if (!m_toStdout) {
+    EnsureOpen();
+    if (!m_file.IsOpened())
+      return;
+  }
   wxDateTime now = wxDateTime::UNow();
   wxString line = now.FormatISOCombined(' ') +
                   wxString::Format(".%03ld", now.GetMillisecond()) + " [" +
                   LevelToString(level) + "] " + msg;
+  if (m_toStdout) {
+    std::fputs(line.utf8_str(), stdout);
+    std::fflush(stdout);
+    return;
+  }
   m_file.Write(line);
   m_file.Flush();
 }

@@ -2,6 +2,7 @@
 #include "bundled_fonts.h"
 #include "terminal_logger.h"
 
+#include <cstdio>
 #include <optional>
 #include <stdexcept>
 #include <wx/app.h>
@@ -27,6 +28,10 @@
 #include <wx/tokenzr.h>
 #include <wx/utils.h>
 #include <wx/xrc/xmlres.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #if defined(__WXGTK__) && USE_OPENGL
 // From <gdk/gdk.h>. The GTK headers are not on our include path, and this
@@ -104,6 +109,9 @@ public:
         {wxCMD_LINE_OPTION, "l", "log-level",
          "set log level: trace, debug, info, warn, error",
          wxCMD_LINE_VAL_STRING, 0},
+        {wxCMD_LINE_SWITCH, nullptr, "log-stdout",
+         "print the log messages to stdout instead of the log file",
+         wxCMD_LINE_VAL_NONE, 0},
         {wxCMD_LINE_OPTION, "s", "shell",
          "shell command to launch instead of the default shell",
          wxCMD_LINE_VAL_STRING, 0},
@@ -124,6 +132,20 @@ public:
     }
 
     SetAppName("glypht");
+
+    if (parser.Found("log-stdout")) {
+#ifdef _WIN32
+      // GUI-subsystem executable: no stdout unless redirected. Attach to the
+      // parent console when the standard handle is not valid.
+      HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+      if ((h == nullptr || h == INVALID_HANDLE_VALUE) &&
+          AttachConsole(ATTACH_PARENT_PROCESS)) {
+        std::freopen("CONOUT$", "w", stdout);
+        std::freopen("CONOUT$", "w", stderr);
+      }
+#endif
+      TerminalLogger::Get().SetLogToStdout(true);
+    }
 
     wxString logLevelStr;
     if (parser.Found("log-level", &logLevelStr)) {

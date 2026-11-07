@@ -29,6 +29,10 @@ public:
   TerminalLogLevel GetLevel() const { return m_level; }
   void SetLogFile(const wxString &path);
 
+  /// Print the messages to stdout instead of the log file.
+  void SetLogToStdout(bool enable) { m_toStdout = enable; }
+  bool IsLogToStdout() const { return m_toStdout; }
+
   class LogEntry {
   public:
     LogEntry(TerminalLogLevel level, bool enabled);
@@ -76,6 +80,7 @@ private:
   void EnsureOpen();
 
   TerminalLogLevel m_level{TerminalLogLevel::kError};
+  bool m_toStdout{false};
   wxString m_logPath;
   wxFFile m_file;
 };
