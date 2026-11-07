@@ -733,15 +733,20 @@ void TerminalCore::TsmOscCb(struct tsm_vte * /*vte*/, const char *u8,
 
   // OSC 7501;state=...:progress=... — program status (Kiro CLI and others).
   if (osc.rfind("7501;", 0) == 0) {
+    TLOG_DEBUG() << "OSC 7501: " << osc.substr(5) << std::endl;
     wxTerminalProgramStatus status;
-    if (self->m_programStatusCallback &&
-        ParseProgramStatus(osc.substr(5), status))
+    if (!ParseProgramStatus(osc.substr(5), status)) {
+      TLOG_DEBUG() << "OSC 7501: report dropped (invalid)" << std::endl;
+      return;
+    }
+    if (self->m_programStatusCallback)
       self->m_programStatusCallback(status);
     return;
   }
 
   // OSC 9;4;<state>;<value> — progress bar (ConEmu, Windows Terminal, iTerm2).
   if (osc.rfind("9;4", 0) == 0 && (osc.size() == 3 || osc[3] == ';')) {
+    TLOG_DEBUG() << "OSC 9;4: " << osc << std::endl;
     if (!self->m_progressCallback)
       return;
     int state = 0;
