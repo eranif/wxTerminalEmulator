@@ -221,10 +221,6 @@ void SettingsDlg::OnDialogInit(wxInitDialogEvent &event) {
   m_tabPositions.push_back(TabPosition::Top);
   m_choiceTabPosition->Append(_("Bottom"));
   m_tabPositions.push_back(TabPosition::Bottom);
-  m_choiceTabPosition->Append(_("Left"));
-  m_tabPositions.push_back(TabPosition::Left);
-  m_choiceTabPosition->Append(_("Right"));
-  m_tabPositions.push_back(TabPosition::Right);
   const auto it = std::find(m_tabPositions.begin(), m_tabPositions.end(),
                             m_config.GetTabPosition());
   m_choiceTabPosition->SetSelection(

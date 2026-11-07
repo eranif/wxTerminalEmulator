@@ -74,6 +74,8 @@ set(LIB_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_event.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_gl_renderer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/terminal_gauge.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/lib/TabAttentionIcon.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/lib/TabStatusIcon.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/GlyphTabArt.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/GlyphTabPainter.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/lib/GlyphTabBar.cpp

@@ -41,6 +41,8 @@ public:
   // The colour behind the tabs. The hover colour is derived from it; the
   // current tab stays the terminal background.
   void SetBarColour(const wxColour &colour);
+  // The height of an icon in every tab (see GlyphTabPainter::SetReservedIconSize()).
+  void SetReservedIconSize(int size) { m_painter.SetReservedIconSize(size); }
 
   void DrawBackground(wxDC &dc, wxWindow *wnd, const wxRect &rect) override;
   int DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,

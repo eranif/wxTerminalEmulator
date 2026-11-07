@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <random>
 #include <wx/choicdlg.h>
+#if wxCHECK_VERSION(3, 3, 0)
+#include <wx/aui/serializer.h>
+#endif
 #include <wx/image.h>
 #include <wx/msgdlg.h>
 #include <wx/xrc/xmlres.h>
@@ -76,64 +79,77 @@ bool TryOpenPath(const wxString &text, const wxString &wd) {
   return true;
 }
 
-// The window style flag of the book for the tab position of the settings.
+// The window style flag of the book for the tab position of the settings: the
+// tabs are above or below the terminal.
 long TabPositionFlag(TabPosition position) {
-  switch (position) {
-  case TabPosition::Bottom:
-    return wxAUI_NB_BOTTOM;
-  case TabPosition::Left:
-    return wxAUI_NB_LEFT;
-  case TabPosition::Right:
-    return wxAUI_NB_RIGHT;
-  default:
-    return wxAUI_NB_TOP;
-  }
+  return position == TabPosition::Bottom ? wxAUI_NB_BOTTOM : wxAUI_NB_TOP;
 }
 
-constexpr long kTabPositionFlags =
-    wxAUI_NB_TOP | wxAUI_NB_BOTTOM | wxAUI_NB_LEFT | wxAUI_NB_RIGHT;
+constexpr long kTabPositionFlags = wxAUI_NB_TOP | wxAUI_NB_BOTTOM;
 
-// The look of the tabs of the settings, as the art of GlyphBook.
+// The look of the tabs of the settings, as the art of the notebook.
 GlyphTabPainter::Style TabArtStyle(TabStyle style) {
   return style == TabStyle::Pills ? GlyphTabPainter::Style::Pills
                                   : GlyphTabPainter::Style::Browser;
 }
 
-// The text of a group in a menu: its name, or "Group N".
-wxString GroupMenuLabel(const TabBook &book, int group) {
-  wxString name = book.GetGroupName(group);
-  if (!name.empty()) {
-    name.Replace(wxS("&"), wxS("&&"));
-    return name;
-  }
-  const std::vector<int> groups = book.GetGroups();
-  const auto it = std::find(groups.begin(), groups.end(), group);
-  return wxString::Format(_("Group %d"),
-                          static_cast<int>(it - groups.begin()) + 1);
-}
+#if wxCHECK_VERSION(3, 3, 0)
+// The name of the notebook for wxAuiNotebook::SaveLayout() and LoadLayout().
+const wxString kNotebookLayoutName = wxS("tabs");
 
-// The icon of a group: a circle of @p colour, made from an SVG in memory so it
-// is sharp at every scale. It is empty without SVG support.
-wxBitmapBundle MakeCircleIcon(const wxColour &colour) {
-  const wxString svg = wxString::Format(
-      wxS("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" "
-          "height=\"16\" viewBox=\"0 0 16 16\"><circle cx=\"8\" cy=\"8\" "
-          "r=\"7\" fill=\"#%02x%02x%02x\"/></svg>"),
-      colour.Red(), colour.Green(), colour.Blue());
-  const wxScopedCharBuffer data = svg.utf8_str();
-  return wxBitmapBundle::FromSVG(data.data(), wxSize(12, 12));
-}
-
-// Ask for the name of a group. Returns false if the user cancelled.
-bool AskGroupName(wxWindow *parent, const wxString &title, wxString &name) {
-  wxTextEntryDialog dialog(parent, _("Group name (it can be empty):"), title,
-                           name);
-  if (dialog.ShowModal() != wxID_OK) {
-    return false;
+// Takes the layout of the tab controls of the notebook (the tabs can be split
+// and docked in it).
+class TabLayoutSaver : public wxAuiBookSerializer {
+public:
+  void BeforeSaveNotebook(const wxString &) override {}
+  void SaveNotebookTabControl(const wxAuiTabLayoutInfo &tab) override {
+    LayoutPersistence::TabControlInfo info;
+    info.dockDirection = tab.dock_direction;
+    info.dockLayer = tab.dock_layer;
+    info.dockRow = tab.dock_row;
+    info.dockPos = tab.dock_pos;
+    info.dockProportion = tab.dock_proportion;
+    info.dockSize = tab.dock_size;
+    info.pages = tab.pages;
+    info.pinned = tab.pinned;
+    info.active = tab.active;
+    controls.push_back(std::move(info));
   }
-  name = dialog.GetValue();
-  return true;
-}
+
+  std::vector<LayoutPersistence::TabControlInfo> controls;
+};
+
+// Gives the saved layout of the tab controls back to the notebook.
+class TabLayoutLoader : public wxAuiBookDeserializer {
+public:
+  explicit TabLayoutLoader(
+      const std::vector<LayoutPersistence::TabControlInfo> &controls)
+      : m_controls(controls) {}
+
+  std::vector<wxAuiTabLayoutInfo>
+  LoadNotebookTabs(const wxString &) override {
+    std::vector<wxAuiTabLayoutInfo> result;
+    for (const auto &control : m_controls) {
+      wxAuiTabLayoutInfo tab;
+      tab.dock_direction = control.dockDirection;
+      tab.dock_layer = control.dockLayer;
+      tab.dock_row = control.dockRow;
+      tab.dock_pos = control.dockPos;
+      tab.dock_proportion = control.dockProportion;
+      tab.dock_size = control.dockSize;
+      tab.pages = control.pages;
+      tab.pinned = control.pinned;
+      tab.active = control.active;
+      result.push_back(std::move(tab));
+    }
+    return result;
+  }
+
+private:
+  const std::vector<LayoutPersistence::TabControlInfo> &m_controls;
+};
+#endif
+
 } // namespace
 
 MyFrame::MyFrame(const wxCmdLineParser &parser,
@@ -195,14 +211,13 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
 
   m_notebook =
       new TabBook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, nbStyle);
-  m_notebook->SetTheme(
-      m_config.GetActiveTheme(),
-      AppConfig::GetTabOutlineColourOf(m_config.GetActiveTheme(),
-                                       m_config.GetTabOutlineColour()),
-      TabArtStyle(m_config.GetTabStyle()));
-  m_notebook->SetTabBarWidth(m_config.GetTabBarWidth());
-  m_notebook->SetTabBarWidthChangedCallback(
-      [this](int width) { m_config.SetTabBarWidth(width); });
+  ApplyTabArt(m_config.GetActiveTheme(), m_config.GetTabOutlineColour());
+  // The bar of the tabs is the button face, which changes with the appearance
+  // of the system.
+  Bind(wxEVT_SYS_COLOUR_CHANGED, [this](wxSysColourChangedEvent &event) {
+    event.Skip();
+    ApplyTabArt(m_tabTheme, m_tabOutlineColour);
+  });
   m_cliShellCommand = shellCommand;
   m_defaultShellCommand = ResolveDefaultShell();
   m_defaultEnvironment = environment;
@@ -210,7 +225,7 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
 
   // Bound before the tabs are created or restored, so the tab that is selected
   // by RestoreLayout() is handled like any other change of the current tab.
-  m_notebook->Bind(wxEVT_BOOKCTRL_PAGE_CHANGED, [this](wxBookCtrlEvent &event) {
+  m_notebook->Bind(wxEVT_AUINOTEBOOK_PAGE_CHANGED, [this](wxAuiNotebookEvent &event) {
     event.Skip();
     if (m_notebook->GetPageCount() == 0) {
       return;
@@ -224,24 +239,14 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
     UpdateProgressStatus();
     UpdateAppSelectionStatus();
   });
-  m_notebook->SetGroupsShown(m_config.GetShowTabGroups());
-  // The book shows no menu: these events ask the application for one.
-  m_notebook->Bind(wxEVT_GLYPHBOOK_TAB_CONTEXT_MENU,
-                   [this](GlyphBookEvent &event) {
+  // The notebook shows no menu: the application builds it.
+  m_notebook->Bind(wxEVT_AUINOTEBOOK_TAB_RIGHT_UP,
+                   [this](wxAuiNotebookEvent &event) {
                      CallAfter(&MyFrame::ShowTabMenu, event.GetSelection(),
-                               event.GetPosition());
+                               wxDefaultPosition);
                    });
-  m_notebook->Bind(wxEVT_GLYPHBOOK_GROUP_CONTEXT_MENU,
-                   [this](GlyphBookEvent &event) {
-                     CallAfter(&MyFrame::ShowGroupMenu, event.GetGroup(),
-                               event.GetPosition());
-                   });
-  m_notebook->Bind(wxEVT_GLYPHBOOK_BAR_CONTEXT_MENU,
-                   [this](GlyphBookEvent &event) {
-                     CallAfter(&MyFrame::ShowBarMenu, event.GetPosition());
-                   });
-  // A middle click on the bar, like on a browser, opens a new tab.
-  m_notebook->Bind(wxEVT_GLYPHBOOK_BAR_MIDDLE_UP, [this](GlyphBookEvent &) {
+  // A double click on the bar, like on a browser, opens a new tab.
+  m_notebook->Bind(wxEVT_AUINOTEBOOK_BG_DCLICK, [this](wxAuiNotebookEvent &) {
     CallAfter([this] {
       wxCommandEvent event;
       OnNewTerminal(event);
@@ -283,16 +288,16 @@ void MyFrame::SaveLayout() {
     return;
   }
 
-  // What the book remembers about its tabs: the current one (and the groups,
-  // when the book has them).
-  // The tabs are in the same order as the pages.
-  const BookLayout book = m_notebook->SaveLayout();
-
-  // Collect per-tab metadata in page order.
+  // Collect per-tab metadata in page order. The notebook describes its tab
+  // controls with the indexes of the pages, so a page that is not saved would
+  // shift the others.
+  const int selection = m_notebook->GetSelection();
+  bool allSaved = true;
   std::vector<LayoutPersistence::TabInfo> tabs;
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
     auto *terminal = TerminalOf(m_notebook->GetPage(i));
     if (!terminal) {
+      allSaved = false;
       continue;
     }
     LayoutPersistence::TabInfo info;
@@ -308,10 +313,7 @@ void MyFrame::SaveLayout() {
       }
     }
     info.customLabel = terminal->GetCustomLabel();
-    if (i < book.tabs.size()) {
-      info.group = book.tabs[i].group;
-      info.selected = book.tabs[i].selected;
-    }
+    info.selected = static_cast<int>(i) == selection;
     tabs.push_back(std::move(info));
   }
 
@@ -320,15 +322,16 @@ void MyFrame::SaveLayout() {
     return;
   }
 
-  std::vector<LayoutPersistence::GroupInfo> groups;
-  for (const auto &group : book.groups) {
-    LayoutPersistence::GroupInfo info;
-    info.name = group.name;
-    info.colour = group.colour;
-    info.collapsed = group.collapsed;
-    groups.push_back(std::move(info));
+  // How the tabs are arranged: split, docked, reordered.
+  std::vector<LayoutPersistence::TabControlInfo> tabControls;
+#if wxCHECK_VERSION(3, 3, 0)
+  if (allSaved) {
+    TabLayoutSaver saver;
+    m_notebook->SaveLayout(kNotebookLayoutName, saver);
+    tabControls = std::move(saver.controls);
   }
-  SaveLayoutFile(tabs, groups, GetSize());
+#endif
+  SaveLayoutFile(tabs, tabControls, GetSize());
 }
 
 bool MyFrame::RestoreLayout() {
@@ -346,15 +349,9 @@ bool MyFrame::RestoreLayout() {
     CentreOnScreen();
   }
 
-  // The layout of the book: one entry for each tab that was created, in order.
-  BookLayout book;
-  for (const auto &group : layout->groups) {
-    BookLayout::Group entry;
-    entry.name = group.name;
-    entry.colour = group.colour;
-    entry.collapsed = group.collapsed;
-    book.groups.push_back(std::move(entry));
-  }
+  // The tabs are created in the order of the file, so the page indexes of the
+  // tab controls are the indexes of the tabs.
+  int selected = wxNOT_FOUND;
   for (const auto &tab : layout->tabs) {
     std::optional<wxString> cwd;
     if (!tab.workingDirectory.empty() && wxDirExists(tab.workingDirectory)) {
@@ -377,64 +374,39 @@ bool MyFrame::RestoreLayout() {
     if (!tab.customLabel.empty()) {
       page->SetTabLabel(tab.customLabel);
     }
-    BookLayout::Tab entry;
-    entry.group =
-        tab.group < static_cast<int>(book.groups.size()) ? tab.group : -1;
-    entry.selected = tab.selected;
-    book.tabs.push_back(std::move(entry));
+    if (tab.selected && selected == wxNOT_FOUND) {
+      selected = static_cast<int>(m_notebook->GetPageCount()) - 1;
+    }
   }
 
   for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
     m_notebook->GetPage(i)->SetFocus();
   }
 
+#if wxCHECK_VERSION(3, 3, 0)
+  // Split and dock the tabs like they were. This is only right when every tab
+  // was created, as the file refers to the tabs by their index.
+  if (!layout->tabControls.empty() &&
+      m_notebook->GetPageCount() == layout->tabs.size()) {
+    TabLayoutLoader loader(layout->tabControls);
+    m_notebook->LoadLayout(kNotebookLayoutName, loader);
+  }
+#endif
+
   // A file of an older version has the title of the current tab and no mark.
   // The first tab with that title is the current one.
-  const bool marked =
-      std::any_of(book.tabs.begin(), book.tabs.end(),
-                  [](const BookLayout::Tab &tab) { return tab.selected; });
-  if (!marked && !layout->activeTitle.empty()) {
-    for (size_t i = 0; i < book.tabs.size() && i < m_notebook->GetPageCount();
-         ++i) {
+  if (selected == wxNOT_FOUND && !layout->activeTitle.empty()) {
+    for (size_t i = 0; i < m_notebook->GetPageCount(); ++i) {
       if (m_notebook->GetPageText(i) == layout->activeTitle) {
-        book.tabs[i].selected = true;
+        selected = static_cast<int>(i);
         break;
       }
     }
   }
-
-  m_notebook->RestoreLayout(book);
-  // The icons are not saved: each restored group gets a new one.
-  for (const int group : m_notebook->GetGroups()) {
-    SetRandomGroupIcon(group);
+  if (selected != wxNOT_FOUND) {
+    m_notebook->SetSelection(static_cast<size_t>(selected));
   }
   return m_notebook->GetPageCount() > 0;
-}
-
-void MyFrame::SetRandomGroupIcon(int group) {
-  // A random colour of the palette (without the grey) that no other group
-  // uses for its icon. When all are used, any of them.
-  const auto &palette = TabBook::GetGroupColours();
-  const std::vector<int> groups = m_notebook->GetGroups();
-  std::vector<wxColour> free;
-  std::vector<wxColour> all;
-  for (size_t i = 1; i < palette.size(); ++i) {
-    all.push_back(palette[i].colour);
-    const bool used = std::any_of(groups.begin(), groups.end(), [&](int g) {
-      const auto it = m_groupIconColours.find(g);
-      return g != group && it != m_groupIconColours.end() &&
-             it->second == palette[i].colour;
-    });
-    if (!used) {
-      free.push_back(palette[i].colour);
-    }
-  }
-  const std::vector<wxColour> &choices = free.empty() ? all : free;
-  static std::mt19937 rng{std::random_device{}()};
-  std::uniform_int_distribution<size_t> pick(0, choices.size() - 1);
-  const wxColour colour = choices[pick(rng)];
-  m_groupIconColours[group] = colour;
-  m_notebook->SetGroupBitmap(group, MakeCircleIcon(colour));
 }
 
 void MyFrame::ShowTabMenu(int tabIdx, const wxPoint &pos) {
@@ -507,152 +479,7 @@ void MyFrame::ShowTabMenu(int tabIdx, const wxPoint &pos) {
       },
       wxID_CLEAR);
 
-  // Groups of tabs. The book has no menu for them: it is built here.
-  if (tabIdx != wxNOT_FOUND) {
-    const size_t tab = static_cast<size_t>(tabIdx);
-    menu.AppendSeparator();
-    wxMenuItem *newGroup = menu.Append(wxID_ANY, _("Add to New Group..."));
-    menu.Bind(
-        wxEVT_MENU,
-        [this, tab](wxCommandEvent &) {
-          wxString name;
-          if (AskGroupName(this, _("New Group"), name)) {
-            // No colour: the group gets the default one, made from the colour
-            // of the tab bar.
-            const int group = m_notebook->AddPageToNewGroup(
-                tab, name, m_config.GetActiveTheme().RandomColour());
-            SetRandomGroupIcon(group);
-          }
-        },
-        newGroup->GetId());
-    const std::vector<int> groups = m_notebook->GetGroups();
-    if (!groups.empty()) {
-      auto *submenu = new wxMenu;
-      for (const int group : groups) {
-        wxMenuItem *item = submenu->AppendCheckItem(
-            wxID_ANY, GroupMenuLabel(*m_notebook, group));
-        item->Check(m_notebook->GetPageGroup(tab) == group);
-        submenu->Bind(
-            wxEVT_MENU,
-            [this, tab, group](wxCommandEvent &) {
-              m_notebook->AddPageToGroup(tab, group);
-            },
-            item->GetId());
-      }
-      menu.AppendSubMenu(submenu, _("Add to Group"));
-    }
-    wxMenuItem *remove = menu.Append(wxID_ANY, _("Remove from Group"));
-    remove->Enable(m_notebook->GetPageGroup(tab) != TabBook::kNoGroup);
-    menu.Bind(
-        wxEVT_MENU,
-        [this, tab](wxCommandEvent &) { m_notebook->RemovePageFromGroup(tab); },
-        remove->GetId());
-  }
-  menu.AppendSeparator();
-  AppendShowTabGroupsItem(menu);
   m_notebook->PopupMenu(&menu, pos);
-}
-
-void MyFrame::ShowGroupMenu(int group, const wxPoint &pos) {
-  if (group == TabBook::kNoGroup) {
-    return;
-  }
-  wxMenu menu;
-  wxMenuItem *rename = menu.Append(wxID_ANY, _("Rename Group..."));
-  menu.Bind(
-      wxEVT_MENU,
-      [this, group](wxCommandEvent &) {
-        wxString name = m_notebook->GetGroupName(group);
-        if (AskGroupName(this, _("Rename Group"), name)) {
-          m_notebook->SetGroupName(group, name);
-        }
-      },
-      rename->GetId());
-
-  auto *colours = new wxMenu;
-  const wxColour current = m_notebook->GetGroupColour(group);
-  // The default colour comes from the tab bar and follows the theme.
-  wxMenuItem *defaultColour = colours->AppendRadioItem(wxID_ANY, _("Default"));
-  defaultColour->Check(!current.IsOk());
-  colours->Bind(
-      wxEVT_MENU,
-      [this, group](wxCommandEvent &) {
-        m_notebook->SetGroupColour(group, wxNullColour);
-      },
-      defaultColour->GetId());
-  for (const auto &entry : TabBook::GetGroupColours()) {
-    wxMenuItem *item =
-        colours->AppendRadioItem(wxID_ANY, wxGetTranslation(entry.name));
-    item->Check(entry.colour == current);
-    const wxColour colour = entry.colour;
-    colours->Bind(
-        wxEVT_MENU,
-        [this, group, colour](wxCommandEvent &) {
-          m_notebook->SetGroupColour(group, colour);
-        },
-        item->GetId());
-  }
-  menu.AppendSubMenu(colours, _("Colour"));
-
-  wxMenuItem *collapse = menu.Append(
-      wxID_ANY, m_notebook->IsGroupCollapsed(group) ? _("Expand Group")
-                                                    : _("Collapse Group"));
-  // A group with the current tab cannot be collapsed.
-  collapse->Enable(m_notebook->IsGroupCollapsed(group) ||
-                   !m_notebook->IsSelectedInGroup(group));
-  menu.Bind(
-      wxEVT_MENU,
-      [this, group](wxCommandEvent &) {
-        m_notebook->SetGroupCollapsed(group,
-                                      !m_notebook->IsGroupCollapsed(group));
-      },
-      collapse->GetId());
-  menu.AppendSeparator();
-
-  wxMenuItem *ungroup = menu.Append(wxID_ANY, _("Ungroup"));
-  menu.Bind(
-      wxEVT_MENU,
-      [this, group](wxCommandEvent &) { m_notebook->Ungroup(group); },
-      ungroup->GetId());
-  wxMenuItem *close = menu.Append(wxID_ANY, _("Close Group"));
-  menu.Bind(
-      wxEVT_MENU,
-      [this, group](wxCommandEvent &) {
-        // From the last tab, so the indexes of the others do not change.
-        const std::vector<size_t> pages = m_notebook->GetGroupPages(group);
-        for (auto it = pages.rbegin(); it != pages.rend(); ++it) {
-          m_notebook->DeletePage(*it);
-        }
-      },
-      close->GetId());
-  m_notebook->PopupMenu(&menu, pos);
-}
-
-void MyFrame::ShowBarMenu(const wxPoint &pos) {
-  wxMenu menu;
-  wxMenuItem *newTab = menu.Append(wxID_ANY, _("New Tab"));
-  menu.Bind(
-      wxEVT_MENU,
-      [this](wxCommandEvent &) {
-        wxCommandEvent event;
-        OnNewTerminal(event);
-      },
-      newTab->GetId());
-  menu.AppendSeparator();
-  AppendShowTabGroupsItem(menu);
-  m_notebook->PopupMenu(&menu, pos);
-}
-
-void MyFrame::AppendShowTabGroupsItem(wxMenu &menu) {
-  wxMenuItem *item = menu.AppendCheckItem(wxID_ANY, _("Show Tab Groups"));
-  item->Check(m_config.GetShowTabGroups());
-  menu.Bind(
-      wxEVT_MENU,
-      [this](wxCommandEvent &) {
-        m_config.SetShowTabGroups(!m_config.GetShowTabGroups());
-        m_notebook->SetGroupsShown(m_config.GetShowTabGroups());
-      },
-      item->GetId());
 }
 
 void MyFrame::SetTabStrip(size_t tabIdx, bool footer) {
@@ -902,14 +729,24 @@ void MyFrame::ApplyThemeToAllTabs(const wxTerminalTheme &theme,
     }
   }
   // The tabs use the colours of the theme.
-  m_notebook->SetTheme(theme,
-                       AppConfig::GetTabOutlineColourOf(theme, outlineColour),
-                       TabArtStyle(m_config.GetTabStyle()));
-  const auto groups = m_notebook->GetGroups();
-  for (int grpId : groups) {
-    m_notebook->SetGroupColour(grpId, theme.RandomColour());
-  }
+  ApplyTabArt(theme, outlineColour);
   m_notebook->Refresh();
+}
+
+void MyFrame::ApplyTabArt(const wxTerminalTheme &theme,
+                          const wxString &outlineColour) {
+  m_tabTheme = theme;
+  m_tabOutlineColour = outlineColour;
+#if wxCHECK_VERSION(3, 3, 0)
+  auto *art = new GlyphTabArt(theme, TabArtStyle(m_config.GetTabStyle()));
+  art->SetOutlineColour(AppConfig::GetTabOutlineColourOf(theme, outlineColour));
+  // The bar is the button face, like the rest of the window.
+  art->SetBarColour(wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE));
+  // Room for the status icon (see TabStatusIcon), so a tab does not grow when
+  // it appears.
+  art->SetReservedIconSize(16);
+  m_notebook->SetArtProvider(art);
+#endif
 }
 
 wxTerminalViewCtrl *MyFrame::GetActiveTerminalView() const {
@@ -932,6 +769,11 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   MyTerminal *terminal = panel->GetTerminal();
   m_notebook->AddPage(panel, m_config.GetNewTabTitle(), selectIt);
   m_tabMru.AddPage(panel, selectIt);
+  // A page that was closed leaves its icon behind. The address of the page may
+  // be used again, so forget those first.
+  PurgeStatusIcons();
+  m_statusIcons[panel] = std::make_unique<TabStatusIcon>(
+      TabIconBook::From(m_notebook), panel);
   ApplyThemeToTab(terminal);
   m_config.SetSafeDrawingEnabled(m_config.IsSafeDrawingEnabled() ||
                                  wxTerminalViewCtrl::IsOpenGLEnabled());
@@ -954,6 +796,8 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   terminal->Bind(wxEVT_TERMINAL_CWD_CHANGED, &MyFrame::OnCwdChanged, this);
   terminal->Bind(wxEVT_TERMINAL_PROGRESS, &MyFrame::OnProgress, this);
   terminal->Bind(wxEVT_TERMINAL_PROGRAM_STATUS, &MyFrame::OnProgress, this);
+  terminal->Bind(wxEVT_TERMINAL_PROGRAM_STATUS, &MyFrame::OnProgramStatus,
+                 this);
   terminal->Bind(wxEVT_TERMINAL_APP_SELECTION_CHANGED,
                  &MyFrame::OnAppSelectionChanged, this);
   terminal->EnsureStarted();
@@ -1276,6 +1120,25 @@ void MyFrame::OnProgress(wxTerminalEvent &event) {
   // Tabs in the background must not change the active tab's bar.
   if (event.GetEventObject() == GetActiveTerminalView()) {
     UpdateProgressStatus();
+  }
+}
+
+void MyFrame::OnProgramStatus(wxTerminalEvent &event) {
+  event.Skip();
+  // The event comes from the terminal, which is inside the page of the tab.
+  auto *terminal = dynamic_cast<wxWindow *>(event.GetEventObject());
+  if (!terminal) {
+    return;
+  }
+  const auto it = m_statusIcons.find(terminal->GetParent());
+  if (it != m_statusIcons.end()) {
+    it->second->SetState(event.GetProgramState());
+  }
+}
+
+void MyFrame::PurgeStatusIcons() {
+  for (auto it = m_statusIcons.begin(); it != m_statusIcons.end();) {
+    it = it->second->IsPageGone() ? m_statusIcons.erase(it) : std::next(it);
   }
 }
 

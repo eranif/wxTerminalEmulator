@@ -5,6 +5,7 @@
 #include <wx/filefn.h>
 #include <wx/filename.h>
 #include <wx/textfile.h>
+#include <wx/tokenzr.h>
 
 namespace {
 
@@ -74,9 +75,33 @@ void LayoutPersistence::Clear() {
 // File IO
 // ---------------------------------------------------------------------------
 
-bool SaveLayoutFile(const std::vector<LayoutPersistence::TabInfo> &tabs,
-                    const std::vector<LayoutPersistence::GroupInfo> &groups,
-                    const wxSize &frameSize) {
+namespace {
+// "1,2,3" for a list of indexes.
+wxString JoinInts(const std::vector<int> &values) {
+  wxString out;
+  for (size_t i = 0; i < values.size(); ++i) {
+    out << (i ? "," : "") << values[i];
+  }
+  return out;
+}
+
+std::vector<int> SplitInts(const wxString &value) {
+  std::vector<int> out;
+  wxStringTokenizer tokens(value, ",");
+  while (tokens.HasMoreTokens()) {
+    long number = 0;
+    if (tokens.GetNextToken().Trim().Trim(false).ToLong(&number)) {
+      out.push_back(static_cast<int>(number));
+    }
+  }
+  return out;
+}
+} // namespace
+
+bool SaveLayoutFile(
+    const std::vector<LayoutPersistence::TabInfo> &tabs,
+    const std::vector<LayoutPersistence::TabControlInfo> &tabControls,
+    const wxSize &frameSize) {
   const wxString path = LayoutPersistence::GetLayoutPath();
   wxFileName fn(path);
   if (!fn.DirExists()) {
@@ -97,24 +122,23 @@ bool SaveLayoutFile(const std::vector<LayoutPersistence::TabInfo> &tabs,
   if (frameSize.x > 0 && frameSize.y > 0) {
     file.AddLine(wxString::Format("size=%dx%d", frameSize.x, frameSize.y));
   }
-  for (const auto &group : groups) {
-    file.AddLine("[group]");
-    file.AddLine("name=" + Encode(group.name));
-    if (group.colour.IsOk()) {
-      file.AddLine("colour=" + group.colour.GetAsString(wxC2S_HTML_SYNTAX));
+  for (const auto &control : tabControls) {
+    file.AddLine("[tabctrl]");
+    file.AddLine(wxString::Format("dock=%d,%d,%d,%d,%d,%d",
+                                  control.dockDirection, control.dockLayer,
+                                  control.dockRow, control.dockPos,
+                                  control.dockProportion, control.dockSize));
+    file.AddLine("pages=" + JoinInts(control.pages));
+    if (!control.pinned.empty()) {
+      file.AddLine("pinned=" + JoinInts(control.pinned));
     }
-    if (group.collapsed) {
-      file.AddLine("collapsed=1");
-    }
+    file.AddLine(wxString::Format("active=%d", control.active));
   }
   for (const auto &tab : tabs) {
     file.AddLine("[tab]");
     file.AddLine("shell=" + Encode(tab.shellCommand));
     file.AddLine("cwd=" + Encode(tab.workingDirectory));
     file.AddLine("label=" + Encode(tab.customLabel));
-    if (tab.group >= 0) {
-      file.AddLine(wxString::Format("group=%d", tab.group));
-    }
     if (tab.selected) {
       file.AddLine("selected=1");
     }
@@ -134,18 +158,18 @@ std::optional<LayoutFile> LoadLayoutFile() {
   }
 
   LayoutFile result;
-  enum class Section { Header, Tab, Group };
+  enum class Section { Header, Tab, TabControl, Ignored };
   Section section = Section::Header;
   LayoutPersistence::TabInfo current;
-  LayoutPersistence::GroupInfo currentGroup;
-  // End the section that is open: the tab or the group is complete.
+  LayoutPersistence::TabControlInfo currentControl;
+  // End the section that is open: the tab or the tab control is complete.
   auto flush = [&]() {
     if (section == Section::Tab) {
       result.tabs.push_back(current);
       current = LayoutPersistence::TabInfo{};
-    } else if (section == Section::Group) {
-      result.groups.push_back(currentGroup);
-      currentGroup = LayoutPersistence::GroupInfo{};
+    } else if (section == Section::TabControl) {
+      result.tabControls.push_back(currentControl);
+      currentControl = LayoutPersistence::TabControlInfo{};
     }
     section = Section::Header;
   };
@@ -163,14 +187,15 @@ std::optional<LayoutFile> LoadLayoutFile() {
       section = Section::Tab;
       continue;
     }
-    if (trimmed == "[group]") {
+    if (trimmed == "[tabctrl]") {
       flush();
-      section = Section::Group;
+      section = Section::TabControl;
       continue;
     }
-    if (trimmed == "[layout]") {
-      // The tab controls of older versions: not used.
+    if (trimmed == "[group]" || trimmed == "[layout]") {
+      // The tab groups and the tab controls of older versions: not used.
       flush();
+      section = Section::Ignored;
       continue;
     }
 
@@ -195,13 +220,30 @@ std::optional<LayoutFile> LoadLayoutFile() {
     }
     const wxString key = trimmed.Left(eq).Lower();
     const wxString value = Decode(trimmed.Mid(eq + 1));
-    if (section == Section::Group) {
-      if (key == "name") {
-        currentGroup.name = value;
-      } else if (key == "colour") {
-        currentGroup.colour = wxColour(value);
-      } else if (key == "collapsed") {
-        currentGroup.collapsed = value == "1";
+    if (section == Section::Ignored) {
+      continue;
+    }
+    if (section == Section::TabControl) {
+      auto &control = currentControl;
+      if (key == "dock") {
+        const std::vector<int> v = SplitInts(value);
+        if (v.size() == 6) {
+          control.dockDirection = v[0];
+          control.dockLayer = v[1];
+          control.dockRow = v[2];
+          control.dockPos = v[3];
+          control.dockProportion = v[4];
+          control.dockSize = v[5];
+        }
+      } else if (key == "pages") {
+        control.pages = SplitInts(value);
+      } else if (key == "pinned") {
+        control.pinned = SplitInts(value);
+      } else if (key == "active") {
+        long active = 0;
+        if (value.ToLong(&active)) {
+          control.active = static_cast<int>(active);
+        }
       }
       continue;
     }
@@ -211,11 +253,6 @@ std::optional<LayoutFile> LoadLayoutFile() {
       current.workingDirectory = value;
     } else if (key == "label") {
       current.customLabel = value;
-    } else if (key == "group") {
-      // A file of an older version had a name here: that is no group.
-      long index = -1;
-      current.group =
-          value.ToLong(&index) && index >= 0 ? static_cast<int>(index) : -1;
     } else if (key == "selected") {
       current.selected = value == "1";
     }

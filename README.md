@@ -171,7 +171,8 @@ book->SetTabPosition(wxRIGHT);              // or change the flags at any time
 - The pages cannot be split, and a tab cannot be dragged to another book
 - `book->SaveLayout()` returns a `BookLayout` (`BookLayout.h`: the groups, and the label, the group and the selected mark of each tab), and `book->RestoreLayout(layout)` applies it. The application stores it
 - `GlyphTabBar` (`GlyphTabBar.h`) is the bar. Use `GlyphBook` instead of using the bar directly
-- In GlyphT, pick "Tab Position" (Top, Bottom, Left or Right) in the settings. It is saved as `tabposition=` in `config.ini`, and the width of the bar as `tabbarwidth=`
+- GlyphT does not use `GlyphBook`: its tabs are a `wxAuiNotebook` drawn by `GlyphTabArt` (wxWidgets 3.3 or newer), so they can be moved, split and docked inside the notebook, and the arrangement is saved in `layout.conf` (with `wxAuiNotebook::SaveLayout()`) and restored on start. In the settings, "Tab Position" is Top or Bottom (`tabposition=` in `config.ini`)
+- The tab of a terminal shows the state of its program (OSC 7501): a spinner while it works, a pulse when it waits for the user, a check mark when it is done (`TabStatusIcon.h`, `TabAttentionIcon.h`). The pulse is always shown and stays until the state changes; the check mark is not shown on the selected tab of the active window, and goes away when the user comes back to the tab
 
 #### Terminal Logger (`terminal_logger.h/cpp`)
 Debugging and diagnostics support:

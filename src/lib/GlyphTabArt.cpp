@@ -116,7 +116,10 @@ int GlyphTabArt::GetBestTabCtrlSize(wxWindow *wnd,
                                     const wxSize &requiredBmpSize) {
   m_painter.SetFont(m_normalFont);
   wxBitmapBundle measureBmp;
-  if (requiredBmpSize.IsFullySpecified()) {
+  // With a reserved icon height the tabs have the same height with and without
+  // an icon, so the size of the icons of the pages does not matter.
+  if (requiredBmpSize.IsFullySpecified() &&
+      m_painter.GetReservedIconSize() == 0) {
     measureBmp = wxBitmap(requiredBmpSize);
   }
 

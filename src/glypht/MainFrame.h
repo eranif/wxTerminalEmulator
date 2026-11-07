@@ -1,8 +1,8 @@
 #pragma once
 
-#include "BookLayout.h"
-#include "GlyphBook.h"
+#include "GlyphTabArt.h"
 #include "TabMRU.h"
+#include "TabStatusIcon.h"
 #include "TabSwitcherDlg.h"
 #include "app_persistence.h"
 #include "layout_persistence.h"
@@ -13,6 +13,7 @@
 
 #include <deque>
 #include <map>
+#include <memory>
 #include <optional>
 #include <vector>
 #include <wx/app.h>
@@ -36,8 +37,9 @@
 
 using EnvironmentList = terminal::PtyBackend::EnvironmentList;
 
-// The tabbed book of the window: it can have tabs on any side.
-using TabBook = GlyphBook;
+// The tabbed book of the window. The tabs can be moved, split and docked
+// inside it, and they are drawn by GlyphTabArt (wxWidgets 3.3 and later).
+using TabBook = wxAuiNotebook;
 
 #ifndef WXTERMINAL_SVG_SOURCE_PATH
 #define WXTERMINAL_SVG_SOURCE_PATH ""
@@ -149,13 +151,13 @@ private:
 
 // A tab of the notebook: a panel with a vertical sizer that holds the terminal.
 // The sizer lets the terminal put its progress bar above itself (the notebook
-// is a wxBookCtrlBase, so the terminal can't use it as the parent for that).
+// is a wxBookCtrlBase, so the terminal cannot use it as the parent for that).
 class TerminalPanel : public wxPanel {
 public:
   TerminalPanel(TabBook *notebook, const wxString &shellCommand,
                 const std::optional<EnvironmentList> &environment,
                 std::optional<wxString> workingDirectory)
-      : wxPanel(notebook->GetPagesParent()) {
+      : wxPanel(notebook) {
     m_terminal = new MyTerminal(this, notebook, shellCommand, environment,
                                 workingDirectory);
     auto *sizer = new wxBoxSizer(wxVERTICAL);
@@ -205,12 +207,6 @@ public:
   // mouse.
   void ShowTabMenu(int tabIdx = wxNOT_FOUND,
                    const wxPoint &pos = wxDefaultPosition);
-  // The context menu of the header of a group, and of the bar of the tabs where
-  // there is no tab. The book fires events for them and shows no menu itself.
-  void ShowGroupMenu(int group, const wxPoint &pos);
-  void ShowBarMenu(const wxPoint &pos);
-  /// The "Show Tab Groups" check item, for the menus of the tab bar.
-  void AppendShowTabGroupsItem(wxMenu &menu);
   // Ask for a text and show it as the header (or the footer) strip of a tab,
   // with random colours. An empty text keeps the current strip.
   void SetTabStrip(size_t tabIdx, bool footer);
@@ -231,6 +227,9 @@ public:
   MyTerminal *CreateTerminalPage(const TerminalPageConfig &config,
                                  bool selectIt);
   void ApplyThemeToTab(wxTerminalViewCtrl *view);
+  // Give the notebook the tab art of the theme (see GlyphTabArt). The bar of the
+  // tabs is the button face, so call it again when the system colours change.
+  void ApplyTabArt(const wxTerminalTheme &theme, const wxString &outlineColour);
   // Set the theme of every terminal tab, and of the tabs themselves with the
   // tab outline colour @p outlineColour (a key of AppConfig).
   void ApplyThemeToAllTabs(const wxTerminalTheme &theme,
@@ -255,6 +254,11 @@ public:
   // Show the directory of the active terminal in the status bar.
   void UpdateDirectoryStatus();
   void OnProgress(wxTerminalEvent &event);
+  // Show the state of the program of a terminal as an icon on its tab (see
+  // TabStatusIcon).
+  void OnProgramStatus(wxTerminalEvent &event);
+  // Forget the status icons of the pages that were closed.
+  void PurgeStatusIcons();
   // Show the last progress or program status event of the active terminal.
   void UpdateProgressStatus();
   void OnAppSelectionChanged(wxTerminalEvent &event);
@@ -268,19 +272,19 @@ public:
   wxString ResolveDefaultShell() const;
   void ApplyNativeAppTheme();
 
-  // Serialize the open tabs and their AUI arrangement to disk. Called on exit.
+  // Serialize the open tabs and how they are arranged (split, docked) to disk. Called on exit.
   void SaveLayout();
   // Recreate the tabs saved by SaveLayout(). Returns true if a layout was
   // restored (at least one tab created).
   bool RestoreLayout();
-  // Give the group a circle icon of a random colour that no other group has.
-  void SetRandomGroupIcon(int group);
   void OnClose(wxCloseEvent &event);
 
 private:
   TabBook *m_notebook{nullptr};
-  // The colour of the icon of each group, by the id of the group.
-  std::map<int, wxColour> m_groupIconColours;
+  // The icon that shows the state of the program of a page, by page.
+  std::map<wxWindow *, std::unique_ptr<TabStatusIcon>> m_statusIcons;
+  wxTerminalTheme m_tabTheme;
+  wxString m_tabOutlineColour;
   // The tabs in most-recently-used order.
   TabMRU m_tabMru;
   TabSwitcherDlg *m_tabSwitcher{nullptr};

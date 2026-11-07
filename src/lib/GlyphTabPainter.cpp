@@ -624,7 +624,15 @@ wxSize GlyphTabPainter::GetContentSize(wxWindow *wnd,
   if (tab.bitmap.IsOk()) {
     const wxSize bitmapSize = tab.bitmap.GetPreferredLogicalSizeFor(wnd);
     size.x += bitmapSize.x + wnd->FromDIP(kMargin);
-    size.IncTo(bitmapSize);
+    if (m_reservedIconSize == 0) {
+      size.IncTo(bitmapSize);
+    }
+  }
+  if (m_reservedIconSize > 0) {
+    // The height of an icon is reserved in every tab, with or without an icon,
+    // so the tab does not change its height when an icon is added. The width
+    // is not reserved: the icon takes room only when it is there.
+    size.y = std::max(size.y, wnd->FromDIP(m_reservedIconSize));
   }
   return size;
 }

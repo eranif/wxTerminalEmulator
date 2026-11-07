@@ -13,8 +13,8 @@ struct TabOutlineColour {
   wxColour wxTerminalTheme::*member;
 };
 
-/// Where the tabs are (see GlyphBook).
-enum class TabPosition { Top, Bottom, Left, Right };
+/// Where the tabs are: above or below the terminal.
+enum class TabPosition { Top, Bottom };
 
 /// The look of the tabs (see GlyphTabPainter::Style).
 enum class TabStyle { Browser, Pills };
@@ -72,10 +72,6 @@ struct AppConfig {
   void SetBlockCursor(bool block) { blockCursor = block; }
   bool GetBlockCursor() const { return blockCursor; }
 
-  /// Show the headers of the tab groups (the "Show Tab Groups" menu item).
-  void SetShowTabGroups(bool show) { showTabGroups = show; }
-  bool GetShowTabGroups() const { return showTabGroups; }
-
   /// The colours the outline of the current tab can have.
   static const std::vector<TabOutlineColour> &GetTabOutlineColours();
   /// The key of the outline colour of the current tab (see TabOutlineColour).
@@ -89,7 +85,7 @@ struct AppConfig {
   void SetTabPosition(TabPosition position) { tabPosition = position; }
   TabPosition GetTabPosition() const { return tabPosition; }
   /// The value of @p position in config.ini, and back. An unknown value is
-  /// Top.
+  /// Top (this includes "left" and "right" of older versions).
   static wxString TabPositionToString(TabPosition position);
   static TabPosition TabPositionFromString(const wxString &value);
 
@@ -99,10 +95,6 @@ struct AppConfig {
   /// Browser.
   static wxString TabStyleToString(TabStyle style);
   static TabStyle TabStyleFromString(const wxString &value);
-
-  /// The width of the vertical tab bar, in DIPs.
-  void SetTabBarWidth(int width) { tabBarWidth = width; }
-  int GetTabBarWidth() const { return tabBarWidth; }
 
   /// Optional shell to start in new tabs, instead of the default shell of the
   /// platform. Empty means: use the default shell.
@@ -137,11 +129,9 @@ private:
   bool safeDrawingEnabled{true};
   bool showCloseButton{true};
   bool blockCursor{true};
-  bool showTabGroups{true};
   wxString tabOutlineColour{"default"};
   TabPosition tabPosition{TabPosition::Top};
   TabStyle tabStyle{TabStyle::Browser};
-  int tabBarWidth{200};
   wxString shellExecutable;
   wxString shellArgs;
   wxString lastShell;

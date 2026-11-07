@@ -121,6 +121,12 @@ public:
 
   Style GetStyle() const { return m_style; }
 
+  // Keep the height of an icon of @p size DIPs in every tab, also in tabs without
+  // one, so a tab does not get higher when an icon is added (for example a
+  // status icon). 0 (the default) reserves nothing.
+  void SetReservedIconSize(int size) { m_reservedIconSize = size; }
+  int GetReservedIconSize() const { return m_reservedIconSize; }
+
   // The grey of the palette of GlyphBook.
   static wxColour DefaultGroupColour() { return wxColour(0x5f, 0x63, 0x68); }
   // The colour a group with @p colour is drawn with. An invalid colour gives
@@ -195,6 +201,7 @@ private:
   wxSize GetContentSize(wxWindow *wnd, const GlyphTabInfo &tab) const;
 
   Style m_style;
+  int m_reservedIconSize{0};
   wxFont m_font;
   wxColour m_bgBar;      // Behind the tabs.
   wxColour m_bgActive;   // The current tab.
