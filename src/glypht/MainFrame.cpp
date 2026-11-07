@@ -126,8 +126,7 @@ public:
       const std::vector<LayoutPersistence::TabControlInfo> &controls)
       : m_controls(controls) {}
 
-  std::vector<wxAuiTabLayoutInfo>
-  LoadNotebookTabs(const wxString &) override {
+  std::vector<wxAuiTabLayoutInfo> LoadNotebookTabs(const wxString &) override {
     std::vector<wxAuiTabLayoutInfo> result;
     for (const auto &control : m_controls) {
       wxAuiTabLayoutInfo tab;
@@ -225,20 +224,21 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
 
   // Bound before the tabs are created or restored, so the tab that is selected
   // by RestoreLayout() is handled like any other change of the current tab.
-  m_notebook->Bind(wxEVT_AUINOTEBOOK_PAGE_CHANGED, [this](wxAuiNotebookEvent &event) {
-    event.Skip();
-    if (m_notebook->GetPageCount() == 0) {
-      return;
-    }
-    auto page = m_notebook->GetPage(m_notebook->GetSelection());
-    if (page) {
-      m_tabMru.Touch(page);
-      page->SetFocus();
-    }
-    UpdateDirectoryStatus();
-    UpdateProgressStatus();
-    UpdateAppSelectionStatus();
-  });
+  m_notebook->Bind(
+      wxEVT_AUINOTEBOOK_PAGE_CHANGED, [this](wxAuiNotebookEvent &event) {
+        event.Skip();
+        if (m_notebook->GetPageCount() == 0) {
+          return;
+        }
+        auto page = m_notebook->GetPage(m_notebook->GetSelection());
+        if (page) {
+          m_tabMru.Touch(page);
+          page->SetFocus();
+        }
+        UpdateDirectoryStatus();
+        UpdateProgressStatus();
+        UpdateAppSelectionStatus();
+      });
   // The notebook shows no menu: the application builds it.
   m_notebook->Bind(wxEVT_AUINOTEBOOK_TAB_RIGHT_UP,
                    [this](wxAuiNotebookEvent &event) {
@@ -290,7 +290,8 @@ void MyFrame::SaveLayout() {
 
   // Collect per-tab metadata in page order. The notebook describes its tab
   // controls with the indexes of the pages, so a page that is not saved would
-  // shift the others.
+  // shift the others. Then the arrangement is not saved (only the order of the
+  // tabs and the current one are), and the tabs come back in one tab control.
   const int selection = m_notebook->GetSelection();
   bool allSaved = true;
   std::vector<LayoutPersistence::TabInfo> tabs;
@@ -385,9 +386,11 @@ bool MyFrame::RestoreLayout() {
 
 #if wxCHECK_VERSION(3, 3, 0)
   // Split and dock the tabs like they were. This is only right when every tab
-  // was created, as the file refers to the tabs by their index.
-  if (!layout->tabControls.empty() &&
-      m_notebook->GetPageCount() == layout->tabs.size()) {
+  // was created, as the file refers to the tabs by their index, and when the
+  // file is consistent (it can be edited by hand): a bad layout would leave a
+  // page in no tab control, which makes it invisible.
+  if (m_notebook->GetPageCount() == layout->tabs.size() &&
+      AreTabControlsValid(layout->tabControls, layout->tabs.size())) {
     TabLayoutLoader loader(layout->tabControls);
     m_notebook->LoadLayout(kNotebookLayoutName, loader);
   }
@@ -772,8 +775,17 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   // A page that was closed leaves its icon behind. The address of the page may
   // be used again, so forget those first.
   PurgeStatusIcons();
-  m_statusIcons[panel] = std::make_unique<TabStatusIcon>(
-      TabIconBook::From(m_notebook), panel);
+  m_statusIcons[panel] =
+      std::make_unique<TabStatusIcon>(TabIconBook::From(m_notebook), panel);
+  // Forget the icon when the page is destroyed. The icon is still handling this
+  // event, so it is erased later. An entry whose page is alive is a new one
+  // that took the address of the page, and stays.
+  panel->Bind(wxEVT_DESTROY, [this, panel](wxWindowDestroyEvent &event) {
+    event.Skip();
+    if (event.GetEventObject() == panel && !IsBeingDeleted()) {
+      CallAfter(&MyFrame::PurgeStatusIcons);
+    }
+  });
   ApplyThemeToTab(terminal);
   m_config.SetSafeDrawingEnabled(m_config.IsSafeDrawingEnabled() ||
                                  wxTerminalViewCtrl::IsOpenGLEnabled());
@@ -1131,8 +1143,21 @@ void MyFrame::OnProgramStatus(wxTerminalEvent &event) {
     return;
   }
   const auto it = m_statusIcons.find(terminal->GetParent());
-  if (it != m_statusIcons.end()) {
-    it->second->SetState(event.GetProgramState());
+  if (it == m_statusIcons.end()) {
+    return;
+  }
+  const auto state = event.GetProgramState();
+  const bool changed = it->second->GetState() != state;
+  it->second->SetState(state);
+
+  // A program that waits for the user, or that is done, while GlyphT is in the
+  // background: bounce the icon in the dock (macOS) or flash the button in the
+  // task bar (Windows). Only a change of state asks (a program reports its
+  // status again and again), and the system stops it when the user comes back.
+  if (changed && !IsActive() &&
+      (state == wxTerminalProgramState::Blocked ||
+       state == wxTerminalProgramState::Done)) {
+    RequestUserAttention(wxUSER_ATTENTION_INFO);
   }
 }
 

@@ -83,8 +83,8 @@ void TabStatusIcon::SetState(wxTerminalProgramState state) {
   case wxTerminalProgramState::Idle:
   case wxTerminalProgramState::Error:
   case wxTerminalProgramState::Clear:
-    // Nothing is going on. The pulse (the program waited for the user) is out of
-    // date. A check mark stays until the user comes back to the page.
+    // Nothing is going on. The pulse (the program waited for the user) is out
+    // of date. A check mark stays until the user comes back to the page.
     m_spinner.reset();
     if (m_attentionState == wxTerminalProgramState::Blocked) {
       m_attention.reset();
@@ -98,8 +98,9 @@ void TabStatusIcon::ShowSpinner() {
     return; // already spinning
   }
   m_spinner = std::make_unique<TabAttentionIcon>(
-      m_book, m_page, Frames(spinner_svg::kSpinnerDark,
-                          spinner_svg::kSpinnerLight), false, kFrameIntervalMs);
+      m_book, m_page,
+      Frames(spinner_svg::kSpinnerDark, spinner_svg::kSpinnerLight), false,
+      kFrameIntervalMs);
 }
 
 void TabStatusIcon::ShowAttention(wxTerminalProgramState state) {
@@ -110,18 +111,19 @@ void TabStatusIcon::ShowAttention(wxTerminalProgramState state) {
   const bool blocked = state == wxTerminalProgramState::Blocked;
   // The pulse is always shown, like the spinner. The check mark is not shown to
   // a user who looks at the page (it is selected and the window is active).
-  if (!m_book.IsOk() || (!blocked && (!m_attentionEnabled ||
-                                      m_book.isCurrentPage(m_page)))) {
+  if (!m_book.IsOk() || (!blocked && m_book.isCurrentPage(m_page))) {
     return;
   }
 
   // A pulse: the program waits for the user. A check mark: the program is
   // done.
-  const std::vector<wxBitmapBundle> frames =
-      state == wxTerminalProgramState::Blocked
-          ? Frames(spinner_svg::kBlockedDark, spinner_svg::kBlockedLight)
-          : std::vector<wxBitmapBundle>{MakeIcon(IsDarkBar() ? spinner_svg::kDoneDark
-                                    : spinner_svg::kDoneLight)};
+  std::vector<wxBitmapBundle> frames;
+  if (blocked) {
+    frames = Frames(spinner_svg::kBlockedDark, spinner_svg::kBlockedLight);
+  } else {
+    frames.push_back(MakeIcon(IsDarkBar() ? spinner_svg::kDoneDark
+                                          : spinner_svg::kDoneLight));
+  }
   m_attention = std::make_unique<TabAttentionIcon>(m_book, m_page, frames,
                                                    /*dismissOnFocus=*/!blocked,
                                                    kFrameIntervalMs);

@@ -32,6 +32,12 @@ TabAttentionIcon::TabAttentionIcon(TabIconBook book, wxWindow *page,
   // The focus event of a child window travels up to its parents.
   if (m_dismissOnFocus) {
     m_page->Bind(wxEVT_CHILD_FOCUS, &TabAttentionIcon::OnChildFocus, this);
+    // Not every port sends the focus event again when the window is activated
+    // and the focus returns to the same child.
+    m_top = wxGetTopLevelParent(m_page);
+    if (m_top) {
+      m_top->Bind(wxEVT_ACTIVATE, &TabAttentionIcon::OnActivate, this);
+    }
   }
   m_page->Bind(wxEVT_DESTROY, &TabAttentionIcon::OnPageDestroyed, this);
 
@@ -57,6 +63,10 @@ void TabAttentionIcon::Dismiss() {
 
   if (m_dismissOnFocus) {
     m_page->Unbind(wxEVT_CHILD_FOCUS, &TabAttentionIcon::OnChildFocus, this);
+    if (m_top) {
+      m_top->Unbind(wxEVT_ACTIVATE, &TabAttentionIcon::OnActivate, this);
+      m_top = nullptr;
+    }
   }
   m_page->Unbind(wxEVT_DESTROY, &TabAttentionIcon::OnPageDestroyed, this);
 
@@ -90,6 +100,14 @@ void TabAttentionIcon::OnChildFocus(wxChildFocusEvent &event) {
   Dismiss();
 }
 
+void TabAttentionIcon::OnActivate(wxActivateEvent &event) {
+  event.Skip();
+  // The user came back to the window, and the page is the one that shows.
+  if (event.GetActive() && m_page && m_book.isSelected(m_page)) {
+    Dismiss();
+  }
+}
+
 void TabAttentionIcon::OnPageDestroyed(wxWindowDestroyEvent &event) {
   event.Skip();
   // wxEVT_DESTROY is a command event: it is sent to the parents of a destroyed
@@ -101,6 +119,10 @@ void TabAttentionIcon::OnPageDestroyed(wxWindowDestroyEvent &event) {
   // The page (and its tab) is being destroyed. Do not touch it, or the book,
   // any more.
   m_timer.Stop();
+  if (m_top) {
+    m_top->Unbind(wxEVT_ACTIVATE, &TabAttentionIcon::OnActivate, this);
+    m_top = nullptr;
+  }
   m_shown = false;
   m_page = nullptr;
 }

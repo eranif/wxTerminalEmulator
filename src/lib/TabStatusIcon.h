@@ -19,10 +19,9 @@
 /// - Idle, Clear, Error: no icon. A check mark stays until the user comes back
 ///   to the page.
 ///
-/// The check mark can be turned off with SetAttentionEnabled(). The icon that was on the tab
-/// before is restored when an icon is removed, and when this object is
-/// destroyed. If the page is destroyed first, this object does nothing any
-/// more.
+/// The icon that was on the tab before is restored when an icon is removed, and
+/// when this object is destroyed. If the page is destroyed first, this object
+/// does nothing any more.
 class TabStatusIcon {
 public:
   /// The time of each frame of the spinner.
@@ -41,10 +40,6 @@ public:
   /// The last state that was set.
   wxTerminalProgramState GetState() const { return m_state; }
 
-  /// Allow the Done icon. The spinner and the pulse are not affected. The default
-  /// is true.
-  void SetAttentionEnabled(bool enabled) { m_attentionEnabled = enabled; }
-
   /// Has the page been destroyed? Then this object does nothing, and can be
   /// deleted.
   bool IsPageGone() const { return m_page == nullptr; }
@@ -62,5 +57,4 @@ private:
   std::unique_ptr<TabAttentionIcon> m_attention;
   wxTerminalProgramState m_attentionState{wxTerminalProgramState::Clear};
   wxTerminalProgramState m_state{wxTerminalProgramState::Clear};
-  bool m_attentionEnabled{true};
 };

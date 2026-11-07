@@ -74,3 +74,12 @@ bool SaveLayoutFile(
     const std::vector<LayoutPersistence::TabControlInfo> &tabControls,
     const wxSize &frameSize);
 std::optional<LayoutFile> LoadLayoutFile();
+
+// Is @p tabControls a layout that wxAuiNotebook::LoadLayout() can use for a
+// notebook with @p pageCount pages? The file can be edited by hand, truncated
+// or come from another version, so check that every index is in range, that no
+// page is in two tab controls, and that every page is in a tab control (a page
+// that is in none would be invisible).
+bool AreTabControlsValid(
+    const std::vector<LayoutPersistence::TabControlInfo> &tabControls,
+    size_t pageCount);

@@ -121,9 +121,9 @@ public:
 
   Style GetStyle() const { return m_style; }
 
-  // Keep the height of an icon of @p size DIPs in every tab, also in tabs without
-  // one, so a tab does not get higher when an icon is added (for example a
-  // status icon). 0 (the default) reserves nothing.
+  // Keep the height of an icon of @p size DIPs in every tab, also in tabs
+  // without one, so a tab does not get higher when an icon is added (for
+  // example a status icon). 0 (the default) reserves nothing.
   void SetReservedIconSize(int size) { m_reservedIconSize = size; }
   int GetReservedIconSize() const { return m_reservedIconSize; }
 

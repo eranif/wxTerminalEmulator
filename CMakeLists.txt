@@ -94,6 +94,7 @@ set(GLYPHT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/app_persistence.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/bundled_fonts.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/layout_persistence.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/layout_validation.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/MainFrame.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/wxTerminalUI.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/SettingsDlg.cpp
@@ -497,4 +498,24 @@ if(BUILD_GLYPHT)
       endif()
     endif()
   endif()
+endif()
+
+# Unit tests of parts that need no window: cmake -DBUILD_TESTS=ON, then ctest.
+# wxWidgets is found at the top of this file, whatever BUILD_GLYPHT is.
+option(BUILD_TESTS "Build the unit tests" OFF)
+if(BUILD_TESTS)
+  add_executable(
+    layout_persistence_test
+    ${CMAKE_CURRENT_LIST_DIR}/tests/layout_persistence_test.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/layout_validation.cpp)
+  target_include_directories(layout_persistence_test
+                             PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/glypht)
+  target_link_libraries(layout_persistence_test PRIVATE ${wxWidgets_LIBRARIES})
+  target_include_directories(layout_persistence_test
+                             PRIVATE ${wxWidgets_INCLUDE_DIRS})
+  target_compile_definitions(layout_persistence_test
+                             PRIVATE ${wxWidgets_DEFINITIONS})
+  target_compile_features(layout_persistence_test PRIVATE cxx_std_20)
+  enable_testing()
+  add_test(NAME layout_persistence_test COMMAND layout_persistence_test)
 endif()

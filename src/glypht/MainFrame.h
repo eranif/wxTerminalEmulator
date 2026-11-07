@@ -227,8 +227,9 @@ public:
   MyTerminal *CreateTerminalPage(const TerminalPageConfig &config,
                                  bool selectIt);
   void ApplyThemeToTab(wxTerminalViewCtrl *view);
-  // Give the notebook the tab art of the theme (see GlyphTabArt). The bar of the
-  // tabs is the button face, so call it again when the system colours change.
+  // Give the notebook the tab art of the theme (see GlyphTabArt). The bar of
+  // the tabs is the button face, so call it again when the system colours
+  // change.
   void ApplyTabArt(const wxTerminalTheme &theme, const wxString &outlineColour);
   // Set the theme of every terminal tab, and of the tabs themselves with the
   // tab outline colour @p outlineColour (a key of AppConfig).
@@ -272,7 +273,8 @@ public:
   wxString ResolveDefaultShell() const;
   void ApplyNativeAppTheme();
 
-  // Serialize the open tabs and how they are arranged (split, docked) to disk. Called on exit.
+  // Serialize the open tabs and how they are arranged (split, docked) to disk.
+  // Called on exit.
   void SaveLayout();
   // Recreate the tabs saved by SaveLayout(). Returns true if a layout was
   // restored (at least one tab created).

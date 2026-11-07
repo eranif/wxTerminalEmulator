@@ -22,6 +22,10 @@ embeds a working terminal into a wxWidgets application.
   ("GlyphT"), built from `src/glypht/`
 - C++20, CMake 3.10+, wxWidgets 3.2.x or 3.3.x (CI runs `./build.sh`, which
   builds wxWidgets `v3.3.4`; set `WX_VERSION` to use another tag)
+  GlyphT needs 3.3 for `GlyphTabArt`, the saved arrangement of the tabs and the
+  tab status icons; with 3.2 it uses the default tab art, restores only the order
+  of the tabs, and shows no status icons (`MainFrame.h` is safe to compile there:
+  `GlyphTabArt.h` is empty before 3.3)
 - VT parsing is done by a vendored copy of **libtsm** in `libtsm/`
 - PTY: Windows (ConPTY), macOS and Linux (`forkpty`)
 - Two renderers: an OpenGL glyph atlas and the older wxDC renderer

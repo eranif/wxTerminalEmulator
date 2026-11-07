@@ -19,11 +19,13 @@ struct TabIconBook {
   std::function<wxBitmapBundle(int)> getBitmap;
   /// Set the icon of the tab.
   std::function<void(int, const wxBitmapBundle &)> setBitmap;
+  /// Is the tab of this page the selected one?
+  std::function<bool(const wxWindow *)> isSelected;
   /// Is the user looking at this page (selected, and the window is active)?
   std::function<bool(const wxWindow *)> isCurrentPage;
 
   bool IsOk() const {
-    return findPage && getBitmap && setBitmap && isCurrentPage;
+    return findPage && getBitmap && setBitmap && isSelected && isCurrentPage;
   }
 
   /// Get the description of @p book (a wxAuiNotebook, ...). The book must
@@ -43,11 +45,13 @@ struct TabIconBook {
       result.setBitmap = [book](int index, const wxBitmapBundle &bmp) {
         book->SetPageBitmap(static_cast<size_t>(index), bmp);
       };
+      result.isSelected = [book](const wxWindow *page) {
+        return book->GetCurrentPage() == page;
+      };
       // The user looks at the page only if its tab is selected and the window
       // is the active one.
       result.isCurrentPage = [book](const wxWindow *page) {
-        auto *top =
-            wxDynamicCast(wxGetTopLevelParent(book), wxTopLevelWindow);
+        auto *top = wxDynamicCast(wxGetTopLevelParent(book), wxTopLevelWindow);
         return book->GetCurrentPage() == page && (!top || top->IsActive());
       };
     }
@@ -93,6 +97,7 @@ public:
 
 private:
   void OnChildFocus(wxChildFocusEvent &event);
+  void OnActivate(wxActivateEvent &event);
   void OnTimer(wxTimerEvent &event);
   void OnPageDestroyed(wxWindowDestroyEvent &event);
   /// Show the frame number @p index on the tab.
@@ -100,6 +105,7 @@ private:
 
   TabIconBook m_book;
   wxWindow *m_page{nullptr}; // nullptr after the page was destroyed
+  wxWindow *m_top{nullptr};  // The window of the page, for OnActivate().
   std::vector<wxBitmapBundle> m_frames;
   size_t m_currentFrame{0};
   wxTimer m_timer;
