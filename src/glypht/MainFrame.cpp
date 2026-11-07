@@ -770,20 +770,6 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   MyTerminal *terminal = panel->GetTerminal();
   m_notebook->AddPage(panel, m_config.GetNewTabTitle(), selectIt);
   m_tabMru.AddPage(panel, selectIt);
-  // A page that was closed leaves its icon behind. The address of the page may
-  // be used again, so forget those first.
-  PurgeStatusIcons();
-  m_statusIcons[panel] =
-      std::make_unique<TabStatusIcon>(TabIconBook::From(m_notebook), panel);
-  // Forget the icon when the page is destroyed. The icon is still handling this
-  // event, so it is erased later. An entry whose page is alive is a new one
-  // that took the address of the page, and stays.
-  panel->Bind(wxEVT_DESTROY, [this, panel](wxWindowDestroyEvent &event) {
-    event.Skip();
-    if (event.GetEventObject() == panel && !IsBeingDeleted()) {
-      CallAfter(&MyFrame::PurgeStatusIcons);
-    }
-  });
   ApplyThemeToTab(terminal);
   m_config.SetSafeDrawingEnabled(m_config.IsSafeDrawingEnabled() ||
                                  wxTerminalViewCtrl::IsOpenGLEnabled());
@@ -804,10 +790,12 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   terminal->Bind(wxEVT_TERMINAL_TEXT_LINK, &MyFrame::OnTerminalLink, this);
   terminal->Bind(wxEVT_TERMINAL_BELL, &MyFrame::OnBell, this);
   terminal->Bind(wxEVT_TERMINAL_CWD_CHANGED, &MyFrame::OnCwdChanged, this);
-  terminal->Bind(wxEVT_TERMINAL_PROGRESS, &MyFrame::OnProgress, this);
-  terminal->Bind(wxEVT_TERMINAL_PROGRAM_STATUS, &MyFrame::OnProgress, this);
-  terminal->Bind(wxEVT_TERMINAL_PROGRAM_STATUS, &MyFrame::OnProgramStatus,
-                 this);
+  terminal->SetProgressCallback([this](MyTerminal *source) {
+    // Tabs in the background must not change the active tab's bar.
+    if (source == GetActiveTerminalView()) {
+      UpdateProgressStatus();
+    }
+  });
   terminal->Bind(wxEVT_TERMINAL_APP_SELECTION_CHANGED,
                  &MyFrame::OnAppSelectionChanged, this);
   terminal->EnsureStarted();
@@ -1123,46 +1111,6 @@ void MyFrame::UpdateDirectoryStatus() {
   auto *view = GetActiveTerminalView();
   statusBar->SetStatusText(view ? view->GetCurrentDir() : wxString{},
                            kStatusFieldDirectory);
-}
-
-void MyFrame::OnProgress(wxTerminalEvent &event) {
-  event.Skip();
-  // Tabs in the background must not change the active tab's bar.
-  if (event.GetEventObject() == GetActiveTerminalView()) {
-    UpdateProgressStatus();
-  }
-}
-
-void MyFrame::OnProgramStatus(wxTerminalEvent &event) {
-  event.Skip();
-  // The event comes from the terminal, which is inside the page of the tab.
-  auto *terminal = dynamic_cast<wxWindow *>(event.GetEventObject());
-  if (!terminal) {
-    return;
-  }
-  const auto it = m_statusIcons.find(terminal->GetParent());
-  if (it == m_statusIcons.end()) {
-    return;
-  }
-  const auto state = event.GetProgramState();
-  const bool changed = it->second->GetState() != state;
-  it->second->SetState(state);
-
-  // A program that waits for the user, or that is done, while GlyphT is in the
-  // background: bounce the icon in the dock (macOS) or flash the button in the
-  // task bar (Windows). Only a change of state asks (a program reports its
-  // status again and again), and the system stops it when the user comes back.
-  if (changed && !IsActive() &&
-      (state == wxTerminalProgramState::Blocked ||
-       state == wxTerminalProgramState::Done)) {
-    RequestUserAttention(wxUSER_ATTENTION_INFO);
-  }
-}
-
-void MyFrame::PurgeStatusIcons() {
-  for (auto it = m_statusIcons.begin(); it != m_statusIcons.end();) {
-    it = it->second->IsPageGone() ? m_statusIcons.erase(it) : std::next(it);
-  }
 }
 
 // The terminal view draws the progress bar. The status bar only says which

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GlyphTabArt.h"
+#include "MyTerminal.h"
 #include "TabMRU.h"
 #include "TabStatusIcon.h"
 #include "TabSwitcherDlg.h"
@@ -12,6 +13,7 @@
 #include "terminal_view.h"
 
 #include <deque>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -34,12 +36,7 @@
 #include <wx/string.h>
 #include <wx/textdlg.h>
 #include <wx/tokenzr.h>
-
-using EnvironmentList = terminal::PtyBackend::EnvironmentList;
-
-// The tabbed book of the window. The tabs can be moved, split and docked
-// inside it, and they are drawn by GlyphTabArt (wxWidgets 3.3 and later).
-using TabBook = wxAuiNotebook;
+#include <wx/toplevel.h>
 
 #ifndef WXTERMINAL_SVG_SOURCE_PATH
 #define WXTERMINAL_SVG_SOURCE_PATH ""
@@ -84,70 +81,6 @@ static wxIconBundle LoadAppIcons() {
 
   return icons;
 }
-
-class MyTerminal : public wxTerminalViewCtrl {
-public:
-  // @p parent is the panel of the tab (see TerminalPanel), which is the page of
-  // @p notebook.
-  MyTerminal(wxWindow *parent, TabBook *notebook, const wxString &shellCommand,
-             const std::optional<EnvironmentList> &environment,
-             std::optional<wxString> workingDirectory = std::nullopt,
-             bool showScrollBar = true)
-      : wxTerminalViewCtrl(parent, shellCommand, environment, workingDirectory,
-                           showScrollBar),
-        m_notebook{notebook} {
-    Bind(wxEVT_TERMINAL_TITLE_CHANGED, &MyTerminal::OnTitleChanged, this);
-  }
-
-  ~MyTerminal() override = default;
-
-  void OnTitleChanged(wxTerminalEvent &event) {
-    if (!m_customLabel.empty()) {
-      return;
-    }
-
-    wxString title = event.GetTitle();
-    title.Trim().Trim(false);
-    if (title.empty()) {
-      title = _("Terminal");
-    }
-    int sel = m_notebook->FindPage(GetParent());
-    if (sel != wxNOT_FOUND) {
-      m_notebook->SetPageText(sel, title);
-    }
-  }
-
-  void SetTabLabel(const wxString &label) {
-    wxString l = label;
-    l.Trim().Trim(false);
-    if (l.empty()) {
-      return;
-    }
-    m_customLabel = l;
-    int sel = m_notebook->FindPage(GetParent());
-    if (sel != wxNOT_FOUND) {
-      m_notebook->SetPageText(sel, m_customLabel);
-    }
-  }
-
-  void ResetTabLabel() {
-    if (m_customLabel.empty()) {
-      return;
-    }
-    m_customLabel.clear();
-    int sel = m_notebook->FindPage(GetParent());
-    if (sel != wxNOT_FOUND) {
-      m_notebook->SetPageText(sel, _("Terminal"));
-    }
-  }
-
-  // The user-assigned tab label, or empty if the title is driven by the shell.
-  const wxString &GetCustomLabel() const { return m_customLabel; }
-
-private:
-  TabBook *m_notebook{nullptr};
-  wxString m_customLabel;
-};
 
 // A tab of the notebook: a panel with a vertical sizer that holds the terminal.
 // The sizer lets the terminal put its progress bar above itself (the notebook
@@ -254,12 +187,6 @@ public:
   void OnCwdChanged(wxTerminalEvent &event);
   // Show the directory of the active terminal in the status bar.
   void UpdateDirectoryStatus();
-  void OnProgress(wxTerminalEvent &event);
-  // Show the state of the program of a terminal as an icon on its tab (see
-  // TabStatusIcon).
-  void OnProgramStatus(wxTerminalEvent &event);
-  // Forget the status icons of the pages that were closed.
-  void PurgeStatusIcons();
   // Show the last progress or program status event of the active terminal.
   void UpdateProgressStatus();
   void OnAppSelectionChanged(wxTerminalEvent &event);
@@ -283,8 +210,6 @@ public:
 
 private:
   TabBook *m_notebook{nullptr};
-  // The icon that shows the state of the program of a page, by page.
-  std::map<wxWindow *, std::unique_ptr<TabStatusIcon>> m_statusIcons;
   wxTerminalTheme m_tabTheme;
   wxString m_tabOutlineColour;
   // The tabs in most-recently-used order.

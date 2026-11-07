@@ -96,6 +96,7 @@ set(GLYPHT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/layout_persistence.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/layout_validation.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/MainFrame.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/glypht/MyTerminal.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/wxTerminalUI.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/SettingsDlg.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/glypht/TabSwitcherDlg.cpp
