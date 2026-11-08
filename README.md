@@ -468,6 +468,7 @@ The included demo application (`main.cpp`) showcases the library features:
 - `--working-directory=<path>`: Start the shell in a specific directory (starts one fresh tab; the saved tabs are not restored)
 - `--env=<list>`: Pass environment variables to the launched process
 - `--log-level=<level>`: Set logging verbosity: `trace`, `debug`, `info`, `warn`, or `error` (default: `error`)
+- `--log-stdout`: Print the log messages to stdout instead of the log file (`~/.glypht/trace.log`)
 
 **Shell setting**: in Settings you can choose a shell program and its arguments. They are saved in `config.ini` (`shell=` and `shellargs=`) and used for new tabs and for restored tabs. `--shell` wins over them. When the program does not exist, or the setting is empty, the default shell of the platform is used. Tabs that are already open keep their shell.
 
