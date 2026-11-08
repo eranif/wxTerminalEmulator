@@ -87,13 +87,13 @@ long TabPositionFlag(TabPosition position) {
 
 constexpr long kTabPositionFlags = wxAUI_NB_TOP | wxAUI_NB_BOTTOM;
 
+#if wxCHECK_VERSION(3, 3, 0)
 // The look of the tabs of the settings, as the art of the notebook.
 GlyphTabPainter::Style TabArtStyle(TabStyle style) {
   return style == TabStyle::Pills ? GlyphTabPainter::Style::Pills
                                   : GlyphTabPainter::Style::Browser;
 }
 
-#if wxCHECK_VERSION(3, 3, 0)
 // The name of the notebook for wxAuiNotebook::SaveLayout() and LoadLayout().
 const wxString kNotebookLayoutName = wxS("tabs");
 
