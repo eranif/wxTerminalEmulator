@@ -118,6 +118,12 @@ public:
   // The colour behind the tabs. The hover colour is derived from it; the
   // current tab stays the terminal background.
   void SetBarColour(const wxColour &colour);
+  // A transparent bar: DrawBarBackground() does not fill the bar (it draws the
+  // line along the pages only), so what is behind the bar shows between the
+  // tabs. The tabs are drawn as before. A GlyphBook made with a transparent
+  // tab bar (see its constructor) sets it on its painter.
+  void SetTransparentBar(bool transparent) { m_transparentBar = transparent; }
+  bool IsTransparentBar() const { return m_transparentBar; }
 
   Style GetStyle() const { return m_style; }
 
@@ -202,6 +208,7 @@ private:
 
   Style m_style;
   int m_reservedIconSize{0};
+  bool m_transparentBar{false}; // See SetTransparentBar().
   wxFont m_font;
   wxColour m_bgBar;      // Behind the tabs.
   wxColour m_bgActive;   // The current tab.

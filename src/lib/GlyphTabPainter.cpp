@@ -317,9 +317,11 @@ void GlyphTabPainter::SetActiveColour(const wxColour &colour) {
 
 void GlyphTabPainter::DrawBarBackground(wxDC &dc, wxWindow *wnd,
                                         const wxRect &rect, wxDirection inner) {
-  dc.SetBrush(m_bgBar);
   dc.SetPen(*wxTRANSPARENT_PEN);
-  dc.DrawRectangle(rect);
+  if (!m_transparentBar) {
+    dc.SetBrush(m_bgBar);
+    dc.DrawRectangle(rect);
+  }
   // A line along the side next to the pages. The current tab covers it (see
   // DrawShape()), so it is not drawn under it. Pills have it only in a
   // vertical bar.

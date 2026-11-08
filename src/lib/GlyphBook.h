@@ -115,19 +115,29 @@ public:
   // The group of a page that is in no group.
   static constexpr int kNoGroup = GlyphTabBar::kNoGroup;
 
+  // @p transparentTabBar: a tab bar that paints only the tabs, with no
+  // background, so that what is behind the book shows between them (for
+  // example a glass background of the application). The book and the pages
+  // parent are transparent too; the pages themselves paint what they paint.
+  // It is chosen here because wx can not make a window transparent once it
+  // exists. It works where wx supports transparent backgrounds (macOS, GTK);
+  // elsewhere the bar stays opaque. The painter of the bar, also one given to
+  // SetPainter(), gets GlyphTabPainter::SetTransparentBar() from it.
   GlyphBook();
   GlyphBook(wxWindow *parent, wxWindowID id = wxID_ANY,
             const wxPoint &pos = wxDefaultPosition,
             const wxSize &size = wxDefaultSize,
             long style = wxAUI_NB_DEFAULT_STYLE,
-            const wxString &name = wxS("GlyphBook"));
+            const wxString &name = wxS("GlyphBook"),
+            bool transparentTabBar = false);
   ~GlyphBook() override = default;
 
   bool Create(wxWindow *parent, wxWindowID id = wxID_ANY,
               const wxPoint &pos = wxDefaultPosition,
               const wxSize &size = wxDefaultSize,
               long style = wxAUI_NB_DEFAULT_STYLE,
-              const wxString &name = wxS("GlyphBook"));
+              const wxString &name = wxS("GlyphBook"),
+              bool transparentTabBar = false);
 
   // Appearance
   // ----------
@@ -165,6 +175,9 @@ public:
   wxWindow *GetPagesParent() const { return m_pages; }
   // The bar of the tabs.
   GlyphTabBar *GetTabBar() const { return m_tabBar; }
+
+  // Whether the tab bar is transparent (see the constructor).
+  bool IsTransparentTabBar() const { return m_transparentTabBar; }
 
   // Groups
   // ------
@@ -323,4 +336,5 @@ private:
   GlyphTabPainter::Style m_tabStyle{GlyphTabPainter::Style::Pills};
   wxColour m_barColour;
   bool m_themed{false};
+  bool m_transparentTabBar{false}; // See the constructor.
 };

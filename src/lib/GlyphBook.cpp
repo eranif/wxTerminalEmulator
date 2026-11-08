@@ -29,9 +29,10 @@ constexpr long kSideFlags =
 GlyphBook::GlyphBook() { Init(); }
 
 GlyphBook::GlyphBook(wxWindow *parent, wxWindowID id, const wxPoint &pos,
-                     const wxSize &size, long style, const wxString &name) {
+                     const wxSize &size, long style, const wxString &name,
+                     bool transparentTabBar) {
   Init();
-  Create(parent, id, pos, size, style, name);
+  Create(parent, id, pos, size, style, name, transparentTabBar);
 }
 
 void GlyphBook::Init() {
@@ -40,16 +41,26 @@ void GlyphBook::Init() {
 }
 
 bool GlyphBook::Create(wxWindow *parent, wxWindowID id, const wxPoint &pos,
-                       const wxSize &size, long style, const wxString &name) {
+                       const wxSize &size, long style, const wxString &name,
+                       bool transparentTabBar) {
   m_style = style;
+  // The windows are made transparent before they exist (a wx rule).
+  m_transparentTabBar = transparentTabBar && IsTransparentBackgroundSupported();
+  if (m_transparentTabBar) {
+    SetBackgroundStyle(wxBG_STYLE_TRANSPARENT);
+  }
   if (!wxBookCtrlBase::Create(parent, id, pos, size, style, name)) {
     return false;
   }
   m_style = style;
 
-  m_tabBar = new GlyphTabBar(this, m_tabBarWidth);
-  m_pages = new wxSimplebook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-                             wxBORDER_NONE);
+  m_tabBar = new GlyphTabBar(this, m_tabBarWidth, m_transparentTabBar);
+  m_pages = new wxSimplebook();
+  if (m_transparentTabBar) {
+    m_pages->SetBackgroundStyle(wxBG_STYLE_TRANSPARENT);
+  }
+  m_pages->Create(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+                  wxBORDER_NONE);
 
   GlyphTabBar::Callbacks callbacks;
   callbacks.select = [this](size_t index) {
@@ -146,7 +157,8 @@ void GlyphBook::UpdateEmptyLook() {
   if (!m_tabBar || !m_pages) {
     return;
   }
-  if (GetPageCount() == 0) {
+  // A transparent book shows what is behind it, also when it is empty.
+  if (GetPageCount() == 0 && !m_transparentTabBar) {
     const wxColour face = wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE);
     m_tabBar->SetPlainColour(face);
     m_pages->SetBackgroundColour(face);
@@ -165,6 +177,9 @@ void GlyphBook::SetPainter(GlyphTabPainter *painter) {
 }
 
 void GlyphBook::ApplyPainter(std::unique_ptr<GlyphTabPainter> painter) {
+  if (painter) {
+    painter->SetTransparentBar(m_transparentTabBar);
+  }
   m_tabBar->SetPainter(std::move(painter));
   DoInvalidateBestSize();
   Layout();

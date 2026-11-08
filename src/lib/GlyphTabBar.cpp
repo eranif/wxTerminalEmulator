@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <optional>
 #include <wx/dcbuffer.h>
 #include <wx/dcclient.h>
 #include <wx/menu.h>
@@ -58,11 +59,12 @@ void ShrinkWidths(std::vector<int> &widths, int room, int minWidth) {
 
 } // namespace
 
-GlyphTabBar::GlyphTabBar(wxWindow *parent, int width)
-    : wxWindow(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-               wxFULL_REPAINT_ON_RESIZE | wxBORDER_NONE),
-      m_width{std::clamp(width, kMinWidth, kMaxWidth)} {
-  SetBackgroundStyle(wxBG_STYLE_PAINT);
+GlyphTabBar::GlyphTabBar(wxWindow *parent, int width, bool transparent)
+    : m_width{std::clamp(width, kMinWidth, kMaxWidth)} {
+  // Before Create(): wx can not make a window transparent once it exists.
+  SetBackgroundStyle(transparent ? wxBG_STYLE_TRANSPARENT : wxBG_STYLE_PAINT);
+  Create(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+         wxFULL_REPAINT_ON_RESIZE | wxBORDER_NONE);
 
   Bind(wxEVT_PAINT, &GlyphTabBar::OnPaint, this);
   Bind(wxEVT_SIZE, &GlyphTabBar::OnSize, this);
@@ -792,21 +794,35 @@ void GlyphTabBar::SetPlainColour(const wxColour &colour) {
 }
 
 void GlyphTabBar::OnPaint(wxPaintEvent &WXUNUSED(event)) {
+  // The platforms with transparent windows (macOS, GTK 3) double buffer
+  // themselves: there this is a wxPaintDC, and no opaque bitmap hides what is
+  // behind a transparent bar.
   wxAutoBufferedPaintDC dc(this);
   const wxRect client = GetClientRect();
+  const bool transparent = GetBackgroundStyle() == wxBG_STYLE_TRANSPARENT;
   if (m_plainColour.IsOk()) {
     dc.SetBackground(wxBrush(m_plainColour));
     dc.Clear();
     return;
   }
   if (!m_painter) {
-    dc.SetBackground(GetBackgroundColour());
-    dc.Clear();
+    if (!transparent) {
+      dc.SetBackground(GetBackgroundColour());
+      dc.Clear();
+    }
     return;
   }
 
   const wxDirection inner = GetInnerSide();
   m_painter->DrawBarBackground(dc, this, client, inner);
+
+  // The tabs, the headers and the lines end where the list button starts. The
+  // button can not cover them: a transparent bar paints no background there.
+  std::optional<wxDCClipper> tabsClip;
+  if (!m_listRect.IsEmpty()) {
+    tabsClip.emplace(
+        dc, wxRect(client.x, client.y, m_tabsRoom - client.x, client.height));
+  }
 
   for (auto &tab : m_tabs) {
     GlyphTabInfo &info = tab.info;
@@ -861,9 +877,9 @@ void GlyphTabBar::OnPaint(wxPaintEvent &WXUNUSED(event)) {
   if (m_dragged && m_dropIndex != wxNOT_FOUND) {
     DrawDropLine(dc);
   }
+  tabsClip.reset();
 
   if (!m_listRect.IsEmpty()) {
-    // The list button covers the end of the tabs that go under it.
     m_painter->DrawBarBackground(dc, this, m_listRect, inner);
     m_painter->DrawDropDownButton(dc, this, m_listRect, m_listHover);
   }

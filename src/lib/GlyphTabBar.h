@@ -51,7 +51,12 @@ public:
 
   // @p width is the width of the bar in DIPs, when it is on the left or the
   // right.
-  GlyphTabBar(wxWindow *parent, int width);
+  // @p transparent: the window has a transparent background
+  // (wxBG_STYLE_TRANSPARENT, which can only be set when the window is made).
+  // Use it with a painter that has SetTransparentBar(): the bar paints only the
+  // tabs. The platform must support it (wxWindow::
+  // IsTransparentBackgroundSupported()).
+  GlyphTabBar(wxWindow *parent, int width, bool transparent = false);
   ~GlyphTabBar() override = default;
 
   void SetPainter(std::unique_ptr<GlyphTabPainter> painter);
