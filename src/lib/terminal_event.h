@@ -135,3 +135,7 @@ wxDECLARE_EVENT(wxEVT_TERMINAL_BELL, wxTerminalEvent);
 wxDECLARE_EVENT(wxEVT_TERMINAL_APP_OWNS_MOUSE, wxTerminalEvent);
 /// The program stopped tracking the mouse. The terminal handles it again.
 wxDECLARE_EVENT(wxEVT_TERMINAL_APP_RELEASE_MOUSE, wxTerminalEvent);
+/// The terminal got the keyboard focus. Sent (not posted) only with
+/// wxTerminalViewCtrl::kFireEvent in SetFocusedEffect(). GetEventObject() is
+/// the terminal.
+wxDECLARE_EVENT(wxEVT_TERMINAL_FOCUSED, wxTerminalEvent);

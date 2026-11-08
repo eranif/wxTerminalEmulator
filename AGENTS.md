@@ -375,7 +375,8 @@ one for keyboard layout translation).
 | `wxEVT_TERMINAL_APP_RELEASE_MOUSE` | Program turns mouse tracking off, or the terminal is reset | No payload |
 | `wxEVT_TERMINAL_PROGRAM_STATUS` | Program sends a status report with OSC 7501 (Kiro CLI) | `evt.GetProgramStatus()` (`wxTerminalProgramStatus`: state, kind, progress (-1 unknown), id, app, title, message); also `wxTerminalViewCtrl::GetProgramStatus()` for the root record |
 | `wxEVT_TERMINAL_PROGRESS` | Program sets or clears a progress bar with OSC 9;4 | `evt.GetProgressState()` (`wxTerminalProgressState`), `evt.GetProgressValue()` (0-100), `evt.ShowProgress()` / `evt.HideProgress()` |
-| `wxEVT_TERMINAL_APP_SELECTION_CHANGED` | Program copies text with OSC 52, or the text is cleared | `evt.GetString()` (empty after a clear); also `GetAppSelection()` / `ClearAppSelection()` |
+| `wxEVT_TERMINAL_APP_SELECTION_CHANGED` | Program copies text with OSC 52, or the text is cleared | `evt.GetString()` (empty after a clear); also `GetAppSelection()` / `ClearAppSelection()`. The library does not write the system clipboard. GlyphT does (`MyFrame::OnAppSelectionChanged()`), but only for the active terminal, so a program in a background tab cannot change the clipboard |
+| `wxEVT_TERMINAL_FOCUSED` | The terminal got the keyboard focus, only with `kFireEvent` in `SetFocusedEffect()`. Sent with `ProcessEvent()`, not posted | `evt.GetEventObject()` (the terminal) |
 
 ## Common Gotchas
 

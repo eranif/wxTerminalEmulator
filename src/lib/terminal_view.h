@@ -204,6 +204,32 @@ public:
   }
   inline bool IsSafeDrawing() const { return m_safeDrawing; }
 
+  // What the view does while it has the keyboard focus (see
+  // SetFocusedEffect()). The values can be combined.
+  enum FocusedEffect {
+    kNoFocusedEffect = 0,
+    // A line along a side of the view.
+    kLeftLine = 1 << 0,
+    kRightLine = 1 << 1,
+    kTopLine = 1 << 2,
+    kBottomLine = 1 << 3,
+    // Send wxEVT_TERMINAL_FOCUSED when the view gets the focus.
+    kFireEvent = 1 << 4,
+  };
+
+  /**
+   * @brief Show which view has the keyboard focus.
+   *
+   * With panes side by side, it shows which terminal gets the keys. @p effects
+   * is a mask of FocusedEffect. The default is kNoFocusedEffect.
+   */
+  void SetFocusedEffect(size_t effects);
+  size_t GetFocusedEffect() const { return m_focusedEffect; }
+  // The colour of the lines of SetFocusedEffect(). An invalid colour (the
+  // default) uses the blue of the theme.
+  void SetFocusLineColour(const wxColour &colour);
+  const wxColour &GetFocusLineColour() const { return m_focusLineColour; }
+
   /**
    * @brief Clears the terminal screen and scrollback buffer for this
    * TerminalView.
@@ -540,6 +566,19 @@ private:
   void StartProcess(const wxString &command,
                     const std::optional<EnvironmentList> &environment);
 
+  // The lines of SetFocusedEffect() that are drawn now: none without the focus.
+  std::vector<wxRect> FocusLineRects() const;
+  // The colour of these lines (see SetFocusLineColour()).
+  wxColour FocusLineColour() const;
+  // The thickness of a focus line, and the room kept for it on @p side
+  // (kRightLine or kBottomLine): 0 when that line is not used.
+  int FocusLineWidth() const;
+  int FocusLineRoom(size_t side) const;
+  // Draw the lines of FocusLineRects().
+  void DrawFocusLines(wxDC &dc) const;
+#if USE_OPENGL
+  void AddFocusLinesGL();
+#endif
   wxColour GetColourFromTheme(std::optional<terminal::ColourSpec> spec,
                               bool foreground) const;
   void OnPaint(wxPaintEvent &evt);
@@ -853,6 +892,9 @@ private:
 #endif
   std::unordered_set<wxChar> m_selectionDelimChars;
   bool m_hasFocus{false};
+  // See SetFocusedEffect() and SetFocusLineColour().
+  size_t m_focusedEffect{kNoFocusedEffect};
+  wxColour m_focusLineColour;
   Strip m_header;
   Strip m_footer;
   std::vector<wxString> m_pendingCommands;

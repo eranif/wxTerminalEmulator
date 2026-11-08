@@ -774,6 +774,9 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   m_config.SetSafeDrawingEnabled(m_config.IsSafeDrawingEnabled() ||
                                  wxTerminalViewCtrl::IsOpenGLEnabled());
   terminal->EnableSafeDrawing(m_config.IsSafeDrawingEnabled());
+  // With panes side by side, a line in the blue of the theme shows which
+  // terminal gets the keys.
+  terminal->SetFocusedEffect(wxTerminalViewCtrl::kRightLine);
   terminal->RegisterKeyEventFilter([this](const wxKeyEvent &key) {
     if (key.GetKeyCode() != WXK_TAB || !key.RawControlDown() || key.AltDown()) {
       return false;
@@ -1148,9 +1151,20 @@ void MyFrame::UpdateProgressStatus() {
 
 void MyFrame::OnAppSelectionChanged(wxTerminalEvent &event) {
   event.Skip();
-  // Tabs in the background must not overwrite the active tab's text.
-  if (event.GetEventObject() == GetActiveTerminalView()) {
-    UpdateAppSelectionStatus();
+  // Tabs in the background must not overwrite the active tab's text, nor the
+  // clipboard: a program there could put a command on it without the user
+  // seeing it.
+  if (event.GetEventObject() != GetActiveTerminalView()) {
+    return;
+  }
+  UpdateAppSelectionStatus();
+  // The program copied text with OSC 52: put it on the system clipboard. An
+  // empty string means the text was cleared, which leaves the clipboard alone.
+  const wxString &text = event.GetString();
+  if (!text.empty() && wxTheClipboard->Open()) {
+    wxTheClipboard->SetData(new wxTextDataObject(text));
+    wxTheClipboard->Flush();
+    wxTheClipboard->Close();
   }
 }
 

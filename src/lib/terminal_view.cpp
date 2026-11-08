@@ -626,11 +626,14 @@ wxRect wxTerminalViewCtrl::GetTerminalRect() const {
   }
 
   wxRect r{GetSize()}; // this size is fixed - without or with the scrollbars.
-  r.SetWidth(r.GetWidth() - kScrollbarWidth);
+  // The right and bottom focus lines get room of their own, so they do not
+  // cover the last column or the footer (see SetFocusedEffect()).
+  r.SetWidth(r.GetWidth() - kScrollbarWidth - FocusLineRoom(kRightLine));
   // The terminal grid is between the header and the footer strips.
   const int header = HeaderHeight();
   r.SetY(header);
-  r.SetHeight(std::max(0, r.GetHeight() - header - FooterHeight()));
+  r.SetHeight(std::max(0, r.GetHeight() - header - FooterHeight() -
+                              FocusLineRoom(kBottomLine)));
   return r;
 }
 
@@ -958,7 +961,10 @@ wxTerminalViewCtrl::GetStripRects(const Strip &strip, bool footer) const {
   const int width = GetClientSize().GetWidth();
   // The separator is on the side of the terminal grid: below the header, above
   // the footer.
-  const int top = footer ? GetClientSize().GetHeight() - height : 0;
+  // The footer is above the room of the bottom focus line.
+  const int top =
+      footer ? GetClientSize().GetHeight() - height - FocusLineRoom(kBottomLine)
+             : 0;
   StripRects r;
   r.text = wxRect(0, footer ? top + (height - textH) : top, width, textH);
   r.separator = wxRect(0, footer ? top : top + textH, width, height - textH);
@@ -2167,6 +2173,8 @@ void wxTerminalViewCtrl::OnPaintDC() {
     }
   }
 
+  DrawFocusLines(dc);
+
   // The buffer now holds the current frame; subsequent paints can reuse it.
   m_renderCacheValid = true;
   dc.SelectObject(wxNullBitmap);
@@ -2357,6 +2365,8 @@ void wxTerminalViewCtrl::OnPaintGL() {
     }
   }
 
+  AddFocusLinesGL();
+
   m_glRenderer.EndFrame();
   SwapBuffers();
   m_lastCursorScreenRow = cursorScreenRow;
@@ -2432,6 +2442,7 @@ void wxTerminalViewCtrl::PaintResizeOverlayGL() {
     m_glRenderer.AddGlyph(static_cast<char32_t>(sizeText[i].GetValue()), false,
                           false, cx, y, m_charW, m_charH, theme.fg);
   }
+  AddFocusLinesGL();
   m_glRenderer.EndFrame();
   SwapBuffers();
   RecoverGLAtlas();
@@ -2496,6 +2507,7 @@ void wxTerminalViewCtrl::PaintResizeOverlay(wxDC &dc) {
   int x = (clientSize.x - textSize.x) / 2;
   int y = (clientSize.y - textSize.y) / 2;
   dc.DrawText(sizeText, x, y);
+  DrawFocusLines(dc);
 }
 
 bool wxTerminalViewCtrl::AppOwnsMouse(const wxMouseEvent &evt) const {
@@ -2944,6 +2956,82 @@ void wxTerminalViewCtrl::OnFocus(wxFocusEvent &evt) {
   InvalidateRenderCache();
   UpdateCursor();
   RefreshView();
+  if (m_focusedEffect & kFireEvent) {
+    wxTerminalEvent event{wxEVT_TERMINAL_FOCUSED};
+    event.SetEventObject(this);
+    GetEventHandler()->ProcessEvent(event);
+  }
+}
+
+void wxTerminalViewCtrl::SetFocusedEffect(size_t effects) {
+  m_focusedEffect = effects;
+  // The room of the right and bottom lines changes the size of the grid, as a
+  // strip does.
+  OnStripChanged();
+}
+
+int wxTerminalViewCtrl::FocusLineWidth() const {
+  return std::max(2, FromDIP(2));
+}
+
+int wxTerminalViewCtrl::FocusLineRoom(size_t side) const {
+  return (m_focusedEffect & side) ? FocusLineWidth() : 0;
+}
+
+void wxTerminalViewCtrl::SetFocusLineColour(const wxColour &colour) {
+  m_focusLineColour = colour;
+  InvalidateRenderCache();
+  RefreshView();
+}
+
+wxColour wxTerminalViewCtrl::FocusLineColour() const {
+  return m_focusLineColour.IsOk() ? m_focusLineColour : m_core.GetTheme().blue;
+}
+
+void wxTerminalViewCtrl::DrawFocusLines(wxDC &dc) const {
+  const std::vector<wxRect> lines = FocusLineRects();
+  if (lines.empty()) {
+    return;
+  }
+  dc.SetPen(*wxTRANSPARENT_PEN);
+  dc.SetBrush(wxBrush(FocusLineColour()));
+  for (const wxRect &line : lines) {
+    dc.DrawRectangle(line);
+  }
+}
+
+#if USE_OPENGL
+void wxTerminalViewCtrl::AddFocusLinesGL() {
+  const wxColour colour = FocusLineColour();
+  for (const wxRect &line : FocusLineRects()) {
+    m_glRenderer.AddSolidRect(line.x, line.y, line.width, line.height, colour);
+  }
+}
+#endif
+
+std::vector<wxRect> wxTerminalViewCtrl::FocusLineRects() const {
+  std::vector<wxRect> lines;
+  if (!m_hasFocus) {
+    return lines;
+  }
+  // They are drawn along the sides of the view, after everything else. The
+  // right and bottom ones are in a room of their own (see FocusLineRoom()); the
+  // left and top ones are drawn over the grid and the header.
+  const wxSize size = GetClientSize();
+  const int width = FocusLineWidth();
+  if (m_focusedEffect & kLeftLine) {
+    lines.emplace_back(0, 0, width, size.y);
+  }
+  if (m_focusedEffect & kRightLine) {
+    lines.emplace_back(size.x - width, 0, width, size.y);
+  }
+  if (m_focusedEffect & kTopLine) {
+    lines.emplace_back(0, 0, size.x, width);
+  }
+  if (m_focusedEffect & kBottomLine) {
+    lines.emplace_back(0, size.y - width, size.x, width);
+  }
+  return lines;
 }
 
 void wxTerminalViewCtrl::OnLostFocus(wxFocusEvent &evt) {
