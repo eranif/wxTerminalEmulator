@@ -7,13 +7,11 @@
 TabSwitcherDlg::TabSwitcherDlg(wxWindow *parent, std::vector<Item> items,
                                bool backwards, DoneCallback onDone,
                                const wxSize &preferredSize)
-    : wxPopupTransientWindow(parent, wxBORDER_DEFAULT),
-      m_items{std::move(items)}, m_onDone{std::move(onDone)},
-      m_ctrlKeyTimer{this} {
-  m_list =
-      new wxDataViewListCtrl(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-                             wxDV_SINGLE | wxDV_NO_HEADER | wxDV_ROW_LINES |
-                                 wxWANTS_CHARS | wxBORDER_NONE);
+    : wxPopupTransientWindow(parent, wxBORDER_NONE), m_items{std::move(items)},
+      m_onDone{std::move(onDone)}, m_ctrlKeyTimer{this} {
+  m_list = new wxDataViewListCtrl(
+      this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+      wxDV_SINGLE | wxDV_NO_HEADER | wxWANTS_CHARS | wxBORDER_NONE);
   m_list->AppendTextColumn(_("Tab"), wxDATAVIEW_CELL_INERT, FromDIP(220));
   m_list->AppendTextColumn(_("Directory"), wxDATAVIEW_CELL_INERT, FromDIP(260));
   AdjustDataViewAlternateColour(m_list);
@@ -50,15 +48,17 @@ TabSwitcherDlg::~TabSwitcherDlg() {
 
 void TabSwitcherDlg::ShowPopup() {
   wxWindow *parent = GetParent();
-  const wxSize size = GetSize();
-  const wxPoint parentPos = parent->ClientToScreen(wxPoint(0, 0));
-  const wxSize parentSize = parent->GetClientSize();
-  Position(parentPos + wxPoint((parentSize.x - size.x) / 2,
-                               (parentSize.y - size.y) / 2),
-           wxSize(0, 0));
+  // At the top of the application's client area, centred horizontally,
+  // 1/2 of its width and 1/4 of its height (screen coordinates).
+  const wxRect parentRect(parent->ClientToScreen(wxPoint(0, 0)),
+                          parent->GetClientSize());
+  wxRect ourRect(0, 0, parentRect.GetWidth() / 2, parentRect.GetHeight() / 4);
+  ourRect = ourRect.CenterIn(parentRect, wxHORIZONTAL);
+  ourRect.SetY(parentRect.GetY());
+  SetSize(ourRect);
   Popup(m_list);
   // A shadow and rounded corners (macOS, Windows), after the window exists.
-  StylePopupWindow(this, 10.0);
+  StylePopupWindow(this);
 
   // The key-up of the Ctrl key may go to the window that has the focus, which
   // is not always seen: poll for it as well.

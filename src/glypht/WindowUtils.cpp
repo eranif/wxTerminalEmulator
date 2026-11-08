@@ -94,10 +94,14 @@ void StylePopupWindow(wxWindow *popup, double radius) {
     ::DeleteObject(region);
   }
 }
-#endif // __WXMSW__
-
-#if !defined(__WXMSW__) && !defined(__WXMAC__)
-// GTK and the other ports: the window manager draws the popup.
+#elif defined(__WXGTK__)
+// GTK: the window manager draws the popup.
+void StylePopupWindow(wxWindow *popup, double radius) {
+  wxUnusedVar(popup);
+  wxUnusedVar(radius);
+}
+#elif !defined(__WXMAC__) // anything that is not macOS (macOS got its own
+                          // implementation in a separate mm file)
 void StylePopupWindow(wxWindow *popup, double radius) {
   wxUnusedVar(popup);
   wxUnusedVar(radius);
