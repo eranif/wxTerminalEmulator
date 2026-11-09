@@ -6,6 +6,7 @@
 #include "GlyphTabPainter.h"
 #include "terminal_theme.h"
 #include <functional>
+#include <optional>
 #include <wx/aui/auibook.h>
 #include <wx/bookctrl.h>
 #include <wx/simplebook.h>
@@ -154,6 +155,12 @@ public:
                 const wxColour &barColour = wxNullColour);
   // Paint the tabs with @p painter. The book takes it.
   void SetPainter(GlyphTabPainter *painter);
+  // The space above and below the label of a tab, in DIPs, which sets the
+  // height of the tabs and of the group headers (see
+  // GlyphTabPainter::SetPaddingY()). std::nullopt, the default, uses the value
+  // of the platform. It applies to the painter made by SetTheme(); with
+  // SetPainter(), set it on the painter.
+  void SetTabPaddingY(std::optional<int> dip);
 
   // The side of the tabs: wxTOP, wxBOTTOM, wxLEFT or wxRIGHT. This is the same
   // as the wxAUI_NB_TOP, wxAUI_NB_BOTTOM, wxAUI_NB_LEFT and wxAUI_NB_RIGHT
@@ -336,5 +343,6 @@ private:
   GlyphTabPainter::Style m_tabStyle{GlyphTabPainter::Style::Pills};
   wxColour m_barColour;
   bool m_themed{false};
+  std::optional<int> m_tabPaddingY{std::nullopt};
   bool m_transparentTabBar{false}; // See the constructor.
 };

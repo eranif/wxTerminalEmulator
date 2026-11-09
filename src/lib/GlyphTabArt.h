@@ -44,6 +44,9 @@ public:
   // The height of an icon in every tab (see
   // GlyphTabPainter::SetReservedIconSize()).
   void SetReservedIconSize(int size) { m_painter.SetReservedIconSize(size); }
+  // The space above and below the label of a tab, in DIPs, which sets the
+  // height of the tabs (see GlyphTabPainter::SetPaddingY()).
+  void SetPaddingY(std::optional<int> dip) { m_painter.SetPaddingY(dip); }
 
   void DrawBackground(wxDC &dc, wxWindow *wnd, const wxRect &rect) override;
   int DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,

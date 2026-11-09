@@ -639,6 +639,10 @@ wxSize GlyphTabPainter::GetContentSize(wxWindow *wnd,
   return size;
 }
 
+int GlyphTabPainter::PaddingY(wxWindow *wnd) const {
+  return wnd->FromDIP(m_paddingY.value_or(kPaddingY));
+}
+
 wxSize GlyphTabPainter::GetTabSize(wxWindow *wnd, const GlyphTabInfo &tab) {
   wxSize size = GetContentSize(wnd, tab);
 
@@ -648,7 +652,7 @@ wxSize GlyphTabPainter::GetTabSize(wxWindow *wnd, const GlyphTabInfo &tab) {
   size.x +=
       wnd->FromDIP(kPaddingX) +
       wnd->FromDIP(GetButtonsWidth(wnd, tab) ? kButtonPaddingX : kPaddingX);
-  size.y += 2 * wnd->FromDIP(kPaddingY);
+  size.y += 2 * PaddingY(wnd);
   if (m_style == Style::Pills) {
     size.x += 2 * wnd->FromDIP(kPillGapX);
     size.y += 2 * wnd->FromDIP(kPillGapY);
@@ -660,7 +664,7 @@ wxSize GlyphTabPainter::GetTabSize(wxWindow *wnd, const GlyphTabInfo &tab) {
 
 int GlyphTabPainter::GetVerticalTabHeight(wxWindow *wnd,
                                           const GlyphTabInfo &tab) {
-  int height = GetContentSize(wnd, tab).y + 2 * wnd->FromDIP(kPaddingY);
+  int height = GetContentSize(wnd, tab).y + 2 * PaddingY(wnd);
   if (m_style == Style::Pills) {
     height += 2 * wnd->FromDIP(kVPillGapY);
   }

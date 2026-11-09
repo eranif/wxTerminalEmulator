@@ -746,6 +746,14 @@ void MyFrame::ApplyTabArt(const wxTerminalTheme &theme,
   // Room for the status icon (see TabStatusIcon), so a tab does not grow when
   // it appears.
   art->SetReservedIconSize(16);
+  // Taller tabs than the default of the platform: 3 DIPs more above and below
+  // the label. The default is 6 DIPs, and 10 DIPs on GTK (see kPaddingY in
+  // GlyphTabPainter.cpp).
+#ifdef __WXGTK__
+  art->SetPaddingY(13);
+#else
+  art->SetPaddingY(9);
+#endif
   m_notebook->SetArtProvider(art);
 #endif
 }

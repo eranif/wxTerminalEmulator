@@ -2,6 +2,7 @@
 
 #include "terminal_theme.h"
 #include <map>
+#include <optional>
 #include <tuple>
 #include <vector>
 #include <wx/bmpbndl.h>
@@ -133,6 +134,12 @@ public:
   void SetReservedIconSize(int size) { m_reservedIconSize = size; }
   int GetReservedIconSize() const { return m_reservedIconSize; }
 
+  // The space above and below the label of a tab, in DIPs. It sets the height
+  // of the tabs and of the group headers. std::nullopt (the default) uses the
+  // value of the platform.
+  void SetPaddingY(std::optional<int> dip) { m_paddingY = dip; }
+  std::optional<int> GetPaddingY() const { return m_paddingY; }
+
   // The grey of the palette of GlyphBook.
   static wxColour DefaultGroupColour() { return wxColour(0x5f, 0x63, 0x68); }
   // The colour a group with @p colour is drawn with. An invalid colour gives
@@ -203,11 +210,14 @@ private:
   // The arrow as a bitmap of @p size pixels, drawn from an SVG that is made
   // in memory. It is empty without SVG support.
   wxBitmap GetIndicatorBitmap(bool collapsed, const wxColour &colour, int size);
+  // The space above and below the label, in pixels.
+  int PaddingY(wxWindow *wnd) const;
   // The size of the icon, the label and the buttons, without the padding.
   wxSize GetContentSize(wxWindow *wnd, const GlyphTabInfo &tab) const;
 
   Style m_style;
   int m_reservedIconSize{0};
+  std::optional<int> m_paddingY{std::nullopt}; // See SetPaddingY().
   bool m_transparentBar{false}; // See SetTransparentBar().
   wxFont m_font;
   wxColour m_bgBar;      // Behind the tabs.

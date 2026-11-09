@@ -131,8 +131,16 @@ void GlyphBook::SetTheme(const wxTerminalTheme &theme, const wxColour &outline,
   RebuildPainter();
 }
 
+void GlyphBook::SetTabPaddingY(std::optional<int> dip) {
+  m_tabPaddingY = dip;
+  if (m_themed) {
+    RebuildPainter();
+  }
+}
+
 void GlyphBook::RebuildPainter() {
   auto painter = std::make_unique<GlyphTabPainter>(m_theme, m_tabStyle);
+  painter->SetPaddingY(m_tabPaddingY);
   if (m_outline.IsOk()) {
     painter->SetOutlineColour(m_outline);
   }
