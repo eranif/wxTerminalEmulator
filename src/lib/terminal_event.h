@@ -119,6 +119,12 @@ wxDECLARE_EVENT(wxEVT_TERMINAL_PROGRAM_STATUS, wxTerminalEvent);
 /// holds the text, or is empty after a clear. The current text is returned by
 /// wxTerminalViewCtrl::GetAppSelection().
 wxDECLARE_EVENT(wxEVT_TERMINAL_APP_SELECTION_CHANGED, wxTerminalEvent);
+/// The program asked for a desktop notification with OSC 777;notify;<title>;
+/// <body>. GetTitle() is the title and GetString() the message (the body), both
+/// without control characters. Either can be empty, but not both. The library
+/// shows nothing: the application decides what to do, and if to do it at all
+/// (any program can send this, also in a tab in the background).
+wxDECLARE_EVENT(wxEVT_TERMINAL_NOTIFICATION, wxTerminalEvent);
 /// Terminal terminated.
 wxDECLARE_EVENT(wxEVT_TERMINAL_TERMINATED, wxTerminalEvent);
 /// User used Ctrl+CLICK on a text in the terminal.

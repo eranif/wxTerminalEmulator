@@ -489,6 +489,16 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
     event.SetEventObject(this);
     GetEventHandler()->AddPendingEvent(event);
   });
+  m_core.SetNotificationCallback(
+      [this](const std::string &title, const std::string &body) {
+        // FromUTF8 gives an empty string for invalid UTF-8 (for example text
+        // cut by the OSC length limit).
+        wxTerminalEvent event{wxEVT_TERMINAL_NOTIFICATION};
+        event.SetTitle(wxString::FromUTF8(title));
+        event.SetString(wxString::FromUTF8(body));
+        event.SetEventObject(this);
+        GetEventHandler()->AddPendingEvent(event);
+      });
   m_core.SetBellCallback([this]() {
     wxTerminalEvent event{wxEVT_TERMINAL_BELL};
     event.SetEventObject(this);

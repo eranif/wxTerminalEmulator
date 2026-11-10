@@ -190,6 +190,8 @@ public:
   // Show the last progress or program status event of the active terminal.
   void UpdateProgressStatus();
   void OnAppSelectionChanged(wxTerminalEvent &event);
+  // A program asked for a desktop notification (OSC 777).
+  void OnNotification(wxTerminalEvent &event);
   // Show the text the program in the active terminal copied with OSC 52.
   void UpdateAppSelectionStatus();
   void OnTimer(wxTimerEvent &event);

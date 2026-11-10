@@ -8,6 +8,7 @@
 #endif
 #include <wx/image.h>
 #include <wx/msgdlg.h>
+#include <wx/notifmsg.h>
 #include <wx/xrc/xmlres.h>
 
 namespace {
@@ -809,6 +810,7 @@ MyTerminal *MyFrame::CreateTerminalPage(const TerminalPageConfig &config,
   });
   terminal->Bind(wxEVT_TERMINAL_APP_SELECTION_CHANGED,
                  &MyFrame::OnAppSelectionChanged, this);
+  terminal->Bind(wxEVT_TERMINAL_NOTIFICATION, &MyFrame::OnNotification, this);
   terminal->EnsureStarted();
   return terminal;
 }
@@ -1155,6 +1157,29 @@ void MyFrame::UpdateProgressStatus() {
     }
   }
   statusBar->SetStatusText(text, kStatusFieldProgress);
+}
+
+void MyFrame::OnNotification(wxTerminalEvent &event) {
+  wxNotificationMessage notification(event.GetTitle(), event.GetString(), this);
+  notification.Show();
+
+  // The same text in the status bar for 3 seconds.
+  if (GetStatusBar()) {
+    wxString text = event.GetTitle();
+    if (!text.empty() && !event.GetString().empty()) {
+      text += wxS(": ");
+    }
+    text += event.GetString();
+    GetStatusBar()->SetStatusText(text);
+    auto clearStatusTextCB = [this, count = size_t{0}]() mutable {
+      if (++count >= 3) {
+        GetStatusBar()->SetStatusText(wxEmptyString);
+        return true;
+      }
+      return false;
+    };
+    m_timerCallbacks.push_back(std::move(clearStatusTextCB));
+  }
 }
 
 void MyFrame::OnAppSelectionChanged(wxTerminalEvent &event) {

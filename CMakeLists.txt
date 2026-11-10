@@ -215,7 +215,11 @@ if(BUILD_GLYPHT)
     set_target_properties(
       glypht
       PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns MACOSX_BUNDLE_BUNDLE_NAME
-                 "GlyphT" MACOSX_BUNDLE_INFO_PLIST
+                 "GlyphT"
+                 # Without an identifier, macOS cannot show desktop
+                 # notifications (OSC 777) for the app.
+                 MACOSX_BUNDLE_GUI_IDENTIFIER "org.codelite.glypht"
+                 MACOSX_BUNDLE_INFO_PLIST
                  "${CMAKE_CURRENT_LIST_DIR}/cmake/MacOSXBundleInfo.plist.in")
   else()
     add_executable(glypht ${GLYPHT_SOURCES})

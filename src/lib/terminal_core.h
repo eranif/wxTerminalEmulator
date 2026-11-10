@@ -188,6 +188,15 @@ public:
   void SetClipboardCallback(std::function<void(const std::string &)> callback) {
     m_clipboardCallback = callback;
   }
+  // Called with (title, body) when the program sends OSC 777;notify;<title>;
+  // <body> (a desktop notification, from VTE, Ghostty and others). Both are
+  // UTF-8, may not be valid UTF-8 when the OSC length limit (libtsm, 4 KB) cut
+  // them, and have no control characters. The body is everything after the
+  // second ';', so it can hold ';'. A single field is the title.
+  void SetNotificationCallback(
+      std::function<void(const std::string &, const std::string &)> callback) {
+    m_notificationCallback = callback;
+  }
   // Called with (state, value) when the program sends OSC 9;4 (progress bar,
   // iTerm2 / ConEmu / Windows Terminal). Value is 0-100 (0 for the states
   // Hidden and Indeterminate).
@@ -330,6 +339,8 @@ private:
   std::function<void(wxTerminalProgressState, int)> m_progressCallback;
   std::function<void(const wxTerminalProgramStatus &)> m_programStatusCallback;
   std::function<void(const std::string &)> m_clipboardCallback;
+  std::function<void(const std::string &, const std::string &)>
+      m_notificationCallback;
   std::function<void()> m_bellCallback;
   std::function<void(bool entered)> m_altScreenCallback;
   std::function<void(bool tracking)> m_mouseTrackingCallback;

@@ -723,6 +723,33 @@ void TerminalCore::TsmOscCb(struct tsm_vte * /*vte*/, const char *u8,
     return;
   }
 
+  // OSC 777;notify;<title>;<body> — a desktop notification. Other OSC 777
+  // commands (precmd, preexec, ...) are ignored.
+  if (osc.rfind("777;notify;", 0) == 0) {
+    if (!self->m_notificationCallback)
+      return;
+    const std::string fields = osc.substr(11);
+    const auto split = fields.find(';');
+    std::string title = fields.substr(0, split);
+    std::string body =
+        split == std::string::npos ? std::string() : fields.substr(split + 1);
+    // Text from a program is not trusted: no control characters (they could
+    // move the cursor or end the text of a notification).
+    const auto clean = [](std::string &text) {
+      for (char &ch : text) {
+        const auto byte = static_cast<unsigned char>(ch);
+        if (byte < 0x20 || byte == 0x7f)
+          ch = ' ';
+      }
+    };
+    clean(title);
+    clean(body);
+    if (title.empty() && body.empty())
+      return;
+    self->m_notificationCallback(title, body);
+    return;
+  }
+
   // OSC 7501;? — does the terminal support the Program Status Protocol?
   if (osc == "7501;?" || osc.rfind("7501;?:", 0) == 0) {
     if (self->m_responseCallback)
