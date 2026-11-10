@@ -1,6 +1,7 @@
 #pragma once
 
 #include "terminal_theme.h"
+#include <functional>
 #include <map>
 #include <optional>
 #include <tuple>
@@ -31,6 +32,24 @@ struct GlyphTabButton {
 };
 
 /**
+ * @brief Own colours for one tab: the background and the text.
+ */
+struct GlyphColourPair {
+  wxColour bg;
+  wxColour fg;
+};
+
+/**
+ * @brief Asks for the own colours of the tab of a page.
+ *
+ * It gets the window of the page. It returns std::nullopt for a tab with the
+ * normal colours. It is called each time a tab is drawn, so it must be fast.
+ * After the answer changes, repaint the tabs.
+ */
+using GlyphTabColourProvider =
+    std::function<std::optional<GlyphColourPair>(wxWindow *)>;
+
+/**
  * @brief What GlyphTabPainter needs to draw and measure one tab.
  *
  * It is a plain struct. The painter gives back the rectangles after it draws
@@ -43,6 +62,12 @@ struct GlyphTabInfo {
   bool active{false};
   // The tab is under the mouse.
   bool hover{false};
+  // Own colours for this tab, for example to mark a tab that needs attention.
+  // The tab is then drawn also when it is not current and not under the mouse,
+  // with this background and text colour. The colour of the tab under the mouse
+  // is a little lighter or darker. std::nullopt (the default) uses the colours
+  // of the painter.
+  std::optional<GlyphColourPair> colours;
   // The buttons at the end of the tab, usually the close button.
   std::vector<GlyphTabButton> buttons;
   // Where the tab was drawn.
@@ -212,6 +237,13 @@ private:
   wxBitmap GetIndicatorBitmap(bool collapsed, const wxColour &colour, int size);
   // The space above and below the label, in pixels.
   int PaddingY(wxWindow *wnd) const;
+  // The colours to draw @p tab with: its own, or the ones of the painter.
+  struct TabColours {
+    wxColour fill;   // The background; not valid for a tab with no background.
+    wxColour text;   // The label and the close button.
+    wxColour dimmed; // The close button of a tab that is not under the mouse.
+  };
+  TabColours ColoursOf(const GlyphTabInfo &tab) const;
   // The size of the icon, the label and the buttons, without the padding.
   wxSize GetContentSize(wxWindow *wnd, const GlyphTabInfo &tab) const;
 

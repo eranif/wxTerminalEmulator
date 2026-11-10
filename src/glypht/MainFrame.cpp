@@ -1,4 +1,5 @@
 #include "MainFrame.h"
+#include "GlyphBook.h"
 #include "SettingsDlg.hpp"
 #include <algorithm>
 #include <random>
@@ -428,6 +429,38 @@ void MyFrame::ShowTabMenu(int tabIdx, const wxPoint &pos) {
   menu.Append(wxID_CLEAR, _("Reset Label..."));
   menu.Enable(XRCID("rename-tab"), clickedTerminal != nullptr);
   menu.Enable(wxID_CLEAR, clickedTerminal != nullptr);
+#if wxCHECK_VERSION(3, 3, 0)
+  // Own colours for the tab, for example to mark it. The menu is shown with
+  // PopupMenu(), so the panel exists as long as the handlers can run.
+  auto *panel = tabIdx == wxNOT_FOUND
+                    ? nullptr
+                    : dynamic_cast<TerminalPanel *>(
+                          m_notebook->GetPage(static_cast<size_t>(tabIdx)));
+  auto *tabColours = new wxMenu;
+  const auto setTabColours = [this,
+                              panel](const std::optional<GlyphColourPair> &c) {
+    panel->SetTabColours(c);
+    m_notebook->Refresh();
+  };
+  wxMenuItem *noColour = tabColours->Append(wxID_ANY, _("None"));
+  tabColours->Bind(
+      wxEVT_MENU,
+      [setTabColours](wxCommandEvent &) { setTabColours(std::nullopt); },
+      noColour->GetId());
+  tabColours->AppendSeparator();
+  for (const auto &entry : GlyphBook::GetGroupColours()) {
+    wxMenuItem *item =
+        tabColours->Append(wxID_ANY, wxGetTranslation(entry.name));
+    const wxColour bg = entry.colour;
+    tabColours->Bind(
+        wxEVT_MENU,
+        [setTabColours, bg](wxCommandEvent &) {
+          setTabColours(GlyphColourPair{bg, IsDark(bg) ? *wxWHITE : *wxBLACK});
+        },
+        item->GetId());
+  }
+  menu.AppendSubMenu(tabColours, _("Colour Tab"))->Enable(panel != nullptr);
+#endif
   menu.AppendSeparator();
   // The header and the footer have the same two items.
   for (const bool footer : {false, true}) {
@@ -747,6 +780,11 @@ void MyFrame::ApplyTabArt(const wxTerminalTheme &theme,
   // Room for the status icon (see TabStatusIcon), so a tab does not grow when
   // it appears.
   art->SetReservedIconSize(16);
+  // A tab can have its own colours (see ShowTabMenu()).
+  art->SetColourProvider([](wxWindow *page) -> std::optional<GlyphColourPair> {
+    auto *panel = dynamic_cast<TerminalPanel *>(page);
+    return panel ? panel->GetTabColours() : std::nullopt;
+  });
   // Taller tabs than the default of the platform: 3 DIPs more above and below
   // the label. The default is 6 DIPs, and 10 DIPs on GTK (see kPaddingY in
   // GlyphTabPainter.cpp).

@@ -433,18 +433,18 @@ wxRect GlyphTabPainter::GetShapeRect(wxWindow *wnd, const wxRect &rect,
 void GlyphTabPainter::DrawShape(wxDC &dc, wxWindow *wnd,
                                 const GlyphTabInfo &tab, const wxRect &shape,
                                 wxDirection inner) const {
+  const wxColour fill = ColoursOf(tab).fill;
   if (m_style == Style::Pills) {
-    if (tab.active || tab.hover) {
+    if (fill.IsOk()) {
       // The current pill has a thin outline in the accent colour.
-      DrawRoundedRect(dc, shape, wnd->FromDIP(kPillRadius), kAllCorners,
-                      tab.active ? m_bgActive : m_bgHover,
+      DrawRoundedRect(dc, shape, wnd->FromDIP(kPillRadius), kAllCorners, fill,
                       tab.active ? m_outline : wxColour{},
                       std::max(1, wnd->FromDIP(1)));
     }
     return;
   }
 
-  if (tab.active || tab.hover) {
+  if (fill.IsOk()) {
     // Rounded corners on the outer side only. The inner side touches the
     // terminal, so the tab looks like a part of it, also when it is hovered.
     const int corners = OuterCorners(inner);
@@ -470,12 +470,12 @@ void GlyphTabPainter::DrawShape(wxDC &dc, wxWindow *wnd,
         hover.width -= width;
         break;
       }
-      DrawRoundedRect(dc, hover, radius, corners, m_bgHover);
+      DrawRoundedRect(dc, hover, radius, corners, fill);
       return;
     }
     // The current tab has the outline colour on its outer sides, so it stands
     // out from the bar (the colours of the bar and the tab can be close).
-    DrawRoundedRect(dc, shape, radius, corners, m_bgActive, m_outline, width);
+    DrawRoundedRect(dc, shape, radius, corners, fill, m_outline, width);
     // The side next to the terminal has no outline: paint it with the tab
     // colour, so the tab joins the terminal.
     // The strip stops one line-width before each end of the side, so the two
@@ -488,7 +488,7 @@ void GlyphTabPainter::DrawShape(wxDC &dc, wxWindow *wnd,
       strip.y += width;
       strip.height -= 2 * width;
     }
-    dc.SetBrush(m_bgActive);
+    dc.SetBrush(fill);
     dc.SetPen(*wxTRANSPARENT_PEN);
     dc.DrawRectangle(strip);
   }
@@ -512,9 +512,7 @@ void GlyphTabPainter::DrawContent(wxDC &dc, wxWindow *wnd, GlyphTabInfo &tab,
   // The current tab uses the normal font too: AUI makes the selected font
   // bold, and the bold measuring font would make every tab wider.
   dc.SetFont(m_font);
-  dc.SetTextForeground(tab.active  ? m_fgActive
-                       : tab.hover ? m_fgHover
-                                   : m_fgNormal);
+  dc.SetTextForeground(ColoursOf(tab).text);
   // The width of the tab comes from GetTextExtent(). Ellipsize() adds up the
   // width of each character, which on Windows is a few pixels more, so it would
   // cut a label that has all the room it measured. Use it only when the label
@@ -584,9 +582,10 @@ int GlyphTabPainter::DrawButtons(wxDC &dc, wxWindow *wnd, GlyphTabInfo &tab,
       // colour, inside a rounded square. The square is darker while the
       // button is pressed.
       const bool hot = pressed || (button.state & GlyphTabButton::kHover) != 0;
-      const wxColour &tabBg = tab.active ? m_bgActive : m_bgHover;
+      const TabColours colours = ColoursOf(tab);
+      const wxColour &tabBg = colours.fill;
       // The text colour of the tab, for the X on it.
-      const wxColour &tabFg = tab.active ? m_fgActive : m_fgHover;
+      const wxColour &tabFg = colours.text;
       wxColour highlight;
       if (hot) {
         highlight = Mix(tabBg, tabFg, 0.25);
@@ -596,7 +595,7 @@ int GlyphTabPainter::DrawButtons(wxDC &dc, wxWindow *wnd, GlyphTabInfo &tab,
       }
       DrawCloseButton(
           dc, button.rect, highlight, wnd->FromDIP(kCloseHighlightGrow),
-          wnd->FromDIP(kCloseHighlightRadius), hot ? tabFg : m_fgDimmed);
+          wnd->FromDIP(kCloseHighlightRadius), hot ? tabFg : colours.dimmed);
     } else if (button.bitmap.IsOk()) {
       dc.DrawBitmap(button.bitmap.GetBitmapFor(wnd), button.rect.GetPosition(),
                     true);
@@ -637,6 +636,25 @@ wxSize GlyphTabPainter::GetContentSize(wxWindow *wnd,
     size.y = std::max(size.y, wnd->FromDIP(m_reservedIconSize));
   }
   return size;
+}
+
+GlyphTabPainter::TabColours
+GlyphTabPainter::ColoursOf(const GlyphTabInfo &tab) const {
+  if (tab.colours && tab.colours->bg.IsOk() && tab.colours->fg.IsOk()) {
+    const wxColour &bg = tab.colours->bg;
+    const wxColour &fg = tab.colours->fg;
+    // The tab under the mouse is a little lighter or darker, like a group
+    // header.
+    return {tab.hover && !tab.active ? Mix(bg, fg, 0.15) : bg, fg,
+            Mix(bg, fg, 0.6)};
+  }
+  return {tab.active  ? m_bgActive
+          : tab.hover ? m_bgHover
+                      : wxColour(),
+          tab.active  ? m_fgActive
+          : tab.hover ? m_fgHover
+                      : m_fgNormal,
+          m_fgDimmed};
 }
 
 int GlyphTabPainter::PaddingY(wxWindow *wnd) const {

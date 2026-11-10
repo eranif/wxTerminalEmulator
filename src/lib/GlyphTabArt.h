@@ -47,6 +47,15 @@ public:
   // The space above and below the label of a tab, in DIPs, which sets the
   // height of the tabs (see GlyphTabPainter::SetPaddingY()).
   void SetPaddingY(std::optional<int> dip) { m_painter.SetPaddingY(dip); }
+  // Own colours for some tabs, for example to mark a tab that needs attention.
+  // The art calls @p provider with the window of the page each time it draws a
+  // tab, and draws the tab with the colours it returns (see GlyphColourPair
+  // and GlyphTabInfo::colours). std::nullopt, or no provider (the default),
+  // uses the normal colours. After the answer for a page changes, refresh the
+  // notebook. A new art does not keep the provider of the old one.
+  void SetColourProvider(GlyphTabColourProvider provider) {
+    m_colourProvider = std::move(provider);
+  }
 
   void DrawBackground(wxDC &dc, wxWindow *wnd, const wxRect &rect) override;
   int DrawPageTab(wxDC &dc, wxWindow *wnd, wxAuiNotebookPage &page,
@@ -71,6 +80,7 @@ private:
   GlyphTabInfo InfoOf(const wxAuiNotebookPage &page) const;
 
   GlyphTabPainter m_painter;
+  GlyphTabColourProvider m_colourProvider;
 };
 
 #endif // wxCHECK_VERSION(3, 3, 0)

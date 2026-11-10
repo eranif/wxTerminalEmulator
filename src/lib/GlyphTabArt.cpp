@@ -41,6 +41,9 @@ GlyphTabInfo GlyphTabArt::InfoOf(const wxAuiNotebookPage &page) const {
   tab.bitmap = page.bitmap;
   tab.active = page.active;
   tab.hover = page.hover;
+  if (m_colourProvider) {
+    tab.colours = m_colourProvider(page.window);
+  }
   for (const wxAuiTabContainerButton &button : page.buttons) {
     GlyphTabButton info;
     info.close = button.id == wxAUI_BUTTON_CLOSE;

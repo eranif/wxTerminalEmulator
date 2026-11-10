@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GlyphTabArt.h"
+#include "GlyphTabPainter.h"
 #include "MyTerminal.h"
 #include "TabMRU.h"
 #include "TabStatusIcon.h"
@@ -105,8 +106,18 @@ public:
   // The terminal takes the focus of the tab.
   void SetFocus() override { m_terminal->SetFocus(); }
 
+  // Own colours for the tab of this page, or std::nullopt for the normal ones
+  // (see GlyphTabArt::SetColourProvider()).
+  const std::optional<GlyphColourPair> &GetTabColours() const {
+    return m_tabColours;
+  }
+  void SetTabColours(const std::optional<GlyphColourPair> &colours) {
+    m_tabColours = colours;
+  }
+
 private:
   MyTerminal *m_terminal{nullptr};
+  std::optional<GlyphColourPair> m_tabColours;
 };
 
 class MyFrame : public wxFrame {
