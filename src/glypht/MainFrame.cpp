@@ -204,7 +204,7 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   BuildMenuBar();
   long nbStyle = wxAUI_NB_DEFAULT_STYLE &
                  ~(wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS |
-                   kTabPositionFlags);
+                   wxAUI_NB_TAB_FIXED_WIDTH | kTabPositionFlags);
   nbStyle |= TabPositionFlag(m_config.GetTabPosition());
   if (m_config.GetShowCloseButton()) {
     nbStyle |= wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS;
