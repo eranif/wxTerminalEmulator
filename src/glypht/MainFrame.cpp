@@ -204,14 +204,14 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   BuildMenuBar();
   long nbStyle = wxAUI_NB_DEFAULT_STYLE &
                  ~(wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS |
-                   wxAUI_NB_TAB_FIXED_WIDTH | kTabPositionFlags);
+                   kTabPositionFlags);
   nbStyle |= TabPositionFlag(m_config.GetTabPosition());
   if (m_config.GetShowCloseButton()) {
     nbStyle |= wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS;
   }
 
-  m_notebook =
-      new TabBook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, nbStyle);
+  m_notebook = new TabBook(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
+                           nbStyle | wxAUI_NB_TAB_FIXED_WIDTH);
   ApplyTabArt(m_config.GetActiveTheme(), m_config.GetTabOutlineColour());
   // The bar of the tabs is the button face, which changes with the appearance
   // of the system.
