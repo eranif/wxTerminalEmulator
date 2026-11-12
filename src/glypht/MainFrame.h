@@ -161,6 +161,8 @@ public:
   void OnNextTab(wxCommandEvent &event);
   void OnPreviousTab(wxCommandEvent &event);
   void OnCloseTab(wxCommandEvent &event);
+  // Close the window when its last tab was closed, like other tabbed apps.
+  void CloseIfNoTabs();
   // Show the modeless tab list in most-recently-used order (Ctrl-Tab).
   // Returns false if there is nothing to switch to (fewer than 2 tabs).
   bool ShowTabSwitcher(bool backwards);

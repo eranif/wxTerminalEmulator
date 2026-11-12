@@ -241,6 +241,13 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
         UpdateProgressStatus();
         UpdateAppSelectionStatus();
       });
+  // A tab closed with its close button (DeletePage() sends no event; its
+  // callers call CloseIfNoTabs() themselves).
+  m_notebook->Bind(wxEVT_AUINOTEBOOK_PAGE_CLOSED,
+                   [this](wxAuiNotebookEvent &event) {
+                     event.Skip();
+                     CloseIfNoTabs();
+                   });
   // The notebook shows no menu: the application builds it.
   m_notebook->Bind(wxEVT_AUINOTEBOOK_TAB_RIGHT_UP,
                    [this](wxAuiNotebookEvent &event) {
@@ -717,6 +724,17 @@ void MyFrame::OnCloseTab(wxCommandEvent &event) {
     return;
   }
   m_notebook->DeletePage(static_cast<size_t>(currentTabIndex));
+  CloseIfNoTabs();
+}
+
+void MyFrame::CloseIfNoTabs() {
+  if (!m_notebook || m_notebook->GetPageCount() > 0 || IsBeingDeleted()) {
+    return;
+  }
+  // After the current event: the notebook may still be in the handler that
+  // closed the page. OnClose() saves the (empty) layout as usual, so the next
+  // start opens one new tab.
+  CallAfter([this] { Close(true); });
 }
 
 void MyFrame::ApplySettings() {
@@ -1115,6 +1133,7 @@ void MyFrame::OnTerminated(wxTerminalEvent &event) {
       tabIndex < static_cast<int>(m_notebook->GetPageCount())) {
     m_notebook->DeletePage(static_cast<size_t>(tabIndex));
   }
+  CloseIfNoTabs();
 }
 
 void MyFrame::OnTerminalLink(wxTerminalEvent &event) {
