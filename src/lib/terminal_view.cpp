@@ -12,6 +12,7 @@
 #endif
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -2884,7 +2885,10 @@ void wxTerminalViewCtrl::OnMouseWheel(wxMouseEvent &evt) {
 
   if (!AppOwnsMouse(evt)) {
     // The application does not track the mouse, or Shift is held: scroll the
-    // viewport
+    // viewport. There is nothing to scroll on the alternate screen.
+    if (m_core.IsAlternateScreen()) {
+      return;
+    }
     std::size_t maxPos = m_core.ShellStart();
     std::size_t vs = m_core.ViewStart();
     if (lines > 0 && vs >= static_cast<std::size_t>(lines))
@@ -3447,6 +3451,9 @@ void wxTerminalViewCtrl::OnKeyDown(wxKeyEvent &evt) {
 }
 
 bool wxTerminalViewCtrl::ScrollViewportForSelection(int delta) {
+  if (m_core.IsAlternateScreen()) {
+    return false; // the view does not scroll (see TerminalCore::SetViewStart)
+  }
   std::size_t vs = m_core.ViewStart();
   std::size_t maxVs =
       m_core.ShellStart(); // Don't scroll beyond the prompt line
@@ -3609,7 +3616,12 @@ void wxTerminalViewCtrl::FindText(const wxString &text, size_t flags) {
     return;
   }
 
-  std::size_t startRow = 0;
+  // On the alternate screen the view cannot scroll into the scrollback (see
+  // TerminalCore::SetViewStart()), so a match there could not be shown: search
+  // only the rows of the screen.
+  const std::size_t firstRow =
+      m_core.IsAlternateScreen() ? m_core.ShellStart() : 0;
+  std::size_t startRow = firstRow;
   std::size_t startCol = 0;
   const std::size_t totalLines = m_core.TotalLines();
 
@@ -3623,6 +3635,19 @@ void wxTerminalViewCtrl::FindText(const wxString &text, size_t flags) {
 
   if (!forward) {
     startCol = m_userSelection.col;
+  }
+
+  // A match found before the program entered the alternate screen: search the
+  // whole screen, from its top (forward) or from the end of its last row
+  // (backward). totalLines > firstRow: the screen has at least one row.
+  if (startRow < firstRow) {
+    if (forward) {
+      startRow = firstRow;
+      startCol = 0;
+    } else {
+      startRow = totalLines - 1;
+      startCol = std::numeric_limits<std::size_t>::max(); // the whole row
+    }
   }
 
   wxString searchText = caseInSensitive ? text.Lower() : text;
@@ -3646,7 +3671,8 @@ void wxTerminalViewCtrl::FindText(const wxString &text, size_t flags) {
       }
     }
     // Wrap around to start
-    for (std::size_t row = 0; row <= startRow && row < totalLines; ++row) {
+    for (std::size_t row = firstRow; row <= startRow && row < totalLines;
+         ++row) {
       wxString line = m_core.GetBufferRowCopyString(row);
       if (caseInSensitive) {
         line.MakeLower();
@@ -3661,7 +3687,8 @@ void wxTerminalViewCtrl::FindText(const wxString &text, size_t flags) {
     }
   } else {
     // Backward search
-    for (int row = static_cast<int>(startRow); row >= 0; --row) {
+    for (int row = static_cast<int>(startRow);
+         row >= static_cast<int>(firstRow); --row) {
       wxString line = m_core.GetBufferRowCopyString(row);
       if (caseInSensitive) {
         line.MakeLower();
@@ -4149,7 +4176,12 @@ void wxTerminalViewCtrl::RefreshView(bool now) {
 }
 
 void wxTerminalViewCtrl::UpdateScrollbar() {
-  if (m_showScrollBar) {
+  if (m_showScrollBar && m_core.IsAlternateScreen()) {
+    // The scrollback is not the history of the program on the alternate
+    // screen (tmux keeps its own): hide the scroll bar. The grid does not
+    // change, GetTerminalRect() always leaves room for the bar.
+    SetScrollbar(wxVERTICAL, 0, 0, 0);
+  } else if (m_showScrollBar) {
     // Don't allow scrolling beyond the shell start (prompt line)
     int total = static_cast<int>(m_core.ShellStart() + m_core.Rows());
     int thumb = static_cast<int>(m_core.Rows());

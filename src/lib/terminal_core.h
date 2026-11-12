@@ -239,6 +239,11 @@ public:
   // as SS3 sequences (ESC O A) instead of CSI (ESC [ A).
   bool IsCursorKeyMode() const;
 
+  // True while the program uses the alternate screen (tmux, vim, less...).
+  // The scrollback holds the lines of the main screen then, not the lines of
+  // the program, so the view does not scroll into it.
+  bool IsAlternateScreen() const;
+
   // View into the buffer: returns rows [viewStart .. viewStart+m_rows)
   std::size_t ViewStart() const { return m_viewStart; }
   std::size_t ShellStart() const;

@@ -291,10 +291,15 @@ std::vector<const std::vector<Cell> *> TerminalCore::GetViewArea() const {
   return view;
 }
 
+bool TerminalCore::IsAlternateScreen() const {
+  return (tsm_screen_get_flags(m_tsmScreen) & TSM_SCREEN_ALTERNATE) != 0;
+}
+
 void TerminalCore::SetViewStart(std::size_t vs) {
   std::size_t total = TotalLines();
   std::size_t maxVs = total > m_rows ? total - m_rows : 0;
-  m_viewStart = std::min(vs, maxVs);
+  // On the alternate screen the view stays on the screen of the program.
+  m_viewStart = IsAlternateScreen() ? maxVs : std::min(vs, maxVs);
   m_followingBottom = (m_viewStart >= ShellStart());
   RefreshScrollbackCache();
 }
@@ -377,6 +382,11 @@ void TerminalCore::PutData(const std::string &data) {
 
   if ((flagsBefore ^ flagsAfter) & TSM_SCREEN_ALTERNATE) {
     bool entered = (flagsAfter & TSM_SCREEN_ALTERNATE) != 0;
+    if (entered) {
+      // A view scrolled back would show the scrollback of the main screen
+      // above the program: go back to the bottom (see below).
+      m_followingBottom = true;
+    }
     if (m_altScreenCallback)
       m_altScreenCallback(entered);
   }

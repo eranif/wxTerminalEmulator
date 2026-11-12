@@ -159,6 +159,11 @@ Factory: `PtyBackend::Create(wxEvtHandler*)` returns
   stops itself when the buffer is empty.
 - When the user scrolls back, the viewport stays where it is while new output
   arrives.
+- On the alternate screen (vim, less, tmux) the view stays on the screen of the
+  program: `TerminalCore::SetViewStart()` clamps to the bottom, the wheel and
+  drag selection do not scroll, search (`FindText()`) looks only at the rows of
+  the screen, and the scroll bar is hidden (`UpdateScrollbar()`). Entering it
+  moves a scrolled-back view to the bottom.
 
 ### Keyboard Input Handling
 
