@@ -130,16 +130,25 @@ struct Cell {
   inline bool IsClicked() const {
     return IsFlagSet(flags, CellFlags::kClicked);
   }
-  inline bool IsEmpty() const { return ch == U' ' && !colours.has_value(); }
+  // A cell that draws nothing: a space with the default colours. A reversed
+  // space has the foreground colour as its background (programs such as Codex
+  // draw their selection with it), and an underlined space draws a line, so
+  // neither is empty.
+  inline bool IsEmpty() const {
+    return ch == U' ' && !colours.has_value() &&
+           !IsFlagSet(flags, CellFlags::kReverse) &&
+           !IsFlagSet(flags, CellFlags::kUnderlined) &&
+           !IsFlagSet(flags, CellFlags::kClicked);
+  }
   inline void SetFgColour(ColourSpec c) {
-    if (IsEmpty()) {
+    if (!colours.has_value()) {
       colours = CellColours{};
     }
     colours.value().fg = c;
   }
 
   inline void SetBgColour(ColourSpec c) {
-    if (IsEmpty()) {
+    if (!colours.has_value()) {
       colours = CellColours{};
     }
     colours.value().bg = c;

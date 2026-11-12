@@ -2065,8 +2065,10 @@ void wxTerminalViewCtrl::OnPaintDC() {
   auto cursor = m_core.Cursor();
   std::size_t viewStart = m_core.ViewStart();
   std::size_t shellStart = m_core.ShellStart();
+  // No caret when the program hid the cursor (DECTCEM): TUI programs draw
+  // their own. The row of the last caret is still redrawn, which erases it.
   int cursorScreenRow = -1;
-  if (viewStart <= shellStart &&
+  if (m_core.IsCursorVisible() && viewStart <= shellStart &&
       shellStart + cursor.y < viewStart + m_core.Rows()) {
     cursorScreenRow = static_cast<int>(shellStart - viewStart + cursor.y);
   }
@@ -2321,8 +2323,10 @@ void wxTerminalViewCtrl::OnPaintGL() {
   auto cursor = m_core.Cursor();
   std::size_t viewStart = m_core.ViewStart();
   std::size_t shellStart = m_core.ShellStart();
+  // No caret when the program hid the cursor (DECTCEM): TUI programs draw
+  // their own. The row of the last caret is still redrawn, which erases it.
   int cursorScreenRow = -1;
-  if (viewStart <= shellStart &&
+  if (m_core.IsCursorVisible() && viewStart <= shellStart &&
       shellStart + cursor.y < viewStart + m_core.Rows()) {
     cursorScreenRow = static_cast<int>(shellStart - viewStart + cursor.y);
   }

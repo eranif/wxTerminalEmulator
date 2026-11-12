@@ -125,10 +125,10 @@ void TerminalCore::SetTheme(const wxTerminalTheme &theme) {
   m_theme = theme;
   SyncPalette();
 
-  // Align libtsm's cursor-cell inversion with the requested caret style.
-  // A block caret inverts the glyph beneath it (libtsm's default behavior);
-  // a beam/line caret is rendered by the front-end and must NOT invert the
-  // underlying glyph, so set TSM_SCREEN_BEAM_CURSOR in that case.
+  // libtsm inverts the cell under the cursor unless TSM_SCREEN_BEAM_CURSOR is
+  // set. RefreshActiveScreen() undoes that inversion for every caret style
+  // (also after a reset, which clears the flag), since the view draws the caret
+  // itself; the flag only saves that work for a beam caret.
   if (m_theme.isBlockCursor)
     tsm_screen_reset_flags(m_tsmScreen, TSM_SCREEN_BEAM_CURSOR);
   else
@@ -416,6 +416,22 @@ void TerminalCore::RefreshActiveScreen() {
                   TerminalLogLevel::kDebug};
   m_activeScreen.assign(m_rows, std::vector<Cell>(m_cols));
   tsm_screen_draw(m_tsmScreen, TsmDrawCb, this);
+
+  // For a block caret, libtsm reverses the cell under the cursor
+  // (tsm-render.c). The view draws the caret itself (a solid block, or a
+  // hollow one without the focus), so undo it: the cell keeps its own colours,
+  // and a space under a hollow caret is not drawn as a filled block. Use the
+  // same conditions and the same clamping as libtsm.
+  const unsigned int flags = tsm_screen_get_flags(m_tsmScreen);
+  if (!(flags & TSM_SCREEN_HIDE_CURSOR) && !(flags & TSM_SCREEN_BEAM_CURSOR) &&
+      m_rows > 0 && m_cols > 0) {
+    const std::size_t x =
+        std::min<std::size_t>(tsm_screen_get_cursor_x(m_tsmScreen), m_cols - 1);
+    const std::size_t y =
+        std::min<std::size_t>(tsm_screen_get_cursor_y(m_tsmScreen), m_rows - 1);
+    Cell &cell = m_activeScreen[y][x];
+    cell.SetReverse(!cell.IsReverse());
+  }
 }
 
 void TerminalCore::RefreshScrollbackCache() {
