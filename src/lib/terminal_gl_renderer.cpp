@@ -693,8 +693,13 @@ TerminalGLRenderer::GetGlyph(char32_t ch, bool bold, bool underlined, int cellW,
                              int cellH, const wxFont *customFont) {
   static const GlyphInfo kBlank{};
 
-  // Whitespace contributes no glyph quad.
-  if (ch == U' ' || ch == 0 || ch == U'\t') {
+  // Whitespace contributes no glyph quad, unless it is underlined: the
+  // underline is part of the tile (drawn with the underlined font), so an
+  // underlined space gets the tile of a space, which holds only the line.
+  if (ch == 0 || ch == U'\t') {
+    ch = U' ';
+  }
+  if (ch == U' ' && !underlined) {
     return kBlank;
   }
 
