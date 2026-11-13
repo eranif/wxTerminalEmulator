@@ -1,6 +1,7 @@
 #include "GlyphTabPainter.h"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <wx/control.h>
 #include <wx/dc.h>
@@ -8,7 +9,32 @@
 #include <wx/graphics.h>
 #include <wx/window.h>
 
+#ifdef __WXGTK__
+// From <gdk/gdk.h>. The GTK headers are not on our include path, and these
+// functions are in libgdk, which we link anyway (see also main.cpp).
+extern "C" {
+struct _GdkScreen;
+_GdkScreen *gdk_screen_get_default(void);
+double gdk_screen_get_resolution(_GdkScreen *screen);
+}
+#endif
+
 namespace {
+
+// How much bigger the fonts are than FromDIP() says: on GTK the resolution of
+// the fonts, in logical pixels (Xft.dpi, or the text scaling of the desktop,
+// times 96), over 96. 1 elsewhere: FromDIP() includes the scaling of the
+// fonts there.
+double FontScale() {
+#ifdef __WXGTK__
+  _GdkScreen *screen = gdk_screen_get_default();
+  const double dpi = screen ? gdk_screen_get_resolution(screen) : -1.0;
+  if (dpi > 0) {
+    return dpi / 96.0;
+  }
+#endif
+  return 1.0;
+}
 
 // Space in DIPs.
 constexpr int kMargin = 4;
@@ -275,6 +301,17 @@ void DrawCloseButton(wxDC &dc, const wxRect &rect, const wxColour &highlight,
 
 } // namespace
 
+int GlyphTabPainter::GlyphFromDIP(const wxWindow *wnd, int dips) {
+  const int pixels = wnd->FromDIP(dips);
+  const double scale = FontScale();
+  return scale == 1.0 ? pixels
+                      : static_cast<int>(std::lround(pixels * scale));
+}
+
+int GlyphTabPainter::LineWidth(const wxWindow *wnd, int dips, int least) {
+  return std::max(least, GlyphFromDIP(wnd, dips));
+}
+
 GlyphTabPainter::GlyphTabPainter(const wxTerminalTheme &theme, Style style)
     : m_style(style), m_font(*wxNORMAL_FONT), m_fgActive(theme.fg) {
   m_bgTerminal = theme.bg;
@@ -327,7 +364,7 @@ void GlyphTabPainter::DrawBarBackground(wxDC &dc, wxWindow *wnd,
   // vertical bar.
   if (m_style == Style::Browser || !IsHorizontal(inner)) {
     dc.SetBrush(m_style == Style::Pills ? m_bgHover : m_outline);
-    dc.DrawRectangle(InnerStrip(rect, inner, std::max(1, wnd->FromDIP(1))));
+    dc.DrawRectangle(InnerStrip(rect, inner, LineWidth(wnd)));
   }
 }
 
@@ -344,19 +381,19 @@ void GlyphTabPainter::DrawDropDownButton(wxDC &dc, wxWindow *wnd,
                                          const wxRect &rect, bool hot) {
   if (hot) {
     wxRect box = rect;
-    box.Deflate(wnd->FromDIP(3), wnd->FromDIP(5));
-    DrawRoundedRect(dc, box, wnd->FromDIP(kCloseHighlightRadius), kAllCorners,
+    box.Deflate(GlyphFromDIP(wnd, 3), GlyphFromDIP(wnd, 5));
+    DrawRoundedRect(dc, box, GlyphFromDIP(wnd, kCloseHighlightRadius), kAllCorners,
                     m_bgHover);
   }
   const wxColour &fg = hot ? m_fgHover : m_fgNormal;
   const double cx = rect.x + rect.width / 2.0;
   const double cy = rect.y + rect.height / 2.0;
-  const double half = wnd->FromDIP(4);
+  const double half = GlyphFromDIP(wnd, 4);
   std::unique_ptr<wxGraphicsContext> gc{
       wxGraphicsContext::CreateFromUnknownDC(dc)};
   if (gc) {
     gc->SetPen(gc->CreatePen(wxGraphicsPenInfo(fg)
-                                 .Width(std::max(1.0, wnd->FromDIP(1) * 1.4))
+                                 .Width(LineWidth(wnd) * 1.4)
                                  .Cap(wxCAP_ROUND)
                                  .Join(wxJOIN_ROUND)));
     wxGraphicsPath path = gc->CreatePath();
@@ -366,7 +403,7 @@ void GlyphTabPainter::DrawDropDownButton(wxDC &dc, wxWindow *wnd,
     gc->StrokePath(path);
     return;
   }
-  dc.SetPen(wxPen(fg, std::max(1, wnd->FromDIP(1))));
+  dc.SetPen(wxPen(fg, LineWidth(wnd)));
   dc.DrawLine(int(cx - half), int(cy - half / 2), int(cx), int(cy + half / 2));
   dc.DrawLine(int(cx), int(cy + half / 2), int(cx + half), int(cy - half / 2));
 }
@@ -377,7 +414,7 @@ void GlyphTabPainter::DrawDropDownButton(wxDC &dc, wxWindow *wnd,
 static wxRect WithoutOuterGap(wxWindow *wnd, const wxRect &rect,
                               wxDirection inner) {
   wxRect shape = rect;
-  const int gap = wnd->FromDIP(kTopGap);
+  const int gap = GlyphTabPainter::GlyphFromDIP(wnd, kTopGap);
   switch (inner) {
   case wxBOTTOM:
     shape.y += gap;
@@ -418,9 +455,9 @@ wxRect GlyphTabPainter::GetShapeRect(wxWindow *wnd, const wxRect &rect,
   if (m_style == Style::Pills) {
     // There is a gap around the pill.
     if (IsHorizontal(inner)) {
-      shape.Deflate(wnd->FromDIP(kPillGapX), wnd->FromDIP(kPillGapY));
+      shape.Deflate(GlyphFromDIP(wnd, kPillGapX), GlyphFromDIP(wnd, kPillGapY));
     } else {
-      shape.Deflate(wnd->FromDIP(kVPillGapX), wnd->FromDIP(kVPillGapY));
+      shape.Deflate(GlyphFromDIP(wnd, kVPillGapX), GlyphFromDIP(wnd, kVPillGapY));
     }
     return shape;
   }
@@ -437,9 +474,9 @@ void GlyphTabPainter::DrawShape(wxDC &dc, wxWindow *wnd,
   if (m_style == Style::Pills) {
     if (fill.IsOk()) {
       // The current pill has a thin outline in the accent colour.
-      DrawRoundedRect(dc, shape, wnd->FromDIP(kPillRadius), kAllCorners, fill,
+      DrawRoundedRect(dc, shape, GlyphFromDIP(wnd, kPillRadius), kAllCorners, fill,
                       tab.active ? m_outline : wxColour{},
-                      std::max(1, wnd->FromDIP(1)));
+                      LineWidth(wnd));
     }
     return;
   }
@@ -448,8 +485,8 @@ void GlyphTabPainter::DrawShape(wxDC &dc, wxWindow *wnd,
     // Rounded corners on the outer side only. The inner side touches the
     // terminal, so the tab looks like a part of it, also when it is hovered.
     const int corners = OuterCorners(inner);
-    const int radius = wnd->FromDIP(kTabRadius);
-    const int width = std::max(1, wnd->FromDIP(1));
+    const int radius = GlyphFromDIP(wnd, kTabRadius);
+    const int width = LineWidth(wnd);
     if (!tab.active) {
       // The hovered tab stops above the line along the side next to the pages,
       // so the line is still visible under it.
@@ -497,13 +534,13 @@ void GlyphTabPainter::DrawShape(wxDC &dc, wxWindow *wnd,
 void GlyphTabPainter::DrawContent(wxDC &dc, wxWindow *wnd, GlyphTabInfo &tab,
                                   const wxRect &shape) {
   // The icon, if any.
-  int xStart = shape.x + wnd->FromDIP(kPaddingX);
+  int xStart = shape.x + GlyphFromDIP(wnd, kPaddingX);
   if (tab.bitmap.IsOk()) {
     const wxBitmap bmp = tab.bitmap.GetBitmapFor(wnd);
     const wxSize bitmapSize = bmp.GetLogicalSize();
     dc.DrawBitmap(bmp, xStart, shape.y + (shape.height - bitmapSize.y) / 2,
                   true);
-    xStart += bitmapSize.x + wnd->FromDIP(kMargin);
+    xStart += bitmapSize.x + GlyphFromDIP(wnd, kMargin);
   }
 
   const int xEnd = DrawButtons(dc, wnd, tab, shape);
@@ -544,7 +581,7 @@ wxSize GlyphTabPainter::ButtonSize(wxWindow *wnd,
     // (the toolkit does), and a desktop that scales only the fonts (Xft.dpi,
     // the text scaling of GNOME or KDE, WSLg) would get a tiny X next to big
     // text. With a normal font the line is about 16 pixels: no change.
-    const int side = std::max(wnd->FromDIP(kCloseSize), LineHeight(wnd));
+    const int side = std::max(GlyphFromDIP(wnd, kCloseSize), LineHeight(wnd));
     return wxSize(side, side);
   }
   return button.bitmap.IsOk() ? button.bitmap.GetBitmapFor(wnd).GetLogicalSize()
@@ -566,7 +603,7 @@ int GlyphTabPainter::DrawButtons(wxDC &dc, wxWindow *wnd, GlyphTabInfo &tab,
   // on the current tab and on the tab under the mouse.
   const int buttonsWidth = GetButtonsWidth(wnd, tab);
   int xEnd = shape.x + shape.width -
-             wnd->FromDIP(buttonsWidth ? kButtonPaddingX : kPaddingX);
+             GlyphFromDIP(wnd, buttonsWidth ? kButtonPaddingX : kPaddingX);
   if (!buttonsWidth) {
     return xEnd;
   }
@@ -607,15 +644,15 @@ int GlyphTabPainter::DrawButtons(wxDC &dc, wxWindow *wnd, GlyphTabInfo &tab,
         }
       }
       DrawCloseButton(
-          dc, button.rect, highlight, wnd->FromDIP(kCloseHighlightGrow),
-          wnd->FromDIP(kCloseHighlightRadius), hot ? tabFg : colours.dimmed);
+          dc, button.rect, highlight, GlyphFromDIP(wnd, kCloseHighlightGrow),
+          GlyphFromDIP(wnd, kCloseHighlightRadius), hot ? tabFg : colours.dimmed);
     } else if (button.bitmap.IsOk()) {
       dc.DrawBitmap(button.bitmap.GetBitmapFor(wnd), button.rect.GetPosition(),
                     true);
     }
     buttonX += buttonSize.x;
   }
-  return xEnd - wnd->FromDIP(kButtonGap);
+  return xEnd - GlyphFromDIP(wnd, kButtonGap);
 }
 
 wxSize GlyphTabPainter::GetContentSize(wxWindow *wnd,
@@ -629,12 +666,12 @@ wxSize GlyphTabPainter::GetContentSize(wxWindow *wnd,
   size.y = std::max(size.y, LineHeight(wnd));
 
   if (const int buttonsWidth = GetButtonsWidth(wnd, tab)) {
-    size.x += wnd->FromDIP(kButtonGap) + buttonsWidth;
+    size.x += GlyphFromDIP(wnd, kButtonGap) + buttonsWidth;
   }
 
   if (tab.bitmap.IsOk()) {
     const wxSize bitmapSize = tab.bitmap.GetPreferredLogicalSizeFor(wnd);
-    size.x += bitmapSize.x + wnd->FromDIP(kMargin);
+    size.x += bitmapSize.x + GlyphFromDIP(wnd, kMargin);
     if (m_reservedIconSize == 0) {
       size.IncTo(bitmapSize);
     }
@@ -643,7 +680,7 @@ wxSize GlyphTabPainter::GetContentSize(wxWindow *wnd,
     // The height of an icon is reserved in every tab, with or without an icon,
     // so the tab does not change its height when an icon is added. The width
     // is not reserved: the icon takes room only when it is there.
-    size.y = std::max(size.y, wnd->FromDIP(m_reservedIconSize));
+    size.y = std::max(size.y, GlyphFromDIP(wnd, m_reservedIconSize));
   }
   return size;
 }
@@ -668,7 +705,7 @@ GlyphTabPainter::ColoursOf(const GlyphTabInfo &tab) const {
 }
 
 int GlyphTabPainter::PaddingY(wxWindow *wnd) const {
-  return wnd->FromDIP(m_paddingY.value_or(kPaddingY));
+  return GlyphFromDIP(wnd, m_paddingY.value_or(kPaddingY));
 }
 
 wxSize GlyphTabPainter::GetTabSize(wxWindow *wnd, const GlyphTabInfo &tab) {
@@ -678,14 +715,14 @@ wxSize GlyphTabPainter::GetTabSize(wxWindow *wnd, const GlyphTabInfo &tab) {
   // drawing uses each padding once per side, and the two can differ by a pixel
   // with a scale like 105% or 150%. With buttons, the right one is smaller.
   size.x +=
-      wnd->FromDIP(kPaddingX) +
-      wnd->FromDIP(GetButtonsWidth(wnd, tab) ? kButtonPaddingX : kPaddingX);
+      GlyphFromDIP(wnd, kPaddingX) +
+      GlyphFromDIP(wnd, GetButtonsWidth(wnd, tab) ? kButtonPaddingX : kPaddingX);
   size.y += 2 * PaddingY(wnd);
   if (m_style == Style::Pills) {
-    size.x += 2 * wnd->FromDIP(kPillGapX);
-    size.y += 2 * wnd->FromDIP(kPillGapY);
+    size.x += 2 * GlyphFromDIP(wnd, kPillGapX);
+    size.y += 2 * GlyphFromDIP(wnd, kPillGapY);
   } else {
-    size.y += wnd->FromDIP(kTopGap);
+    size.y += GlyphFromDIP(wnd, kTopGap);
   }
   return size;
 }
@@ -694,7 +731,7 @@ int GlyphTabPainter::GetVerticalTabHeight(wxWindow *wnd,
                                           const GlyphTabInfo &tab) {
   int height = GetContentSize(wnd, tab).y + 2 * PaddingY(wnd);
   if (m_style == Style::Pills) {
-    height += 2 * wnd->FromDIP(kVPillGapY);
+    height += 2 * GlyphFromDIP(wnd, kVPillGapY);
   }
   return height;
 }
@@ -721,12 +758,12 @@ wxSize GlyphTabPainter::GetGroupHeaderSize(wxWindow *wnd,
   // The arrow, and the space after it when there is an icon or a name. The
   // chip is as high as the tab.
   size.x += IndicatorSize(wnd, size.y) +
-            (HasHeaderLabel(group) ? wnd->FromDIP(kIndicatorGap) : 0);
+            (HasHeaderLabel(group) ? GlyphFromDIP(wnd, kIndicatorGap) : 0);
   // A tab puts a margin after its icon. A header without a name has none.
   if (group.bitmap.IsOk() && group.name.empty()) {
-    size.x -= wnd->FromDIP(kMargin);
+    size.x -= GlyphFromDIP(wnd, kMargin);
   }
-  size.x = std::max(size.x, wnd->FromDIP(kMinHeaderWidth));
+  size.x = std::max(size.x, GlyphFromDIP(wnd, kMinHeaderWidth));
   return size;
 }
 
@@ -736,7 +773,7 @@ int GlyphTabPainter::GetVerticalGroupHeaderHeight(wxWindow *wnd,
 }
 
 int GlyphTabPainter::IndicatorSize(wxWindow *wnd, int chipHeight) const {
-  return std::max(wnd->FromDIP(kMinIndicatorSize), chipHeight * 2 / 5);
+  return std::max(GlyphFromDIP(wnd, kMinIndicatorSize), chipHeight * 2 / 5);
 }
 
 wxBitmap GlyphTabPainter::GetIndicatorBitmap(bool collapsed,
@@ -837,10 +874,10 @@ void GlyphTabPainter::DrawGroupHeader(wxDC &dc, wxWindow *wnd,
   const wxColour fill = group.hover && !group.locked
                             ? Mix(colour, TextOn(colour, 1.0), 0.15)
                             : colour;
-  DrawRoundedRect(dc, chip, wnd->FromDIP(kTabRadius), corners, fill, penColour);
+  DrawRoundedRect(dc, chip, GlyphFromDIP(wnd, kTabRadius), corners, fill, penColour);
   // It looks glossy: the top half is lighter, or the lower half is darker for a
   // light colour. The gloss stays inside the outline.
-  DrawGloss(dc, chip, wnd->FromDIP(kTabRadius), corners, 1, IsDark(colour));
+  DrawGloss(dc, chip, GlyphFromDIP(wnd, kTabRadius), corners, 1, IsDark(colour));
 
   // The arrow of a group that cannot be collapsed is dimmed: a mix of the
   // colour of the text and the colour of the chip.
@@ -849,16 +886,16 @@ void GlyphTabPainter::DrawGroupHeader(wxDC &dc, wxWindow *wnd,
 
   dc.SetFont(m_font);
   dc.SetTextForeground(textColour);
-  const int padding = wnd->FromDIP(kPaddingX);
+  const int padding = GlyphFromDIP(wnd, kPaddingX);
   const int indicator = IndicatorSize(wnd, chip.height);
-  const int gap = HasHeaderLabel(group) ? wnd->FromDIP(kIndicatorGap) : 0;
+  const int gap = HasHeaderLabel(group) ? GlyphFromDIP(wnd, kIndicatorGap) : 0;
   // The icon, and the margin between it and the name.
   wxBitmap icon;
   int iconWidth = 0;
   if (group.bitmap.IsOk()) {
     icon = group.bitmap.GetBitmapFor(wnd);
     iconWidth = icon.GetLogicalWidth() +
-                (group.name.empty() ? 0 : wnd->FromDIP(kMargin));
+                (group.name.empty() ? 0 : GlyphFromDIP(wnd, kMargin));
   }
   wxString text = group.name;
   const int room =
@@ -903,7 +940,7 @@ void GlyphTabPainter::DrawGroupLine(wxDC &dc, wxWindow *wnd, const wxRect &span,
   // The line is along the side of the bar that is next to the pages: at the
   // bottom of a bar above the pages, at the top of a bar below them, on the
   // right of a bar on the left, and on the left of a bar on the right.
-  const int width = std::max(2, wnd->FromDIP(kGroupLineWidth));
+  const int width = LineWidth(wnd, kGroupLineWidth, 2);
   wxRect line;
   switch (inner) {
   case wxBOTTOM:

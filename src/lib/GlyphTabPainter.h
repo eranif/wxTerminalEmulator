@@ -129,6 +129,13 @@ public:
   GlyphTabPainter(const GlyphTabPainter &other) = default;
   GlyphTabPainter &operator=(const GlyphTabPainter &other) = default;
 
+  /// @p dips in pixels of @p wnd, like wxWindow::FromDIP(), and also scaled
+  /// with the fonts. On GTK FromDIP() does not scale (the toolkit does), but a
+  /// desktop can make only the fonts bigger (Xft.dpi, the text scaling of
+  /// GNOME or KDE, WSLg): the sizes around the text then grow with it. All
+  /// the sizes of the tabs and of the bar use it.
+  static int GlyphFromDIP(const wxWindow *wnd, int dips);
+
   // The font of the labels.
   void SetFont(const wxFont &font) { m_font = font; }
   const wxFont &GetFont() const { return m_font; }
@@ -231,6 +238,9 @@ private:
   int GetButtonsWidth(wxWindow *wnd, const GlyphTabInfo &tab) const;
   // The height of a line of the tab font.
   int LineHeight(wxWindow *wnd) const;
+  // The width of a line (a pen, an outline, a strip): @p dips with
+  // GlyphFromDIP(), and at least @p least pixels, so it is never 0.
+  static int LineWidth(const wxWindow *wnd, int dips = 1, int least = 1);
   // The size of the arrow on the header of a group, for a chip that is
   // @p chipHeight high.
   int IndicatorSize(wxWindow *wnd, int chipHeight) const;
