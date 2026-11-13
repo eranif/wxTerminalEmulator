@@ -1075,13 +1075,30 @@ void wxTerminalViewCtrl::Feed(const std::string &data) {
   RefreshView();
 }
 
-void wxTerminalViewCtrl::SetTerminalSizeFromClient() {
+wxSize wxTerminalViewCtrl::GridSizeFromClient() const {
   if (m_charH == 0 || m_charW == 0) {
-    return;
+    return {};
   }
   const wxSize sz = GetTerminalSize();
-  const std::size_t cols = std::max(1, sz.GetWidth() / m_charW);
-  const std::size_t rows = std::max(1, sz.GetHeight() / m_charH);
+  return {std::max(1, sz.GetWidth() / m_charW),
+          std::max(1, sz.GetHeight() / m_charH)};
+}
+
+void wxTerminalViewCtrl::SetTerminalSizeFromClient() {
+  // While the user drags the border of the window, keep the size: every step
+  // would resize the PTY, and the program gets a resize signal for each one.
+  // Some clients do not survive a burst of them: the ssh of Windows quits
+  // with "poll: No error". The view shows the new size meanwhile (see
+  // PaintResizeOverlay()), and OnResizeEndTimer() resizes once at the end.
+  if (m_liveResize) {
+    return;
+  }
+  const wxSize grid = GridSizeFromClient();
+  if (grid.GetWidth() <= 0 || grid.GetHeight() <= 0) {
+    return;
+  }
+  const std::size_t cols = static_cast<std::size_t>(grid.GetWidth());
+  const std::size_t rows = static_cast<std::size_t>(grid.GetHeight());
 
   if (cols == m_core.Cols() && rows == m_core.Rows())
     return;
@@ -2047,8 +2064,8 @@ void wxTerminalViewCtrl::OnPaintDC() {
     return;
   }
 
-  m_charW = dc.GetTextExtent("X").GetWidth();
-  m_charH = dc.GetTextExtent("X").GetHeight();
+  SetCellSize(dc.GetTextExtent("X").GetWidth(),
+              dc.GetTextExtent("X").GetHeight());
 
   // Invalidate selection if the view has scrolled since it was created
   if (m_mouseSelection.HasSelection() &&
@@ -2279,8 +2296,8 @@ void wxTerminalViewCtrl::OnPaintGL() {
   // Re-measure with the regular font — the DC path (line ~1138) also uses
   // m_defaultFont for the ongoing charW/charH that drives grid layout.
   paintDc.SetFont(m_defaultFont);
-  m_charW = paintDc.GetTextExtent("X").GetWidth();
-  m_charH = paintDc.GetTextExtent("X").GetHeight();
+  SetCellSize(paintDc.GetTextExtent("X").GetWidth(),
+              paintDc.GetTextExtent("X").GetHeight());
 
   // The first real paint may arrive after the window has been laid out at its
   // final size but before OnSize fired (or OnSize fired when charW was still 0
@@ -2447,7 +2464,10 @@ void wxTerminalViewCtrl::PaintResizeOverlayGL() {
   m_glRenderer.BeginFrame(clientSize.x, clientSize.y, scale, theme.bg);
 #endif
 
-  wxString sizeText = wxString::Format("%zux%zu", m_core.Cols(), m_core.Rows());
+  // The size the grid gets when the drag ends (see SetTerminalSizeFromClient).
+  const wxSize grid = GridSizeFromClient();
+  wxString sizeText =
+      wxString::Format("%dx%d", grid.GetWidth(), grid.GetHeight());
   int textW = static_cast<int>(sizeText.length()) * m_charW;
   int x = (clientSize.x - textW) / 2;
   int y = (clientSize.y - m_charH) / 2;
@@ -2471,6 +2491,19 @@ void wxTerminalViewCtrl::PaintResizeOverlayGL() {
 // resize by the user. The size is remembered per top-level window and shared by
 // all its views, so a view that was hidden during a resize does not report it
 // again when it is shown.
+void wxTerminalViewCtrl::SetCellSize(int width, int height) {
+  if (width == m_charW && height == m_charH) {
+    return;
+  }
+  m_charW = width;
+  m_charH = height;
+  // SetTheme() resets the cell size to 0 for a new font, so the size event it
+  // posts finds no cell size and changes nothing: resize the grid (and the
+  // PTY) here, with the size the rows are drawn with. Nothing happens when the
+  // number of rows and columns is the same.
+  SetTerminalSizeFromClient();
+}
+
 bool wxTerminalViewCtrl::TopLevelWindowResized() const {
   static std::unordered_map<const wxWindow *, wxSize> lastSizes;
   const wxWindow *top =
@@ -2488,14 +2521,16 @@ bool wxTerminalViewCtrl::TopLevelWindowResized() const {
 }
 
 void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
-  SetTerminalSizeFromClient();
-  UpdateScrollbar();
+  // First: a drag of the border of the window resizes once, at its end.
   if (::wxGetMouseState().LeftIsDown() && TopLevelWindowResized()) {
+    m_liveResize = true;
     if (m_resizeEndTimer.IsRunning())
       m_resizeEndTimer.Stop();
     m_resizeEndTimer.StartOnce(150);
     RefreshView();
   }
+  SetTerminalSizeFromClient();
+  UpdateScrollbar();
 
   evt.Skip();
 }
@@ -2505,6 +2540,10 @@ void wxTerminalViewCtrl::OnResizeEndTimer(wxTimerEvent &) {
     m_resizeEndTimer.StartOnce(50);
     return;
   }
+  // The drag is over: resize the grid and the PTY to the final size.
+  m_liveResize = false;
+  SetTerminalSizeFromClient();
+  UpdateScrollbar();
   InvalidateRenderCache();
   RefreshView();
 }
@@ -2514,7 +2553,10 @@ void wxTerminalViewCtrl::PaintResizeOverlay(wxDC &dc) {
   dc.SetBackground(wxBrush(theme.bg));
   dc.Clear();
 
-  wxString sizeText = wxString::Format("%zux%zu", m_core.Cols(), m_core.Rows());
+  // The size the grid gets when the drag ends (see SetTerminalSizeFromClient).
+  const wxSize grid = GridSizeFromClient();
+  wxString sizeText =
+      wxString::Format("%dx%d", grid.GetWidth(), grid.GetHeight());
   dc.SetFont(m_defaultFont);
   dc.SetTextForeground(theme.fg);
   wxSize textSize = dc.GetTextExtent(sizeText);

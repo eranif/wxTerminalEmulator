@@ -620,6 +620,9 @@ private:
 
   void OnSize(wxSizeEvent &evt);
   bool TopLevelWindowResized() const;
+  // Set the size of a cell, measured by a paint. When it changed (a new font,
+  // a DPI change), the grid gets new rows and columns and the PTY is told.
+  void SetCellSize(int width, int height);
   void OnCharHook(wxKeyEvent &evt);
   void OnKeyDown(wxKeyEvent &evt);
   /// Send characters that wxEVT_KEY_DOWN can not report, i.e. characters of a
@@ -926,6 +929,9 @@ private:
   inline void InvalidateRenderCache() { m_renderCacheValid = false; }
 
   void OnResizeEndTimer(wxTimerEvent &evt);
+  // The columns (width) and rows (height) that fit the window now, or an
+  // empty size before the font was measured.
+  wxSize GridSizeFromClient() const;
   void OnFeedTimer(wxTimerEvent &event);
   // Drains m_feedBuffer while the GUI is idle; the timer is the fallback.
   void OnFeedIdle(wxIdleEvent &event);
@@ -950,6 +956,9 @@ private:
   wxTimer m_glAtlasRetryTimer;
 #endif
   wxTimer m_resizeEndTimer;
+  // True while the user drags the border of the window. The grid and the PTY
+  // keep their size until the drag ends (see SetTerminalSizeFromClient()).
+  bool m_liveResize{false};
   wxTimer m_feedTimer;
   wxTimer
       m_progressTimer; // moves the gauge while the progress is indeterminate
