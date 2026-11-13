@@ -15,6 +15,7 @@
 #include <thread>
 #endif
 #include <atomic>
+#include <chrono>
 #include <wx/dcbuffer.h>
 #include <wx/dcgraph.h>
 #include <wx/panel.h>
@@ -959,6 +960,8 @@ private:
   // True while the user drags the border of the window. The grid and the PTY
   // keep their size until the drag ends (see SetTerminalSizeFromClient()).
   bool m_liveResize{false};
+  // The last size event of that drag.
+  std::chrono::steady_clock::time_point m_lastLiveResize{};
   wxTimer m_feedTimer;
   wxTimer
       m_progressTimer; // moves the gauge while the progress is indeterminate

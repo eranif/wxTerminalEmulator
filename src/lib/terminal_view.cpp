@@ -2524,6 +2524,7 @@ void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
   // First: a drag of the border of the window resizes once, at its end.
   if (::wxGetMouseState().LeftIsDown() && TopLevelWindowResized()) {
     m_liveResize = true;
+    m_lastLiveResize = std::chrono::steady_clock::now();
     if (m_resizeEndTimer.IsRunning())
       m_resizeEndTimer.Stop();
     m_resizeEndTimer.StartOnce(150);
@@ -2536,10 +2537,18 @@ void wxTerminalViewCtrl::OnSize(wxSizeEvent &evt) {
 }
 
 void wxTerminalViewCtrl::OnResizeEndTimer(wxTimerEvent &) {
-  if (::wxGetMouseState().LeftIsDown()) {
+  // Wait while the button is down, but not long after the last size event:
+  // some window managers (WSLg) keep the release of the drag, and the button
+  // looks down until the next click in the window. A user who only pauses in
+  // the middle of a drag gets one resize, and the next move starts again.
+  constexpr auto kMaxQuiet = std::chrono::milliseconds{250};
+  if (::wxGetMouseState().LeftIsDown() &&
+      std::chrono::steady_clock::now() - m_lastLiveResize < kMaxQuiet) {
+    TLOG_DEBUG() << "Live resize: the button is down, wait" << std::endl;
     m_resizeEndTimer.StartOnce(50);
     return;
   }
+  TLOG_DEBUG() << "Live resize: done" << std::endl;
   // The drag is over: resize the grid and the PTY to the final size.
   m_liveResize = false;
   SetTerminalSizeFromClient();
