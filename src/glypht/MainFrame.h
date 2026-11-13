@@ -120,7 +120,7 @@ private:
   std::optional<GlyphColourPair> m_tabColours;
 };
 
-class MyFrame : public wxFrame {
+class MyFrame : public wxFrame, public wxEventFilter {
 public:
   enum {
     ID_CenterLine = wxID_HIGHEST + 1,
@@ -151,6 +151,14 @@ public:
   // mouse.
   void ShowTabMenu(int tabIdx = wxNOT_FOUND,
                    const wxPoint &pos = wxDefaultPosition);
+  // Show the context menu of the bar of the tabs, where there is no tab: the
+  // items of AppendTabBarItems() only.
+  void ShowTabBarMenu();
+  // The items for the whole bar: "Tab Position" and "Tab Size".
+  void AppendTabBarItems(wxMenu &menu);
+  // wxEventFilter: a right click on the bar where there is no tab. The
+  // notebook sends no event for it (only for a tab).
+  int FilterEvent(wxEvent &event) override;
   // Ask for a text and show it as the header (or the footer) strip of a tab,
   // with random colours. An empty text keeps the current strip.
   void SetTabStrip(size_t tabIdx, bool footer);
@@ -167,6 +175,9 @@ public:
   // Returns false if there is nothing to switch to (fewer than 2 tabs).
   bool ShowTabSwitcher(bool backwards);
   void ApplySettings();
+  // Give the notebook the style of the settings: the tab position and the
+  // close buttons.
+  void ApplyNotebookStyle();
   wxTerminalViewCtrl *GetActiveTerminalView() const;
   // The terminal of a notebook page (a TerminalPanel), or nullptr.
   static MyTerminal *TerminalOf(wxWindow *page);

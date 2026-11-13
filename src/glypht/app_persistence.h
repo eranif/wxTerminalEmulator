@@ -19,6 +19,9 @@ enum class TabPosition { Top, Bottom };
 /// The look of the tabs (see GlyphTabPainter::Style).
 enum class TabStyle { Browser, Pills };
 
+/// The height of the tabs: the room above and below the label.
+enum class TabSize { Tiny, Small, Medium, Tall };
+
 struct AppConfig {
   AppConfig();
 
@@ -96,6 +99,13 @@ struct AppConfig {
   static wxString TabStyleToString(TabStyle style);
   static TabStyle TabStyleFromString(const wxString &value);
 
+  void SetTabSize(TabSize size) { tabSize = size; }
+  TabSize GetTabSize() const { return tabSize; }
+  /// The value of @p size in config.ini, and back. An unknown value is
+  /// Medium.
+  static wxString TabSizeToString(TabSize size);
+  static TabSize TabSizeFromString(const wxString &value);
+
   /// Optional shell to start in new tabs, instead of the default shell of the
   /// platform. Empty means: use the default shell.
   void SetShellExecutable(const wxString &path) { shellExecutable = path; }
@@ -132,6 +142,7 @@ private:
   wxString tabOutlineColour{"default"};
   TabPosition tabPosition{TabPosition::Top};
   TabStyle tabStyle{TabStyle::Browser};
+  TabSize tabSize{TabSize::Medium};
   wxString shellExecutable;
   wxString shellArgs;
   wxString lastShell;

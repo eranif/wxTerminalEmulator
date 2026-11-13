@@ -131,6 +131,34 @@ TabStyle AppConfig::TabStyleFromString(const wxString &value) {
   return value.Lower() == "pills" ? TabStyle::Pills : TabStyle::Browser;
 }
 
+wxString AppConfig::TabSizeToString(TabSize size) {
+  switch (size) {
+  case TabSize::Tiny:
+    return "tiny";
+  case TabSize::Small:
+    return "small";
+  case TabSize::Tall:
+    return "tall";
+  case TabSize::Medium:
+    break;
+  }
+  return "medium";
+}
+
+TabSize AppConfig::TabSizeFromString(const wxString &value) {
+  const wxString v = value.Lower();
+  if (v == "tiny") {
+    return TabSize::Tiny;
+  }
+  if (v == "small") {
+    return TabSize::Small;
+  }
+  if (v == "tall") {
+    return TabSize::Tall;
+  }
+  return TabSize::Medium;
+}
+
 AppConfig::AppConfig() {
   themes["dark"] = wxTerminalTheme::MakeDarkTheme();
   themes["light"] = wxTerminalTheme::MakeLightTheme();
@@ -324,6 +352,8 @@ bool AppPersistence::Load(AppConfig &config) {
         config.SetTabPosition(AppConfig::TabPositionFromString(value));
       } else if (key == "tabstyle") {
         config.SetTabStyle(AppConfig::TabStyleFromString(value));
+      } else if (key == "tabsize") {
+        config.SetTabSize(AppConfig::TabSizeFromString(value));
       } else if (key == "shell") {
         config.SetShellExecutable(value);
       } else if (key == "lastshell") {
@@ -386,6 +416,7 @@ bool AppPersistence::Save(const AppConfig &config) {
   file.AddLine("tabposition=" +
                AppConfig::TabPositionToString(config.GetTabPosition()));
   file.AddLine("tabstyle=" + AppConfig::TabStyleToString(config.GetTabStyle()));
+  file.AddLine("tabsize=" + AppConfig::TabSizeToString(config.GetTabSize()));
   file.AddLine("font=" + config.GetFont().GetNativeFontInfoDesc());
   file.AddLine(wxString::Format(
       "safedrawing=%s", config.IsSafeDrawingEnabled() ? "true" : "false"));

@@ -96,6 +96,29 @@ GlyphTabPainter::Style TabArtStyle(TabStyle style) {
                                   : GlyphTabPainter::Style::Browser;
 }
 
+// The room above and below the label of a tab, in DIPs, for the tab size of
+// the settings. The default of GlyphTabPainter is 6 DIPs, and 10 DIPs on GTK
+// (see kPaddingY in GlyphTabPainter.cpp); Medium is 3 DIPs more, and each
+// size is 3 DIPs from the next.
+int TabPaddingY(TabSize size) {
+#ifdef __WXGTK__
+  constexpr int kBase = 10;
+#else
+  constexpr int kBase = 6;
+#endif
+  switch (size) {
+  case TabSize::Tiny:
+    return kBase - 3;
+  case TabSize::Small:
+    return kBase;
+  case TabSize::Tall:
+    return kBase + 6;
+  case TabSize::Medium:
+    break;
+  }
+  return kBase + 3;
+}
+
 // The name of the notebook for wxAuiNotebook::SaveLayout() and LoadLayout().
 const wxString kNotebookLayoutName = wxS("tabs");
 
@@ -279,12 +302,15 @@ MyFrame::MyFrame(const wxCmdLineParser &parser,
   }
 
   Bind(wxEVT_CLOSE_WINDOW, &MyFrame::OnClose, this);
+  // A right click on the bar of the tabs where there is no tab (see
+  // FilterEvent()).
+  wxEvtHandler::AddFilter(this);
   if (GetActiveTerminalView() && !command.empty()) {
     GetActiveTerminalView()->SendCommand(command);
   }
 }
 
-MyFrame::~MyFrame() {}
+MyFrame::~MyFrame() { wxEvtHandler::RemoveFilter(this); }
 
 void MyFrame::OnClose(wxCloseEvent &event) {
   SaveLayout();
@@ -523,7 +549,81 @@ void MyFrame::ShowTabMenu(int tabIdx, const wxPoint &pos) {
       },
       wxID_CLEAR);
 
+  menu.AppendSeparator();
+  AppendTabBarItems(menu);
   m_notebook->PopupMenu(&menu, pos);
+}
+
+void MyFrame::ShowTabBarMenu() {
+  if (!m_notebook) {
+    return;
+  }
+  wxMenu menu;
+  AppendTabBarItems(menu);
+  m_notebook->PopupMenu(&menu);
+}
+
+void MyFrame::AppendTabBarItems(wxMenu &menu) {
+  // The menu is shown with PopupMenu(), so the handlers run while it exists.
+  auto *position = new wxMenu;
+  for (const auto &[value, label] :
+       {std::pair{TabPosition::Top, _("Top")},
+        std::pair{TabPosition::Bottom, _("Bottom")}}) {
+    wxMenuItem *item = position->AppendRadioItem(wxID_ANY, label);
+    item->Check(m_config.GetTabPosition() == value);
+    position->Bind(
+        wxEVT_MENU,
+        [this, value](wxCommandEvent &) {
+          m_config.SetTabPosition(value);
+          ApplyNotebookStyle();
+          PersistSettings();
+        },
+        item->GetId());
+  }
+  menu.AppendSubMenu(position, _("Tab Position"));
+
+#if wxCHECK_VERSION(3, 3, 0)
+  // The height of the tabs is a setting of the tab art (wxWidgets 3.3).
+  auto *size = new wxMenu;
+  for (const auto &[value, label] :
+       {std::pair{TabSize::Tiny, _("Tiny")},
+        std::pair{TabSize::Small, _("Small")},
+        std::pair{TabSize::Medium, _("Medium")},
+        std::pair{TabSize::Tall, _("Tall")}}) {
+    wxMenuItem *item = size->AppendRadioItem(wxID_ANY, label);
+    item->Check(m_config.GetTabSize() == value);
+    size->Bind(
+        wxEVT_MENU,
+        [this, value](wxCommandEvent &) {
+          m_config.SetTabSize(value);
+          ApplyTabArt(m_tabTheme, m_tabOutlineColour);
+          m_notebook->Refresh();
+          PersistSettings();
+        },
+        item->GetId());
+  }
+  menu.AppendSubMenu(size, _("Tab Size"));
+#endif
+}
+
+int MyFrame::FilterEvent(wxEvent &event) {
+  if (event.GetEventType() != wxEVT_RIGHT_UP || !m_notebook) {
+    return Event_Skip;
+  }
+  // The bar of the tabs is a wxAuiTabCtrl, a child of the notebook (there is
+  // one for each group of split tabs).
+  auto *tabCtrl = dynamic_cast<wxAuiTabCtrl *>(event.GetEventObject());
+  if (!tabCtrl || tabCtrl->GetParent() != m_notebook) {
+    return Event_Skip;
+  }
+  const wxPoint pos = tabCtrl->ClientToScreen(
+      static_cast<wxMouseEvent &>(event).GetPosition());
+  if (m_notebook->HitTest(m_notebook->ScreenToClient(pos)) != wxNOT_FOUND) {
+    // On a tab: wxEVT_AUINOTEBOOK_TAB_RIGHT_UP shows the menu of the tab.
+    return Event_Skip;
+  }
+  CallAfter(&MyFrame::ShowTabBarMenu);
+  return Event_Processed;
 }
 
 void MyFrame::SetTabStrip(size_t tabIdx, bool footer) {
@@ -758,6 +858,10 @@ void MyFrame::ApplySettings() {
     }
   }
 
+  ApplyNotebookStyle();
+}
+
+void MyFrame::ApplyNotebookStyle() {
   // Tab close button and tab position
   long style = m_notebook->GetWindowStyleFlag();
   style &= ~(wxAUI_NB_CLOSE_ON_ACTIVE_TAB | wxAUI_NB_CLOSE_ON_ALL_TABS |
@@ -803,14 +907,8 @@ void MyFrame::ApplyTabArt(const wxTerminalTheme &theme,
     auto *panel = dynamic_cast<TerminalPanel *>(page);
     return panel ? panel->GetTabColours() : std::nullopt;
   });
-  // Taller tabs than the default of the platform: 3 DIPs more above and below
-  // the label. The default is 6 DIPs, and 10 DIPs on GTK (see kPaddingY in
-  // GlyphTabPainter.cpp).
-#ifdef __WXGTK__
-  art->SetPaddingY(13);
-#else
-  art->SetPaddingY(9);
-#endif
+  // The height of the tabs (the tab size of the settings).
+  art->SetPaddingY(TabPaddingY(m_config.GetTabSize()));
   m_notebook->SetArtProvider(art);
 #endif
 }
