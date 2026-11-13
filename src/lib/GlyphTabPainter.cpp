@@ -540,10 +540,23 @@ int GlyphTabPainter::GetButtonsWidth(wxWindow *wnd,
 wxSize GlyphTabPainter::ButtonSize(wxWindow *wnd,
                                    const GlyphTabButton &button) const {
   if (button.close) {
-    return wxSize(wnd->FromDIP(kCloseSize), wnd->FromDIP(kCloseSize));
+    // At least as tall as the text. On GTK and macOS FromDIP() does not scale
+    // (the toolkit does), and a desktop that scales only the fonts (Xft.dpi,
+    // the text scaling of GNOME or KDE, WSLg) would get a tiny X next to big
+    // text. With a normal font the line is about 16 pixels: no change.
+    const int side = std::max(wnd->FromDIP(kCloseSize), LineHeight(wnd));
+    return wxSize(side, side);
   }
   return button.bitmap.IsOk() ? button.bitmap.GetBitmapFor(wnd).GetLogicalSize()
                               : wxSize();
+}
+
+int GlyphTabPainter::LineHeight(wxWindow *wnd) const {
+  // The window measures the text, so this works also while a paint event runs.
+  int lineHeight = 0;
+  wnd->GetTextExtent(wxS("Xg"), nullptr, &lineHeight, nullptr, nullptr,
+                     &m_font);
+  return lineHeight;
 }
 
 int GlyphTabPainter::DrawButtons(wxDC &dc, wxWindow *wnd, GlyphTabInfo &tab,
@@ -613,10 +626,7 @@ wxSize GlyphTabPainter::GetContentSize(wxWindow *wnd,
   // same height.
   wxSize size;
   wnd->GetTextExtent(tab.caption, &size.x, &size.y, nullptr, nullptr, &m_font);
-  int lineHeight = 0;
-  wnd->GetTextExtent(wxS("Xg"), nullptr, &lineHeight, nullptr, nullptr,
-                     &m_font);
-  size.y = std::max(size.y, lineHeight);
+  size.y = std::max(size.y, LineHeight(wnd));
 
   if (const int buttonsWidth = GetButtonsWidth(wnd, tab)) {
     size.x += wnd->FromDIP(kButtonGap) + buttonsWidth;

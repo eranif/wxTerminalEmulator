@@ -229,6 +229,8 @@ private:
   // without buttons).
   wxSize ButtonSize(wxWindow *wnd, const GlyphTabButton &button) const;
   int GetButtonsWidth(wxWindow *wnd, const GlyphTabInfo &tab) const;
+  // The height of a line of the tab font.
+  int LineHeight(wxWindow *wnd) const;
   // The size of the arrow on the header of a group, for a chip that is
   // @p chipHeight high.
   int IndicatorSize(wxWindow *wnd, int chipHeight) const;
