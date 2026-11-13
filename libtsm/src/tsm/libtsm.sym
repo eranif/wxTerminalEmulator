@@ -47,6 +47,7 @@ global:
 	tsm_screen_resize;
 	tsm_screen_set_margins;
 	tsm_screen_set_max_sb;
+	tsm_screen_set_resize_keep_top;
 	tsm_screen_clear_sb;
 
 	tsm_screen_sb_up;

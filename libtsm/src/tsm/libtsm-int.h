@@ -146,6 +146,9 @@ struct tsm_screen {
 
 	struct tsm_scrollback sb;
 
+	/* resize like ConPTY: see tsm_screen_set_resize_keep_top() */
+	bool resize_keep_top;
+
 	/* cursor: positions are always in-bound, but cursor_x might be
 	 * bigger than size_x if new-line is pending */
 	unsigned int cursor_x;		/* current cursor x-pos */

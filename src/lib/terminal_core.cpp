@@ -90,6 +90,14 @@ TerminalCore::TerminalCore(std::size_t rows, std::size_t cols,
   tsm_screen_resize(m_tsmScreen, static_cast<unsigned int>(cols),
                     static_cast<unsigned int>(rows));
   tsm_screen_set_max_sb(m_tsmScreen, static_cast<unsigned int>(maxLines));
+#ifdef _WIN32
+  // ConPTY keeps its own copy of the screen and places the cursor with
+  // absolute moves. When the window gets taller it adds blank rows at the
+  // bottom, and when it gets shorter it drops the blank rows at the bottom
+  // first. Resize the same way, or the cursor of ConPTY and ours end up on
+  // different rows and the next output overwrites lines.
+  tsm_screen_set_resize_keep_top(m_tsmScreen, true);
+#endif
 
   tsm_vte_new(&m_tsmVte, m_tsmScreen, TsmWriteCb, this, nullptr, nullptr);
   tsm_vte_set_osc_cb(m_tsmVte, TsmOscCb, this);

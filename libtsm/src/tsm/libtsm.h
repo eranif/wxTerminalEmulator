@@ -198,6 +198,13 @@ int tsm_screen_resize(struct tsm_screen *con, unsigned int x,
 		      unsigned int y);
 int tsm_screen_set_margins(struct tsm_screen *con,
 			   unsigned int top, unsigned int bottom);
+/* Resize the height like ConPTY (Windows) does: a taller screen gets new blank
+ * rows at the bottom (lines in the scrollback stay there), and a shorter one
+ * drops its blank rows at the bottom first; only text or the cursor that would
+ * fall off the screen moves to the scrollback. Off by default: a taller screen
+ * then takes lines back from the scrollback, and a shorter one always moves its
+ * top rows to the scrollback. The alternate screen is not affected. */
+void tsm_screen_set_resize_keep_top(struct tsm_screen *con, bool keep);
 void tsm_screen_set_max_sb(struct tsm_screen *con, unsigned int max);
 void tsm_screen_clear_sb(struct tsm_screen *con);
 

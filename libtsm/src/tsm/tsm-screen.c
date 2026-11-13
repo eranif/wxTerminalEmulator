@@ -187,6 +187,18 @@ static int line_resize(struct tsm_screen *con, struct line *line,
 	return 0;
 }
 
+/* True when the line holds no text (only spaces or empty cells). */
+static bool line_is_blank(const struct line *line)
+{
+	unsigned int i;
+
+	for (i = 0; i < line->size; ++i) {
+		if (line->cells[i].ch != 0 && line->cells[i].ch != ' ')
+			return false;
+	}
+	return true;
+}
+
 static void clear_selection_on_line(struct tsm_screen *con, struct line *line)
 {
 	if (!con->sel_active)
@@ -652,7 +664,7 @@ int tsm_screen_resize(struct tsm_screen *con, unsigned int x,
 		      unsigned int y)
 {
 	struct line **cache;
-	unsigned int i, j, width, diff, start;
+	unsigned int i, j, width, diff, start, last;
 	int ret;
 	bool *tab_ruler;
 
@@ -780,7 +792,27 @@ int tsm_screen_resize(struct tsm_screen *con, unsigned int x,
 	/* scroll buffer if screen height shrinks */
 	if (y < con->size_y) {
 		diff = con->size_y - y;
-		if (shl_dlist_empty(&con->sb.list) || (con->flags & TSM_SCREEN_ALTERNATE)) {
+		if (con->resize_keep_top &&
+		    !(con->flags & TSM_SCREEN_ALTERNATE)) {
+			/* Like ConPTY: the blank rows at the bottom go first.
+			 * Only the rows that would push text or the cursor off
+			 * the screen move to the scrollback. */
+			last = con->cursor_y;
+			for (j = con->size_y; j > con->cursor_y + 1; --j) {
+				if (!line_is_blank(con->lines[j - 1])) {
+					last = j - 1;
+					break;
+				}
+			}
+			if (last >= y) {
+				diff = last - y + 1;
+				tsm_screen_scroll_up(con, diff);
+				if (con->cursor_y > diff)
+					move_cursor(con, con->cursor_x, con->cursor_y - diff);
+				else
+					move_cursor(con, con->cursor_x, 0);
+			}
+		} else if (shl_dlist_empty(&con->sb.list) || (con->flags & TSM_SCREEN_ALTERNATE)) {
 			/* If there is nothing in the scrollback buffer,
 			 * Only scroll up if the cursor would go off-screen */
 			if (con->cursor_y >= y) {
@@ -803,7 +835,10 @@ int tsm_screen_resize(struct tsm_screen *con, unsigned int x,
 		 * When increasing the terminal number of rows, we can move some
 		 * lines from the scrollback buffer to the main buffer.
 		 */
-		if (diff && !(con->flags & TSM_SCREEN_ALTERNATE)) {
+		/* With resize_keep_top the new rows are added at the bottom,
+		 * like ConPTY does: lines in the scrollback stay there. */
+		if (diff && !(con->flags & TSM_SCREEN_ALTERNATE) &&
+		    !con->resize_keep_top) {
 			con->size_y = y;
 			con->margin_bottom = con->size_y - 1;
 			tsm_screen_scroll_down(con, diff);
@@ -846,6 +881,15 @@ int tsm_screen_set_margins(struct tsm_screen *con,
 	con->margin_top = upper;
 	con->margin_bottom = lower;
 	return 0;
+}
+
+SHL_EXPORT
+void tsm_screen_set_resize_keep_top(struct tsm_screen *con, bool keep)
+{
+	if (!con)
+		return;
+
+	con->resize_keep_top = keep;
 }
 
 /* set maximum scrollback buffer size in number of lines*/
