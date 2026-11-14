@@ -1204,30 +1204,49 @@ void wxTerminalViewCtrl::SendBackspace() { SendInput("\x7f"); }
 // applications that enable DECCKM (ESC[?1h) -- vi, less, emacs -- bind the
 // SS3 form, so sending CSI leaves their arrow keys dead. Pick the encoding
 // the application asked for.
-void wxTerminalViewCtrl::SendCursorKey(char final) {
+//
+// A modified key (Shift/Alt/Ctrl) uses the xterm form ESC [ 1 ; <mod> <final>,
+// with <mod> = 1 + Shift(1) + Alt(2) + Ctrl(4). This form is the same whether
+// or not DECCKM is set. Applications such as Claude Code rely on it to tell
+// Shift+Up from Up.
+void wxTerminalViewCtrl::SendCursorKey(char final, int mod) {
+  if (mod > 1) {
+    SendInput("\x1b[1;" + std::to_string(mod) + std::string(1, final));
+    return;
+  }
   char seq[4] = {'\x1b', m_core.IsCursorKeyMode() ? 'O' : '[', final, '\0'};
   SendInput(seq);
 }
 
-void wxTerminalViewCtrl::SendArrowUp() { SendCursorKey('A'); }
+// Keys of the form ESC [ <code> ~ take the modifier as ESC [ <code> ; <mod> ~.
+void wxTerminalViewCtrl::SendTildeKey(int code, int mod) {
+  std::string seq = "\x1b[" + std::to_string(code);
+  if (mod > 1) {
+    seq += ";" + std::to_string(mod);
+  }
+  seq += "~";
+  SendInput(seq);
+}
 
-void wxTerminalViewCtrl::SendArrowDown() { SendCursorKey('B'); }
+void wxTerminalViewCtrl::SendArrowUp(int mod) { SendCursorKey('A', mod); }
 
-void wxTerminalViewCtrl::SendArrowRight() { SendCursorKey('C'); }
+void wxTerminalViewCtrl::SendArrowDown(int mod) { SendCursorKey('B', mod); }
 
-void wxTerminalViewCtrl::SendArrowLeft() { SendCursorKey('D'); }
+void wxTerminalViewCtrl::SendArrowRight(int mod) { SendCursorKey('C', mod); }
 
-void wxTerminalViewCtrl::SendHome() { SendCursorKey('H'); }
+void wxTerminalViewCtrl::SendArrowLeft(int mod) { SendCursorKey('D', mod); }
 
-void wxTerminalViewCtrl::SendEnd() { SendCursorKey('F'); }
+void wxTerminalViewCtrl::SendHome(int mod) { SendCursorKey('H', mod); }
 
-void wxTerminalViewCtrl::SendDelete() { SendInput("\x1b[3~"); }
+void wxTerminalViewCtrl::SendEnd(int mod) { SendCursorKey('F', mod); }
 
-void wxTerminalViewCtrl::SendInsert() { SendInput("\x1b[2~"); }
+void wxTerminalViewCtrl::SendDelete(int mod) { SendTildeKey(3, mod); }
 
-void wxTerminalViewCtrl::SendPageUp() { SendInput("\x1b[5~"); }
+void wxTerminalViewCtrl::SendInsert(int mod) { SendTildeKey(2, mod); }
 
-void wxTerminalViewCtrl::SendPageDown() { SendInput("\x1b[6~"); }
+void wxTerminalViewCtrl::SendPageUp(int mod) { SendTildeKey(5, mod); }
+
+void wxTerminalViewCtrl::SendPageDown(int mod) { SendTildeKey(6, mod); }
 
 void wxTerminalViewCtrl::SendCtrlR() {
   if (IsCmdShell()) {
@@ -3530,9 +3549,13 @@ bool wxTerminalViewCtrl::ScrollViewportForSelection(int delta) {
 bool wxTerminalViewCtrl::HandleSpecialKeys(wxKeyEvent &key_event) {
   auto key = key_event.GetKeyCode();
   bool shift = key_event.ShiftDown();
+  const int mod = 1 + (shift ? 1 : 0) + (key_event.AltDown() ? 2 : 0) +
+                  (key_event.RawControlDown() ? 4 : 0);
 
-  // Shift+navigation: keyboard selection
-  if (shift) {
+  // Shift+navigation: keyboard selection. A full-screen application (alternate
+  // screen) or one that tracks the mouse owns the keyboard, so it gets the
+  // modified key instead -- e.g. Claude Code binds Shift+Up/Down.
+  if (shift && !m_core.IsAlternateScreen() && !m_core.IsMouseTracking()) {
     bool isNav = (key == WXK_UP || key == WXK_DOWN || key == WXK_LEFT ||
                   key == WXK_RIGHT || key == WXK_HOME || key == WXK_END ||
                   key == WXK_PAGEUP || key == WXK_PAGEDOWN);
@@ -3612,31 +3635,31 @@ bool wxTerminalViewCtrl::HandleSpecialKeys(wxKeyEvent &key_event) {
   }
 
   if (key == WXK_UP || key == WXK_DOWN) {
-    key == WXK_UP ? SendArrowUp() : SendArrowDown();
+    key == WXK_UP ? SendArrowUp(mod) : SendArrowDown(mod);
     return true;
   } else if (key == WXK_RIGHT) {
-    SendArrowRight();
+    SendArrowRight(mod);
     return true;
   } else if (key == WXK_LEFT) {
-    SendArrowLeft();
+    SendArrowLeft(mod);
     return true;
   } else if (key == WXK_HOME) {
-    SendHome();
+    SendHome(mod);
     return true;
   } else if (key == WXK_END) {
-    SendEnd();
+    SendEnd(mod);
     return true;
   } else if (key == WXK_DELETE) {
-    SendDelete();
+    SendDelete(mod);
     return true;
   } else if (key == WXK_INSERT) {
-    SendInsert();
+    SendInsert(mod);
     return true;
   } else if (key == WXK_PAGEUP) {
-    SendPageUp();
+    SendPageUp(mod);
     return true;
   } else if (key == WXK_PAGEDOWN) {
-    SendPageDown();
+    SendPageDown(mod);
     return true;
   } else if (key >= WXK_F1 && key <= WXK_F12) {
     // Function keys F1-F12

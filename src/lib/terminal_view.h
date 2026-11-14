@@ -130,19 +130,24 @@ public:
   void SendTab();
   void SendEscape();
   void SendBackspace();
-  void SendArrowUp();
-  void SendArrowDown();
-  void SendArrowLeft();
-  void SendArrowRight();
-  void SendHome();
-  void SendEnd();
-  void SendDelete();
-  void SendInsert();
-  void SendPageUp();
-  void SendPageDown();
+  // `mod` is the xterm modifier parameter: 1 + Shift(1) + Alt(2) + Ctrl(4).
+  // 1 means no modifier.
+  void SendArrowUp(int mod = 1);
+  void SendArrowDown(int mod = 1);
+  void SendArrowLeft(int mod = 1);
+  void SendArrowRight(int mod = 1);
+  void SendHome(int mod = 1);
+  void SendEnd(int mod = 1);
+  void SendDelete(int mod = 1);
+  void SendInsert(int mod = 1);
+  void SendPageUp(int mod = 1);
+  void SendPageDown(int mod = 1);
 
-  // Transmit a cursor-style key, honouring DECCKM (CSI vs SS3 encoding).
-  void SendCursorKey(char final);
+  // Transmit a cursor-style key, honouring DECCKM (CSI vs SS3 encoding) when
+  // unmodified, and the xterm ESC[1;<mod><final> form when modified.
+  void SendCursorKey(char final, int mod = 1);
+  // Transmit an ESC[<code>~ key, with the modifier as ESC[<code>;<mod>~.
+  void SendTildeKey(int code, int mod = 1);
 
   // Common keyboard shortcuts
 
