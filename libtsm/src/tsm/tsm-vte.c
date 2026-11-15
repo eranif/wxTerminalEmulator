@@ -111,6 +111,8 @@ enum parser_action {
 #define CSI_PLUS	0x0100		/* CSI: + */
 #define CSI_POPEN	0x0200		/* CSI: ( */
 #define CSI_PCLOSE	0x0400		/* CSI: ) */
+#define CSI_LT		0x0800		/* CSI: < */
+#define CSI_EQ		0x1000		/* CSI: = */
 
 /* max CSI arguments */
 #define CSI_ARG_MAX 16
@@ -878,14 +880,28 @@ static void save_state(struct tsm_vte *vte)
 	vte->saved_state.origin_mode = vte->flags & TSM_VTE_FLAG_ORIGIN_MODE;
 }
 
+/* Background colour erase: cells cleared by an erase or a scroll take the
+ * current background colour, and nothing else. Copying all of cattr would give
+ * them the underline (or bold, inverse...) that was on at the time, so blanks
+ * erased under SGR 4 would be drawn as a line. */
+static void update_erase_attr(struct tsm_vte *vte)
+{
+	struct tsm_screen_attr attr;
+
+	if (!(vte->flags & TSM_VTE_FLAG_BACKGROUND_COLOR_ERASE_MODE))
+		return;
+	attr = vte->def_attr;
+	copy_bcolor(&attr, &vte->cattr);
+	tsm_screen_set_def_attr(vte->con, &attr);
+}
+
 static void restore_state(struct tsm_vte *vte)
 {
 	tsm_screen_move_to(vte->con, vte->saved_state.cursor_x,
 			       vte->saved_state.cursor_y);
 	vte->cattr = vte->saved_state.cattr;
 	to_rgb(vte, &vte->cattr);
-	if (vte->flags & TSM_VTE_FLAG_BACKGROUND_COLOR_ERASE_MODE)
-		tsm_screen_set_def_attr(vte->con, &vte->cattr);
+	update_erase_attr(vte);
 	vte->gl = vte->saved_state.gl;
 	vte->gr = vte->saved_state.gr;
 
@@ -1132,6 +1148,12 @@ static void do_collect(struct tsm_vte *vte, uint32_t data)
 		break;
 	case ')':
 		vte->csi_flags |= CSI_PCLOSE;
+		break;
+	case '<':
+		vte->csi_flags |= CSI_LT;
+		break;
+	case '=':
+		vte->csi_flags |= CSI_EQ;
 		break;
 	}
 }
@@ -1697,8 +1719,7 @@ static void csi_attribute(struct tsm_vte *vte)
 	}
 
 	to_rgb(vte, &vte->cattr);
-	if (vte->flags & TSM_VTE_FLAG_BACKGROUND_COLOR_ERASE_MODE)
-		tsm_screen_set_def_attr(vte->con, &vte->cattr);
+	update_erase_attr(vte);
 }
 
 static void csi_soft_reset(struct tsm_vte *vte)
@@ -2187,10 +2208,12 @@ static void do_csi(struct tsm_vte *vte, uint32_t data)
 		tsm_screen_erase_chars(vte->con, num);
 		break;
 	case 'm':
-		/* CSI_GT ('>' prefix) marks a private/DEC sequence such as
-		 * XTMODKEYS \033[>4;1m — not an SGR attribute. Guard against
-		 * misinterpreting it as e.g. SGR 4 (underline). */
-		if (!(vte->csi_flags & CSI_GT))
+		/* Only a plain CSI ... m is SGR. A prefix or an intermediate
+		 * makes it another sequence: XTMODKEYS \033[>4;2m, the
+		 * XTQMODKEYS query \033[?4m that Vim sends after it identifies
+		 * the terminal, and so on. Taken as SGR they would turn on
+		 * underline (4) and dim (2). */
+		if (!vte->csi_flags)
 			csi_attribute(vte);
 		break;
 	case 'p':
