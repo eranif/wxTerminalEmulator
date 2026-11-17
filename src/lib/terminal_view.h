@@ -567,6 +567,15 @@ private:
   bool IsCmdShell() const;
   bool IsShell(const wxString &shell_name, const wxArrayString &children) const;
   bool InitialiseAndStart(wxDC *pdc = nullptr);
+  // Whether the view has the size of its layout: more than one cell in each
+  // direction (a view that was not laid out yet has one).
+  bool HasLayoutSize() const;
+  // Starts the shell when the view has its size (HasLayoutSize()). Before
+  // that, m_startTimer checks again a few times; after the last check the
+  // shell starts with the size the view has then. The shell must not start
+  // with a size of one column: it would show its prompt in that column.
+  void StartWhenSized();
+  void OnStartTimer(wxTimerEvent &evt);
 
   void Feed(const std::string &data);
   void StartProcess(const wxString &command,
@@ -962,6 +971,9 @@ private:
   wxTimer m_glAtlasRetryTimer;
 #endif
   wxTimer m_resizeEndTimer;
+  // See StartWhenSized(): the next check, and the number of checks so far.
+  wxTimer m_startTimer;
+  int m_startRetries{0};
   // True while the user drags the border of the window. The grid and the PTY
   // keep their size until the drag ends (see SetTerminalSizeFromClient()).
   bool m_liveResize{false};

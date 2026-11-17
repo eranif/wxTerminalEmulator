@@ -48,6 +48,14 @@ namespace {
 using EnvMap = std::unordered_map<wxString, wxString>;
 
 constexpr int kFeedTimerIntervalMs = 10;
+// The shell is started once the view has its size (see StartWhenSized()):
+// it is checked every kStartRetryMs, and after kMaxStartRetries checks the
+// shell starts anyway. A view that still has no size then (it is hidden)
+// starts with kDefaultCols x kDefaultRows, the usual size of a terminal.
+constexpr int kStartRetryMs = 100;
+constexpr int kMaxStartRetries = 10;
+constexpr std::size_t kDefaultCols = 80;
+constexpr std::size_t kDefaultRows = 24;
 // ProcessFeedBuffer() parses chunks of this size until the buffer is empty or
 // the time budget is used, then returns so the view can paint and handle
 // input (about 60 frames a second while output floods in).
@@ -389,6 +397,9 @@ wxTerminalViewCtrl::wxTerminalViewCtrl(
   m_feedTimer.SetOwner(this);
   Bind(wxEVT_TIMER, &wxTerminalViewCtrl::OnFeedTimer, this,
        m_feedTimer.GetId());
+  m_startTimer.SetOwner(this);
+  Bind(wxEVT_TIMER, &wxTerminalViewCtrl::OnStartTimer, this,
+       m_startTimer.GetId());
   Bind(wxEVT_IDLE, &wxTerminalViewCtrl::OnFeedIdle, this);
 
   Bind(wxEVT_SHOW, &wxTerminalViewCtrl::OnShow, this);
@@ -1093,10 +1104,14 @@ void wxTerminalViewCtrl::SetTerminalSizeFromClient() {
   if (m_liveResize) {
     return;
   }
-  const wxSize grid = GridSizeFromClient();
-  if (grid.GetWidth() <= 0 || grid.GetHeight() <= 0) {
+  // A view that is not laid out (it is hidden) has no size to give: the
+  // program keeps the size it has, and gets the real one when the view is
+  // shown. A resize to one column would make the shell redraw its prompt in
+  // that column.
+  if (!HasLayoutSize()) {
     return;
   }
+  const wxSize grid = GridSizeFromClient();
   const std::size_t cols = static_cast<std::size_t>(grid.GetWidth());
   const std::size_t rows = static_cast<std::size_t>(grid.GetHeight());
 
@@ -2000,13 +2015,41 @@ bool wxTerminalViewCtrl::InitialiseAndStart(wxDC *pdc) {
 
   SetTerminalSizeFromClient();
   if (m_backend == nullptr) {
-    CallAfter(&wxTerminalViewCtrl::StartProcess, m_shell_command,
-              m_environment);
+    StartWhenSized();
   }
   // Now that the char width is known, do another paint.
   CallAfter(&wxTerminalViewCtrl::RefreshView, false);
   return true;
 }
+
+bool wxTerminalViewCtrl::HasLayoutSize() const {
+  // A view that was not laid out yet gives a grid of one cell (see
+  // GridSizeFromClient()).
+  const wxSize grid = GridSizeFromClient();
+  return grid.GetWidth() > 1 && grid.GetHeight() > 1;
+}
+
+void wxTerminalViewCtrl::StartWhenSized() {
+  if (m_backend != nullptr) {
+    return;
+  }
+  if (!HasLayoutSize() && m_startRetries < kMaxStartRetries) {
+    ++m_startRetries;
+    m_startTimer.StartOnce(kStartRetryMs);
+    return;
+  }
+  if (HasLayoutSize()) {
+    // The size of the view now: it may have changed since the first try.
+    SetTerminalSizeFromClient();
+  } else {
+    // Hidden (a pane that is not shown): not one column. The view gets its
+    // real size when it is shown (OnSize()).
+    m_core.SetViewportSize(kDefaultRows, kDefaultCols);
+  }
+  CallAfter(&wxTerminalViewCtrl::StartProcess, m_shell_command, m_environment);
+}
+
+void wxTerminalViewCtrl::OnStartTimer(wxTimerEvent &) { StartWhenSized(); }
 
 void wxTerminalViewCtrl::OnPaint(wxPaintEvent &) {
 #if USE_OPENGL
