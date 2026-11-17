@@ -121,6 +121,16 @@ void GlyphTabBar::SetCloseButtons(bool onAllTabs, bool onActiveTab) {
   Refresh();
 }
 
+void GlyphTabBar::SetFixedTabWidth(int width) {
+  width = std::max(0, width);
+  if (width == m_fixedTabWidth) {
+    return;
+  }
+  m_fixedTabWidth = width;
+  LayoutTabs();
+  Refresh();
+}
+
 int GlyphTabBar::ClampWidth(int width) const {
   width = std::clamp(width, kMinWidth, kMaxWidth);
   // Keep half of the parent for the pages.
@@ -693,8 +703,13 @@ void GlyphTabBar::LayoutTabs() {
       item.firstTab = static_cast<int>(i);
       m_items.push_back(item);
       flexible.push_back(m_items.size() - 1);
-      sizes.push_back(vertical ? m_painter->GetVerticalTabHeight(this, tab.info)
-                               : m_painter->GetTabSize(this, tab.info).x);
+      if (vertical) {
+        sizes.push_back(m_painter->GetVerticalTabHeight(this, tab.info));
+      } else if (m_fixedTabWidth > 0) {
+        sizes.push_back(FromDIP(m_fixedTabWidth));
+      } else {
+        sizes.push_back(m_painter->GetTabSize(this, tab.info).x);
+      }
     }
   }
   int total = 0;

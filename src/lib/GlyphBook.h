@@ -178,6 +178,12 @@ public:
   // Called with the new width (in DIPs) after the user dragged the edge.
   void SetTabBarWidthChangedCallback(std::function<void(int)> callback);
 
+  // The width of the tabs, in DIPs, with the wxAUI_NB_TAB_FIXED_WIDTH flag of
+  // the window style: all the tabs of a horizontal bar are this wide (they
+  // still get narrower when they do not fit). The default is 160.
+  void SetFixedTabWidth(int width);
+  int GetFixedTabWidth() const { return m_fixedTabWidth; }
+
   // The parent for the pages (see above).
   wxWindow *GetPagesParent() const { return m_pages; }
   // The bar of the tabs.
@@ -336,6 +342,7 @@ private:
   // The window style, with the flags that the base class does not know.
   long m_style{wxAUI_NB_DEFAULT_STYLE};
   int m_tabBarWidth{200};
+  int m_fixedTabWidth{160};
   // The last SetTheme() call. The painter is made again from it when the system
   // colours change. Not used after SetPainter().
   wxTerminalTheme m_theme;

@@ -83,6 +83,12 @@ public:
   // Which tabs have a close button: all, or only the selected one.
   void SetCloseButtons(bool onAllTabs, bool onActiveTab);
 
+  // The width of every tab of a horizontal bar, in DIPs; 0 (the default): each
+  // tab is as wide as its caption. The tabs still get narrower when they do not
+  // fit. A vertical bar does not use it: its tabs are as wide as the bar.
+  void SetFixedTabWidth(int width);
+  int GetFixedTabWidth() const { return m_fixedTabWidth; }
+
   // Tabs
   // ----
 
@@ -271,6 +277,7 @@ private:
   int m_selection{-1};
   bool m_closeOnAll{false};
   bool m_closeOnActive{false};
+  int m_fixedTabWidth{0};
   wxDirection m_side{wxTOP};
   int m_width;
   std::function<void(int)> m_onWidthChanged;

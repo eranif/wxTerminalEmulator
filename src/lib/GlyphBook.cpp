@@ -244,6 +244,13 @@ void GlyphBook::SetTabBarWidth(int width) {
   }
 }
 
+void GlyphBook::SetFixedTabWidth(int width) {
+  m_fixedTabWidth = width;
+  if (m_tabBar) {
+    UpdateLayout();
+  }
+}
+
 int GlyphBook::GetTabBarWidth() const {
   return m_tabBar ? m_tabBar->GetBarWidth() : m_tabBarWidth;
 }
@@ -257,6 +264,8 @@ void GlyphBook::UpdateLayout() {
   const wxDirection position = GetTabPosition();
   m_tabBar->SetCloseButtons((m_style & wxAUI_NB_CLOSE_ON_ALL_TABS) != 0,
                             (m_style & wxAUI_NB_CLOSE_ON_ACTIVE_TAB) != 0);
+  m_tabBar->SetFixedTabWidth(
+      (m_style & wxAUI_NB_TAB_FIXED_WIDTH) ? m_fixedTabWidth : 0);
   m_tabBar->SetSide(position);
 
   // The bar is before the pages for the left and top sides, after them for the
