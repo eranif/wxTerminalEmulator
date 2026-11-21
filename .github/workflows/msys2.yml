@@ -43,7 +43,7 @@ jobs:
 
     # build.sh builds wxWidgets once and reuses it when it finds the install.
     - name: Cache wxWidgets
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: .build-release/wxWidgets-install
         key: wxwidgets-${{ runner.os }}-${{ matrix.wx-version }}-${{ hashFiles('build.sh', 'patches/**') }}
